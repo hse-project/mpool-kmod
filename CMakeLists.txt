@@ -184,8 +184,8 @@ endif()
 find_package(Git)
 
 # Edit these lines when we cut a release branch.
-set( MPOOL_VERSION_MAJOR 0 )
-set( MPOOL_VERSION_MINOR 0 )
+set( MPOOL_VERSION_MAJOR 1 )
+set( MPOOL_VERSION_MINOR 7 )
 set( MPOOL_VERSION_PATCH 0 )
 
 # Create our template for the header file
