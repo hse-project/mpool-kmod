@@ -3746,28 +3746,27 @@ out_err:
  * @mbiov:  mblock parameter block
  */
 static merr_t
-mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_iov *mbiov)
+mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw)
 {
-	struct mpioc_mblock    *mb;
-	struct refmap_obj       obj;
-	struct mpc_mpool       *mpool;
-	struct iovec           *kiov;
-	merr_t                  err;
-	size_t                  kiovsz;
-	u64                     objid;
-	char                   *op_str;
-	bool                    loaded = false;
+	struct iovec        kiov_buf[MPIOC_KIOV_MIN];
+	struct refmap_obj   obj;
+	struct mpc_mpool   *mpool;
+	struct iovec       *kiov;
+	merr_t              err;
+	size_t              kiovsz;
+	u64                 objid;
+	char               *op_str;
+	bool                loaded = false;
 
-	if (!unit || !mbiov || !unit->un_mpool)
+	if (!unit || !mbrw || !unit->un_mpool)
 		return merr(EINVAL);
 
-	mb = &mbiov->mb_mblock;
 	mpool = unit->un_mpool;
 
-	if (!mb->mb_handle)
+	if (!mbrw->mb_handle)
 		return merr(EINVAL);
 
-	objid = mblock_uhandle_to_objid(mb->mb_handle);
+	objid = mblock_uhandle_to_objid(mbrw->mb_handle);
 
 	op_str = (cmd == MPIOC_MB_READ) ? "READ" : "WRITE";
 
@@ -3795,19 +3794,18 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_iov *mbiov)
 	 * bytes transferred.  But (AFAIK) mpool returns failure if it
 	 * cannot completely fulfill the request.
 	 */
-	if (mb->mb_offset >= obj.ro_priv1)
+	if (mbrw->mb_offset >= obj.ro_priv1)
 		return merr(EIO);
 
 	/* For small iovec counts we simply copyin the array of iovecs
-	 * to the storage in the mbiov object (which was allocated by
-	 * by the caller.  Otherwise, we must kmalloc a buffer into
-	 * which to perform the copyin.
+	 * to local storage (kiov_buf).  Otherwise, we must kmalloc a
+	 * buffer into which to perform the copyin.
 	 */
-	kiovsz = mb->mb_iov_cnt * sizeof(*kiov);
-	kiov = mbiov->mb_kiov;
+	kiovsz = mbrw->mb_iov_cnt * sizeof(*kiov);
+	kiov = kiov_buf;
 
-	if (mb->mb_iov_cnt > MPIOC_MBLOCK_KIOV_MIN) {
-		if (mb->mb_iov_cnt > MPIOC_MBLOCK_KIOV_MAX)
+	if (mbrw->mb_iov_cnt > MPIOC_KIOV_MIN) {
+		if (mbrw->mb_iov_cnt > MPIOC_KIOV_MAX)
 			return merr(EINVAL);
 
 		kiov = kmalloc(kiovsz, GFP_KERNEL);
@@ -3815,17 +3813,17 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_iov *mbiov)
 			return merr(ENOMEM);
 	}
 
-	if (copy_from_user(kiov, mb->mb_iov, kiovsz)) {
+	if (copy_from_user(kiov, mbrw->mb_iov, kiovsz)) {
 		err = merr(EFAULT);
 	} else {
 		err = mpc_physio(mpool->mp_desc, obj.ro_value,
-				 kiov, mb->mb_iov_cnt, mb->mb_offset,
+				 kiov, mbrw->mb_iov_cnt, mbrw->mb_offset,
 				 obj.ro_priv1, MP_OBJ_MBLOCK,
 				 (cmd == MPIOC_MB_READ) ? READ : WRITE);
 		err = merr(err);
 	}
 
-	if (kiov != mbiov->mb_kiov)
+	if (kiov != kiov_buf)
 		kfree(kiov);
 
 	return err;
@@ -4114,35 +4112,31 @@ merr_t mpioc_mlog_open(struct mpc_unit *unit, struct mpioc_mlog *ml)
 	return 0;
 }
 
-merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_iov *mliov)
+merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi)
 {
-	struct mpioc_mlog_io       *mi;
-	struct refmap_obj           obj;
-	struct iovec               *kiov;
+	struct iovec        kiov_buf[MPIOC_KIOV_MIN];
+	struct refmap_obj   obj;
+	struct iovec       *kiov;
 
-	merr_t err;
 	size_t kiovsz;
-	u8     op;
+	merr_t err;
 
-	if (!mliov || !unit || !unit->un_mpool)
+	if (!mi || !unit || !unit->un_mpool)
 		return merr(EINVAL);
-
-	mi = &mliov->mi_mlog;
 
 	err = mpc_mlog_resolve(unit, mi->mi_objid, &obj);
 	if (ev(err))
 		return err;
 
 	/* For small iovec counts we simply copyin the array of iovecs
-	 * to the storage in the mbiov object (which was allocated by
-	 * by the caller.  Otherwise, we must kmalloc a buffer into
-	 * which to perform the copyin.
+	 * to the the stack (kiov_buf). Otherwise, we must kmalloc a
+	 * buffer into which to perform the copyin.
 	 */
 	kiovsz = mi->mi_iovc * sizeof(*kiov);
-	kiov   = mliov->mi_kiov;
+	kiov   = kiov_buf;
 
-	if (mi->mi_iovc > MPIOC_MLOG_KIOV_MIN) {
-		if (mi->mi_iovc > MPIOC_MLOG_KIOV_MAX)
+	if (mi->mi_iovc > MPIOC_KIOV_MIN) {
+		if (mi->mi_iovc > MPIOC_KIOV_MAX)
 			return merr(EINVAL);
 
 		kiov = kmalloc(kiovsz, GFP_KERNEL);
@@ -4150,18 +4144,16 @@ merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_iov *mliov)
 			return merr(ENOMEM);
 	}
 
-	op = mi->mi_op;
-
 	if (copy_from_user(kiov, mi->mi_iov, kiovsz)) {
 		err = merr(EFAULT);
 	} else {
 		err = mpc_physio(unit->un_mpool->mp_desc, obj.ro_value, kiov,
 				 mi->mi_iovc, mi->mi_off, 0, MP_OBJ_MLOG,
-				 (op == MPOOL_OP_READ) ? READ : WRITE);
+				 (mi->mi_op == MPOOL_OP_READ) ? READ : WRITE);
 		ev(err);
 	}
 
-	if (kiov != mliov->mi_kiov)
+	if (kiov != kiov_buf)
 		kfree(kiov);
 
 	return err;
