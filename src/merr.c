@@ -46,8 +46,8 @@ merr_t merr_to_user(merr_t err, char __user *ubuf)
 
 	rc = copy_to_user(ubuf + off + len, file, strlen(file) + 1);
 	if (rc) {
-		WARN_ONCE(1, "%s: ubuf copyout: err %lx, ubuf %lx, off %ld, len %ld, file %s",
-			  __func__, (ulong)err, (ulong)ubuf, (long)off, (long)len, file);
+		WARN_ONCE(1, "%s: ubuf copyout: err %lx, ubuf %px, off %ld, len %ld, file %s",
+			  __func__, (ulong)err, ubuf, (long)off, (long)len, file);
 		return (err & ~MERR_FILE_MASK);
 	}
 

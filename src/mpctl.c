@@ -7,6 +7,7 @@
 #include <linux/module.h>
 #include <linux/device.h>
 #include <linux/cdev.h>
+#include <linux/idr.h>
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/blkdev.h>
@@ -152,30 +153,6 @@ struct readpage_work {
 };
 
 /**
- * struct mpc_rgn -
- * @rgn_node:  rb-tree linkage
- * @rgn_start: first available key
- * @rgn_end:   last available key (not inclusive)
- */
-struct mpc_rgn {
-	struct rb_node      rgn_node;
-	u32                 rgn_start;
-	u32                 rgn_end;
-};
-
-/**
- * struct mpc_rgnmap -
- */
-struct mpc_rgnmap {
-	struct mutex        rm_lock;
-	struct rb_root      rm_root;
-	struct rb_node     *rm_cur;
-
-	____cacheline_aligned
-	struct kmem_cache  *rm_cache;
-};
-
-/**
  * struct mpc_metamap_bkt -
  * @mmb_lock:
  * @mmb_root:
@@ -192,8 +169,11 @@ struct mpc_metamap_bkt {
  */
 struct mpc_metamap {
 	struct mpc_metamap_bkt  mm_bkt[MPC_MM_BKT_MAX];
-	struct mpc_rgnmap       mm_rgnmap;
 	atomic_t                mm_cnt;
+
+	____cacheline_aligned
+	struct mutex            mm_rgnlock;
+	struct idr              mm_rgnmap;
 };
 
 static merr_t mpc_cf_journal(struct mpc_unit *unit);
@@ -242,7 +222,6 @@ static struct mpc_reap *mpc_reap __read_mostly;
 
 static size_t mpc_vma_cachesz[2] __read_mostly;
 static struct kmem_cache *mpc_vma_cache[2] __read_mostly;
-static struct kmem_cache *mpc_rgn_cache __read_mostly;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
 static struct backing_dev_info mpc_bdi = {
@@ -1100,124 +1079,6 @@ errout:
 	return err;
 }
 
-static u32 mpc_rgn_alloc(struct mpc_rgnmap *rgnmap)
-{
-	struct mpc_rgn     *rgn;
-	struct rb_root     *root;
-	struct rb_node     *node;
-	u32                 key;
-
-	rgn = NULL;
-	key = 0;
-
-	mutex_lock(&rgnmap->rm_lock);
-	root = &rgnmap->rm_root;
-
-	node = rgnmap->rm_cur;
-	if (!node) {
-		node = rb_first(root);
-		rgnmap->rm_cur = node;
-	}
-
-	if (node) {
-		rgn = rb_entry(node, struct mpc_rgn, rgn_node);
-
-		key = rgn->rgn_start++;
-
-		if (rgn->rgn_start < rgn->rgn_end) {
-			rgn = NULL;
-		} else {
-			rgnmap->rm_cur = rb_next(node);
-			rb_erase(&rgn->rgn_node, root);
-		}
-	}
-	mutex_unlock(&rgnmap->rm_lock);
-
-	if (rgn)
-		kmem_cache_free(mpc_rgn_cache, rgn);
-
-	return key;
-}
-
-static void mpc_rgn_free(struct mpc_rgnmap *rgnmap, u32 key)
-{
-	struct mpc_rgn     *this, *that;
-	struct rb_node    **new, *parent;
-	struct rb_node     *nxtprv;
-	struct rb_root     *root;
-
-	assert(rgnmap && key > 0);
-
-	this = that = NULL;
-	parent = NULL;
-	nxtprv = NULL;
-
-	mutex_lock(&rgnmap->rm_lock);
-	root = &rgnmap->rm_root;
-	new = &root->rb_node;
-
-	while (*new) {
-		this = rb_entry(*new, struct mpc_rgn, rgn_node);
-		parent = *new;
-
-		if (key < this->rgn_start) {
-			if (key == this->rgn_start - 1) {
-				--this->rgn_start;
-				nxtprv = rb_prev(*new);
-				new = NULL;
-				break;
-			}
-			new = &(*new)->rb_left;
-		} else if (key >= this->rgn_end) {
-			if (key == this->rgn_end) {
-				++this->rgn_end;
-				nxtprv = rb_next(*new);
-				new = NULL;
-				break;
-			}
-			new = &(*new)->rb_right;
-		} else {
-			assert(key < this->rgn_start ||
-			       key >= this->rgn_end);
-			new = NULL;
-			break;
-		}
-	}
-
-	if (nxtprv) {
-		that = rb_entry(nxtprv, struct mpc_rgn, rgn_node);
-
-		if (this->rgn_start == that->rgn_end) {
-			this->rgn_start = that->rgn_start;
-			if (&that->rgn_node == rgnmap->rm_cur)
-				rgnmap->rm_cur = &this->rgn_node;
-			rb_erase(&that->rgn_node, root);
-		} else if (this->rgn_end == that->rgn_start) {
-			this->rgn_end = that->rgn_end;
-			if (&that->rgn_node == rgnmap->rm_cur)
-				rgnmap->rm_cur = rb_next(&that->rgn_node);
-			rb_erase(&that->rgn_node, root);
-		} else {
-			that = NULL;
-		}
-	} else if (new) {
-		struct mpc_rgn *rgn;
-
-		rgn = kmem_cache_alloc(mpc_rgn_cache, GFP_ATOMIC);
-		if (rgn) {
-			rgn->rgn_start = key;
-			rgn->rgn_end = key + 1;
-
-			rb_link_node(&rgn->rgn_node, parent, new);
-			rb_insert_color(&rgn->rgn_node, root);
-		}
-	}
-	mutex_unlock(&rgnmap->rm_lock);
-
-	if (that)
-		kmem_cache_free(mpc_rgn_cache, that);
-}
-
 static inline struct mpc_metamap_bkt *
 mpc_metamap_key2bkt(struct mpc_metamap *mm, u32 key)
 {
@@ -1227,8 +1088,6 @@ mpc_metamap_key2bkt(struct mpc_metamap *mm, u32 key)
 static merr_t mpc_metamap_create(u32 rmax, struct mpc_metamap **mmp)
 {
 	struct mpc_metamap *mm;
-	struct mpc_rgnmap  *rgnmap;
-	struct mpc_rgn     *rgn;
 	int                 i;
 
 	if (rmax < 1 || rmax >= U32_MAX)
@@ -1248,23 +1107,8 @@ static merr_t mpc_metamap_create(u32 rmax, struct mpc_metamap **mmp)
 
 	atomic_set(&mm->mm_cnt, 0);
 
-	rgnmap = &mm->mm_rgnmap;
-	mutex_init(&rgnmap->rm_lock);
-	rgnmap->rm_root = RB_ROOT;
-
-	rgn = kmem_cache_alloc(mpc_rgn_cache, GFP_KERNEL);
-	if (!rgn) {
-		kfree(mm);
-		return merr(ENOMEM);
-	}
-
-	rgn->rgn_start = 1;
-	rgn->rgn_end = rmax + 1;
-
-	mutex_lock(&rgnmap->rm_lock);
-	rb_link_node(&rgn->rgn_node, NULL, &rgnmap->rm_root.rb_node);
-	rb_insert_color(&rgn->rgn_node, &rgnmap->rm_root);
-	mutex_unlock(&rgnmap->rm_lock);
+	mutex_init(&mm->mm_rgnlock);
+	idr_init(&mm->mm_rgnmap);
 
 	*mmp = mm;
 
@@ -1273,10 +1117,6 @@ static merr_t mpc_metamap_create(u32 rmax, struct mpc_metamap **mmp)
 
 static void mpc_metamap_destroy(struct mpc_metamap *mm)
 {
-	struct mpc_rgnmap  *rgnmap;
-	struct mpc_rgn     *rgn, *next;
-	bool                leaked;
-
 	if (!mm)
 		return;
 
@@ -1288,28 +1128,12 @@ static void mpc_metamap_destroy(struct mpc_metamap *mm)
 	while (atomic_read(&mm->mm_cnt) > 0)
 		usleep_range(100000, 150000);
 
-	rgnmap = &mm->mm_rgnmap;
-
-	mutex_lock(&rgnmap->rm_lock);
-	leaked = rb_first(&rgnmap->rm_root) != rb_last(&rgnmap->rm_root);
-
-	rbtree_postorder_for_each_entry_safe(
-		rgn, next, &rgnmap->rm_root, rgn_node) {
-
-		kmem_cache_free(mpc_rgn_cache, rgn);
-	}
-	mutex_unlock(&rgnmap->rm_lock);
-
-	if (leaked)
-		mp_pr_warn("rgn leak");
-
-	mutex_destroy(&rgnmap->rm_lock);
-	rgnmap->rm_root = RB_ROOT;
+	idr_destroy(&mm->mm_rgnmap);
 	kfree(mm);
 }
 
 static inline struct mpc_vma *
-mpc_metamap_lookup_locked(struct mpc_metamap_bkt *bkt, u32 key)
+mpc_metamap_lookup_locked(struct mpc_metamap_bkt *bkt, int key)
 {
 	struct rb_root *root;
 	struct rb_node *node;
@@ -1333,7 +1157,7 @@ mpc_metamap_lookup_locked(struct mpc_metamap_bkt *bkt, u32 key)
 	return NULL;
 }
 
-static struct mpc_vma *mpc_metamap_lookup(struct mpc_metamap *mm, u32 key)
+static struct mpc_vma *mpc_metamap_lookup(struct mpc_metamap *mm, int key)
 {
 	struct mpc_metamap_bkt *bkt;
 	struct mpc_vma         *value;
@@ -1347,7 +1171,7 @@ static struct mpc_vma *mpc_metamap_lookup(struct mpc_metamap *mm, u32 key)
 	return value;
 }
 
-static struct mpc_vma *mpc_metamap_acquire(struct mpc_metamap *mm, u32 key)
+static struct mpc_vma *mpc_metamap_acquire(struct mpc_metamap *mm, int key)
 {
 	struct mpc_metamap_bkt *bkt;
 	struct mpc_vma         *meta;
@@ -1395,7 +1219,7 @@ mpc_metamap_insert_locked(struct mpc_metamap_bkt *bkt, struct mpc_vma *meta)
 }
 
 static bool
-mpc_metamap_insert(struct mpc_metamap *mm, u32 key, struct mpc_vma *meta)
+mpc_metamap_insert(struct mpc_metamap *mm, int key, struct mpc_vma *meta)
 {
 	struct mpc_metamap_bkt *bkt;
 	struct mpc_vma         *dup;
@@ -1434,10 +1258,12 @@ again:
 
 	mm = meta->mcm_metamap;
 
-	mpc_rgn_free(&mm->mm_rgnmap, meta->mcm_rgn);
+	mutex_lock(&mm->mm_rgnlock);
+	idr_remove(&mm->mm_rgnmap, meta->mcm_rgn);
+	mutex_unlock(&mm->mm_rgnlock);
 
 	meta->mcm_magic = 0xbadcafe;
-	meta->mcm_rgn = -1;
+	meta->mcm_rgn = 0;
 
 	kmem_cache_free(meta->mcm_cache, meta);
 
@@ -2157,7 +1983,7 @@ static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 
 	off_t   off;
 	ulong   len;
-	u64     key;
+	u32     key;
 
 	unit = fp->private_data;
 
@@ -4197,6 +4023,7 @@ merr_t mpioc_mlog_erase(struct mpc_unit *unit, struct mpioc_mlog_id *mi)
 static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 {
 	struct mpool_descriptor    *mpdesc;
+	struct mpc_metamap         *mm;
 	struct mpc_mbinfo          *mbinfov;
 	struct kmem_cache          *cache;
 	struct mpc_vma             *meta;
@@ -4295,9 +4122,15 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 		goto errout;
 	}
 
-	meta->mcm_rgn = mpc_rgn_alloc(&unit->un_metamap->mm_rgnmap);
-	if (!meta->mcm_rgn) {
-		err = merr(ENOSPC);
+	//lockdep_assert_held(&wq_pool_mutex);
+	mm = unit->un_metamap;
+
+	mutex_lock(&mm->mm_rgnlock);
+	meta->mcm_rgn = idr_alloc_cyclic(&mm->mm_rgnmap, NULL, 1, 8 << 20, GFP_ATOMIC);
+	mutex_unlock(&mm->mm_rgnlock);
+
+	if (meta->mcm_rgn < 1) {
+		err = merr(meta->mcm_rgn ?: ENOMEM);
 		goto errout;
 	}
 
@@ -4306,7 +4139,10 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 	vma->im_len = meta->mcm_bktsz * mbidc;
 	vma->im_len = ALIGN(vma->im_len, (1ul << mpc_vma_size_max));
 
-	if (!mpc_metamap_insert(unit->un_metamap, meta->mcm_rgn, meta)) {
+	if (!mpc_metamap_insert(mm, meta->mcm_rgn, meta)) {
+		mutex_lock(&mm->mm_rgnlock);
+		idr_remove(&mm->mm_rgnmap, meta->mcm_rgn);
+		mutex_unlock(&mm->mm_rgnlock);
 		err = merr(EEXIST);
 		goto errout;
 	}
@@ -4945,15 +4781,6 @@ static __init int mpc_init(void)
 		goto errout;
 	}
 
-	mpc_rgn_cache = kmem_cache_create(
-		"mpc_rgn", sizeof(struct mpc_rgn), 0,
-		SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
-	if (!mpc_rgn_cache) {
-		errmsg = "rgn cache create failed";
-		err = merr(ENOMEM);
-		goto errout;
-	}
-
 	sz = sizeof(struct mpc_mbinfo) * 8;
 	mpc_vma_cachesz[0] = sizeof(struct mpc_vma) + sz;
 
@@ -5120,9 +4947,6 @@ errout:
 	kmem_cache_destroy(mpc_vma_cache[0]);
 	mpc_vma_cache[0] = NULL;
 
-	kmem_cache_destroy(mpc_rgn_cache);
-	mpc_rgn_cache = NULL;
-
 	mpc_sysctl_unregister();
 
 	return -merr_errno(err);
@@ -5165,9 +4989,6 @@ static __exit void mpc_exit(void)
 
 	kmem_cache_destroy(mpc_vma_cache[0]);
 	mpc_vma_cache[0] = NULL;
-
-	kmem_cache_destroy(mpc_rgn_cache);
-	mpc_rgn_cache = NULL;
 
 	mpc_sysctl_unregister();
 

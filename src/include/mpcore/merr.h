@@ -55,7 +55,7 @@
  * MERR_INFO_SZ    Max size of struct merr_info message buffer
  * MERR_BASE_SZ    Size of struct merr_base[] user buffer for module file names
  */
-#define MERR_ALIGN          (1u << 6)
+#define MERR_ALIGN          (1 << 6)
 #define MERR_BASE_SZ        (MERR_ALIGN * 64 * 2)
 
 #define _merr_section       __attribute__((__section__("mpool_merr")))
