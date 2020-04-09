@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
+
+#
+# This file is for use on el6 or el6-based distros
+# Should be installed in /etc/sysconfig/modules
+#
+# Load the Heterogeneous Storage Engine kernel modules at boot.
+#
+exec /sbin/modprobe mpool >/dev/null
+

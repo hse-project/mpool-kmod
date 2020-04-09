@@ -1,0 +1,915 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
+ */
+
+#include <linux/fs.h>
+#include <linux/blk_types.h>
+#include <linux/log2.h>
+
+#include <mpcore/mdc.h>
+
+#include "mpcore_defs.h"
+
+#define ECIO_FST_RW   2 /* Number of rw locks for first layer */
+#define ECIO_SND_RW  32 /* Number of rw locks for second layer */
+_Static_assert(ECIO_SND_RW + ECIO_FST_RW < ECIO_RWL_PER_NODE,
+	       "Not enough ecio layout rw locks");
+
+/*
+ * ecio API functions
+ */
+
+/*
+ * Error codes: all ecio fns can return one or more of:
+ * -EINVAL = invalid fn args
+ * -EIO = all other errors
+ *
+ * NOTE: the ecio error report carries more detailed error information
+ */
+
+
+/**
+ * Read tlength bytes from object starting at byte offset boff, where
+ * for an mlog; boff is absolute and for an mblock boff is relative to
+ * mblock.  In either case boff and tlength must be multiple of OS pages
+ * transparently handles media failures if possible.
+ *
+ * Returns: 0 if successful, merr_t otherwise
+ */
+static merr_t
+ecio_read_driver(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	struct iovec                   *iov,
+	int                             iovcnt,
+	u64                             boff,
+	u64                             tlength,
+	u32                             max_iovecs,
+	struct cb_context              *cbctx,
+	struct ecio_err_report         *erpt)
+{
+	merr_t err = 0;
+
+	if (iovcnt) {
+		struct mpool_dev_info         *pd;
+
+		pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
+
+		err = pd_zone_preadv(pd, iov, iovcnt, layout->eld_ld.ol_zaddr,
+				     boff, cbctx);
+	}
+
+	return err;
+}
+
+/**
+ * ecio_mbwrite_driver()
+ *
+ * This function splits the caller's iovec list (via src_cursor) across
+ * the back-end pd's according to the layout.
+ *
+ * Write tlength bytes to mblock object erasure coded
+ * per layout; mblock must be available to write
+ * and tlength must be a OS pagesz multiple as confirmed by caller.
+ *
+ * @mp:         mpool descriptor
+ * @layout:     layout descriptor
+ * @iov:
+ * @iovcnt:
+ * @boff:       Starting offset into the object, in bytes
+ * @tlength:    Length of the I/O
+ * @max_iovecs:
+ * @op_flags:   bio request flags
+ * @erpt:       ecio_err_report
+ *
+ * Returns: 0 if successful, merr_t otherwise
+ *
+ * The caller (or its caller) is responsible for validity-checking the
+ * src_cursor.
+ */
+static merr_t
+ecio_mbwrite_driver(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	struct iovec                   *iov,
+	int                             iovcnt,
+	u64                             boff,
+	u64                             tlength,
+	u32                             max_iovecs,
+	u32                             op_flags,
+	struct cb_context              *cbctx,
+	struct ecio_err_report         *erpt)
+{
+	merr_t                         err = 0;
+
+	if (iovcnt) {
+		struct mpool_dev_info         *pd;
+
+		pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
+
+		err = pd_zone_pwritev(pd, iov, iovcnt, layout->eld_ld.ol_zaddr,
+				      boff, op_flags, cbctx);
+	}
+
+	return err;
+}
+
+/**
+ * ecio_mbio_chunker()
+ *
+ * This function is a wrapper for ecio_mbwrite_driver() and ecio_read_driver()
+ *
+ * This wrapper splits writes into non-overlapping chunks.  The goal is for
+ * the chunks to be 'big enough' to achieve decent data rates with a single
+ * stream, but more importantly to avoid putting more outstanding I/O than
+ * necessary from any single stream.  (The single-stream case is not the
+ * common case)
+ *
+ * ...this is because we need the device to be able to complete more important
+ * I/Os with a tight latency distribution.  Flooding the devices with queue
+ * depth dents to cause more scatter in the latency distribution.
+ *
+ * This function updates layout->eld_mblen for successful writes.
+ */
+static merr_t
+ecio_mbio_chunker(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	struct iovec                   *iov,
+	int                             iovcnt,
+	u64                             tlength,
+	struct ecio_err_report         *erpt,
+	int                             rw,
+	u64                             obj_ofs_bytes)
+{
+	struct cb_context  *cbctx;
+
+	u64    mblock_offset = obj_ofs_bytes;
+	u64    remainder_pages, max_pages;
+	u32    op_flags = 0;
+	u32    max_iovecs = get_max_iovecs();
+	int    payload_offset, i, nchunks, index;
+	merr_t err = 0;
+
+	assert(!(tlength & (PAGE_SIZE - 1)));
+	assert(!(obj_ofs_bytes & (PAGE_SIZE - 1)));
+	assert(iovcnt == (tlength >> PAGE_SHIFT));
+	assert((rw == MPOOL_OP_READ) || (obj_ofs_bytes == layout->eld_mblen));
+
+	if ((tlength >> PAGE_SHIFT) <= max_iovecs) {
+		if (rw == MPOOL_OP_WRITE) {
+			op_flags |= REQ_FUA;
+			err = ecio_mbwrite_driver(mp, layout, iov, iovcnt,
+						  obj_ofs_bytes, tlength,
+						  max_iovecs, op_flags,
+						  NULL, erpt);
+			if (!ev(err))
+				layout->eld_mblen += tlength;
+		} else {
+			err = ecio_read_driver(mp, layout, iov, iovcnt,
+					       obj_ofs_bytes, tlength,
+					       max_iovecs, NULL, erpt);
+		}
+
+		return err;
+	}
+
+	/* This I/O is large enough to require chunking */
+	remainder_pages = tlength >> PAGE_SHIFT;
+	max_pages       = max_iovecs;
+	payload_offset  = 0;
+	nchunks = (remainder_pages / max_pages) + 1;
+
+	index = (nchunks <= 8) ? 0 : order_base_2(nchunks) - 3;
+	if (index > MPOOL_CHUNKER_CACHE_MAX - 1)
+		cbctx = kcalloc(nchunks, sizeof(*cbctx), GFP_KERNEL);
+	else
+		cbctx = kmem_cache_zalloc(chunker_cache[index], GFP_KERNEL);
+	if (!cbctx)
+		return merr(ENOMEM);
+
+	for (i = 0; remainder_pages; i++) {
+		u64 cur_pages = min_t(u64, max_pages, remainder_pages);
+		u64 cur_bytes = cur_pages << PAGE_SHIFT;
+
+		init_completion(&cbctx[i].cb_iodone);
+		atomic_set(&cbctx[i].cb_iocnt, 1);
+
+		if (rw == MPOOL_OP_WRITE) {
+			/*
+			 * Need to FLUSH the drive cache at mblock_commit,
+			 * since we don't issue write with FUA bit set
+			 */
+			layout->eld_flags |= MB_FLG_NEED_FLUSH;
+
+			err = ecio_mbwrite_driver(mp, layout,
+						  &iov[payload_offset],
+						  cur_pages, mblock_offset,
+						  cur_bytes, max_iovecs,
+						  op_flags, &cbctx[i], erpt);
+		} else {
+			err = ecio_read_driver(mp, layout, &iov[payload_offset],
+					       cur_pages, mblock_offset,
+					       cur_bytes, max_iovecs,
+					       &cbctx[i], erpt);
+		}
+		if (ev(err))
+			break;
+
+		remainder_pages -= cur_pages;
+		payload_offset  += cur_pages;
+		mblock_offset   += cur_bytes;
+	}
+
+	/* Updating eld_mblen here means that it is only updated if
+	 * all chunk writes completed.  This is more consistent with
+	 * our current semantics in which we do not partially
+	 * complete I/Os
+	 */
+	if (rw == MPOOL_OP_WRITE && !err)
+		layout->eld_mblen += tlength;
+
+	assert(i <= nchunks);
+	while (--i >= 0) {
+		int    rc;
+
+		wait_for_completion_io(&cbctx[i].cb_iodone);
+		rc = atomic_read(&cbctx[i].cb_ioerr);
+		if (rc)
+			err = merr(rc);
+	}
+
+	if (index > MPOOL_CHUNKER_CACHE_MAX - 1)
+		kfree(cbctx);
+	else
+		kmem_cache_free(chunker_cache[index], cbctx);
+
+	return err;
+}
+
+/**
+ * iov_len_and_alignment()
+ *
+ * Calculate the total data length of an iovec list, and set a flag if there
+ * are any non-page-aligned pointers (or non-page-multiple iovecs)
+ */
+static u64 iov_len_and_alignment(struct iovec *iov, int iovcnt, int *alignment)
+{
+	u64    rval = 0;
+	int    i = 0;
+	int    align = 0;
+
+	*alignment = 0;
+
+	for (i = 0; i < iovcnt; i++) {
+		rval += iov[i].iov_len;
+
+		/* Make alignment and length problems distinguishable */
+		if ((ulong)iov[i].iov_base & (PAGE_SIZE - 1))
+			align |= 1;
+		if (iov[i].iov_len & (PAGE_SIZE - 1))
+			align |= 2;
+	}
+
+	*alignment = align;
+
+	return rval;
+}
+
+/**
+ * ecio_object_valid()
+ *
+ * @mp
+ * @layout
+ *
+ * Validate an mblock for read, write or erase.
+ */
+static merr_t
+ecio_object_valid(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	enum obj_type_omf               type)
+{
+	merr_t err;
+
+	if (ev(type != OMF_OBJ_MBLOCK && type != OMF_OBJ_MLOG))
+		return merr(EINVAL);
+
+	if (pmd_objid_type(layout->eld_objid) != type) {
+		err = merr(EINVAL);
+		mp_pr_err("mpool %s, object 0x%lx type %d is not %s",
+			  err, mp->pds_name,
+			  (ulong)layout->eld_objid,
+			  pmd_objid_type(layout->eld_objid),
+			  (type == OMF_OBJ_MBLOCK) ? "mblock" : "mlog");
+		return err;
+	}
+
+	return 0;
+}
+
+u32
+ecio_mblock_stripe_size(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout)
+{
+	struct mpool_dev_info          *pd;
+
+	pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
+
+	return pd->pdi_parm.dpr_optiosz;
+}
+
+/**
+ * ecio_mbrw_argcheck()
+ *
+ * @mp:      - Mpool descriptor
+ * @layout:  - Layout of the mblock
+ * @iov:     - iovec array
+ * @iovcnt:  - iovec count
+ * @boff:    - Byte offset into the layout.  Must be equal to layout->eld_mblen
+ *             for write
+ * @rw:      - MPOOL_OP_READ or MPOOL_OP_WRITE
+ * @nbytes:  - Output: number of bytes in iov list
+ *
+ * Validate ecio_mblock_write() and ecio_mblock_read()
+ *
+ * Sets *nbytes to total data in iov
+ *
+ * Returns: 0 if successful, merr_t otherwise
+ *
+ * Note: be aware that there are checks in this function that prevent illegal
+ * arguments in lower level functions (lower level functions should assert the
+ * requirements but not otherwise check them)
+ */
+static merr_t
+ecio_mbrw_argcheck(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	struct iovec                   *iov,
+	int                             iovcnt,
+	u64                             boff,
+	int                             rw,
+	u64                            *nbytes)
+{
+	u64    data_len = 0;
+	u64    stripe_bytes;
+	u32    mblock_cap;
+	int    alignment;
+	merr_t err;
+
+	err = ecio_object_valid(mp, layout, OMF_OBJ_MBLOCK);
+	if (ev(err))
+		return err;
+
+	mblock_cap   = ecio_obj_get_cap_from_layout(mp, layout);
+	stripe_bytes = ecio_mblock_stripe_size(mp, layout);
+
+	data_len = iov_len_and_alignment(iov, iovcnt, &alignment);
+	if (alignment) {
+		err = merr(EINVAL);
+		mp_pr_err("mpool %s, mblock %s IOV not page aligned (%d)",
+			  err, mp->pds_name,
+			  (rw == MPOOL_OP_READ) ? "read" : "write",
+			  alignment);
+		return err;
+	}
+
+	if (rw == MPOOL_OP_READ) {
+		/* boff must be a multiple of the OS page size */
+		if (boff  & (PAGE_SIZE - 1)) {
+			err = merr(EINVAL);
+			mp_pr_err("mpool %s, read offset 0x%lx is not multiple of OS page size",
+				  err, mp->pds_name, (ulong) boff);
+			return err;
+		}
+
+		/* Check that boff is not past end of mblock capacity.
+		 */
+		if (mblock_cap <= boff) {
+			err = merr(EINVAL);
+			mp_pr_err("mpool %s, read offset 0x%lx >= mblock capacity 0x%x",
+				  err, mp->pds_name, (ulong)boff, mblock_cap);
+			return err;
+		}
+
+		/* Check that the request does not extend past the data
+		 * written.  Don't record an error if this appears to
+		 * be an mcache readahead request.
+		 *
+		 * TODO: Use (data_len != MCACHE_RA_PAGES_MAX)
+		 */
+		if (ev(boff + data_len > layout->eld_mblen))
+			return merr(EINVAL);
+	} else {
+		/* Write boff required to match eld_mblen */
+		if (boff != layout->eld_mblen) {
+			err = merr(EINVAL);
+			mp_pr_err("mpool %s write boff (%ld) != eld_mblen (%d)",
+				  err, mp->pds_name, (ulong)boff,
+				  layout->eld_mblen);
+			return err;
+		}
+
+		/* Writes must be stripe-aligned */
+		if (boff % stripe_bytes) {
+			err = merr(EINVAL);
+			mp_pr_err("mpool %s, write not stripe-aligned, offset 0x%lx",
+				  err, mp->pds_name, (ulong)boff);
+			return err;
+		}
+
+		/* Check for write past end of allocated space (!) */
+		if ((data_len + boff) > mblock_cap) {
+			err = merr(EINVAL);
+			mp_pr_err("(write): len %lu + boff %lu > mblock_cap %lu",
+				  err, (ulong)data_len, (ulong)boff,
+				  (ulong)mblock_cap);
+			return err;
+		}
+	}
+
+	/* Set the amount of data to read/write */
+	*nbytes = data_len;
+
+	return 0;
+}
+
+static void
+ecio_pd_status_update(
+	struct mpool_descriptor    *mp,
+	uint                        pdh,
+	struct ecio_err_report     *erpt)
+{
+	struct mpool_dev_info  *pd;
+
+	if (!erpt->eer_errs || !mp->pds_pdv)
+		return;
+
+	pd = &mp->pds_pdv[pdh];
+
+	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
+		return;
+
+	if (erpt_succeeded(erpt, 0))
+		mpool_pd_status_set(pd, PD_STAT_ONLINE);
+	else
+		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
+}
+
+/**
+ * ecio_mblock_write()
+ *
+ * Write a complete mblock, erasure coded per mblock layout;
+ * caller MUST hold pmd_obj_*lock() on layout;
+ *
+ * Sets bytes written in nbytes.
+ *
+ * Returns: 0 if successful, merr_t otherwise
+ */
+merr_t
+ecio_mblock_write(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	struct iovec                   *iov,
+	int                             iovcnt,
+	struct ecio_err_report         *erpt,
+	u64                            *nbytes)
+{
+	merr_t err;
+
+	erpt_init(erpt);
+
+	/* After this call, *nbytes is valid */
+	err = ecio_mbrw_argcheck(mp, layout, iov, iovcnt, layout->eld_mblen,
+				 MPOOL_OP_WRITE, nbytes);
+	if (err) {
+		mp_pr_debug("ecio write argcheck err", err);
+		return merr(err);
+	}
+
+	if (*nbytes == 0)
+		return 0;
+
+	err = ecio_mbio_chunker(mp, layout, iov, iovcnt, *nbytes, erpt,
+				MPOOL_OP_WRITE, layout->eld_mblen);
+
+	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+
+	return err;
+}
+
+/*
+ * Read mblock starting at byte offset boff;
+ * and transparently handles media failures if possible; boff and read length
+ * must be OS page multiples;
+ * caller MUST hold pmd_obj_*lock() on layout.
+ *
+ * Returns: 0 if successful, merr_t otherwise
+ */
+merr_t
+ecio_mblock_read(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	struct iovec                   *iov,
+	int                             iovcnt,
+	u64                             boff,
+	struct ecio_err_report         *erpt)
+{
+	u64    nbytes = 0;
+	merr_t err;
+
+	erpt_init(erpt);
+
+	err = ecio_mbrw_argcheck(mp, layout, iov, iovcnt, boff,
+				 MPOOL_OP_READ, &nbytes);
+	if (err) {
+		mp_pr_debug("ecio read argcheck", err);
+		return merr(err);
+	}
+
+	if (!nbytes)
+		return 0;
+
+	err = ecio_mbio_chunker(mp, layout, iov, iovcnt, nbytes, erpt,
+				MPOOL_OP_READ, boff);
+
+	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+
+	return err;
+}
+
+
+/*
+ * ecio_erase_driver() - Erase all strips in layout
+ * @mp:
+ * @layout:
+ * @flags: OR of pd_erase_flags bits
+ * @erpt:
+ * Returns: 0 if successful, merr_t otherwise
+ */
+static merr_t
+ecio_erase_driver(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	enum pd_erase_flags             flags,
+	struct ecio_err_report         *erpt)
+{
+	struct mpool_dev_info  *pd;
+	merr_t err;
+
+	pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
+
+	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
+		return merr(EIO);
+
+	err = pd_bio_erase_sync(pd, layout->eld_ld.ol_zaddr,
+				layout->eld_ld.ol_zcnt, flags);
+
+	return err;
+}
+
+/*
+ * Erase mblock; caller MUST hold pmd_obj_wrlock() on layout.
+ *
+ * Returns: 0 if successful, merr_t otherwise
+ */
+merr_t
+ecio_mblock_erase(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	struct ecio_err_report         *erpt)
+{
+	merr_t err;
+
+	erpt_init(erpt);
+
+	err = ecio_object_valid(mp, layout, OMF_OBJ_MBLOCK);
+	if (ev(err))
+		return err;
+
+	err = ecio_erase_driver(mp, layout, 0, erpt);
+
+	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+
+	return err;
+}
+
+/*
+ * Caller MUST hold pmd_obj_wrlock() on layout.
+ *
+ * Returns: 0 if successful, merr_t if error
+ */
+merr_t
+ecio_mlog_write(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	struct iovec                   *iov,
+	int                             iovcnt,
+	u64                             boff,
+	struct ecio_err_report         *erpt)
+{
+	struct mpool_dev_info  *pd;
+
+	merr_t err;
+	int    op_flags = 0;
+
+	erpt_init(erpt);
+	err = ecio_object_valid(mp, layout, OMF_OBJ_MLOG);
+	if (ev(err))
+		return err;
+
+	pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
+	op_flags |= REQ_FUA;
+
+	err = pd_zone_pwritev(pd, iov, iovcnt, layout->eld_ld.ol_zaddr,
+			      boff, op_flags, NULL);
+
+	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+
+	return err;
+}
+
+/*
+ * Read log block at page offset lpoff into lbuf; and
+ * transparently handles media failures if possible; caller MUST hold
+ * pmd_obj_*lock() on layout.
+ *
+ * Returns: 0 if success, merr_t otherwise
+ */
+merr_t
+ecio_mlog_read(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	struct iovec                   *iov,
+	int                             iovcnt,
+	u64                             boff,
+	struct ecio_err_report         *erpt)
+{
+	merr_t err;
+	u64    tlen;
+	int    aligned;
+
+	erpt_init(erpt);
+
+	err = ecio_object_valid(mp, layout, OMF_OBJ_MLOG);
+	if (ev(err))
+		return err;
+
+	/* Get length of iov list (not interested in alignment but it's free) */
+	tlen = iov_len_and_alignment(iov, iovcnt, &aligned);
+
+	err = ecio_read_driver(mp, layout, iov, iovcnt, boff, tlen,
+			       get_max_mlog_iovecs(), NULL, erpt);
+
+	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+
+	return err;
+}
+
+/*
+ * Erase mlog; caller MUST hold pmd_obj_wrlock() on layout.
+ *
+ * Returns: 0 if successful, merr_t if error
+ */
+merr_t
+ecio_mlog_erase(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	enum pd_erase_flags             flags,
+	struct ecio_err_report         *erpt)
+{
+	merr_t err;
+
+	erpt_init(erpt);
+
+	err = ecio_object_valid(mp, layout, OMF_OBJ_MLOG);
+	if (ev(err))
+		return err;
+
+	/* PD_ERASE_READS_ERASED: need to read from the erased blocks */
+	flags |= PD_ERASE_READS_ERASED;
+	err = ecio_erase_driver(mp, layout, flags, erpt);
+
+	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+
+	return err;
+}
+
+/**
+ * ecio_objid2rwidx() - compute an index in the rw locks of a node from
+ *	the obj id.
+ * @objid:
+ * @mdc1_shift:
+ * ((mdi_slotvcnt-1) rounded up to next power of 2) == 2^mdc1_shift)
+ *	The -1 is to not count MDC0.
+ *	If the number of existing/allocated slots among MDC1-255 is a power
+ *	of 2, then it is equal to 2^mdc1_shift.
+ *
+ * A same thread can take the rw lock of a client obj, then the one of
+ * a MDCi (i>0) mlog, then the one of a MDC0 mlog. If these rw locks where
+ * the same, it would result in a deadlock.
+ * To avoid the deadlock, we make sure that any rw lock can be used solely by
+ * one of these three layers.
+ */
+static u32 ecio_objid2rwidx(u64 objid, u8 mdc1_shift)
+{
+	u32    idx = 0;
+
+	if (objid == MDC0_OBJID_LOG1)
+		idx = 0; /* First layer, object metadata in SB */
+	else if (objid == MDC0_OBJID_LOG2)
+		idx = 1; /* First layer */
+	else if (!objid_slot(objid))
+		/* Second layer, obj metadata in MDC0 : rw locks 2 to 33 */
+		idx = objid_uniq(objid)%ECIO_SND_RW + ECIO_FST_RW;
+	else
+		/*
+		 * Client layer, obj metadata in MDC1-255
+		 * Use the mdc1_shift lower bits of the cslot and the
+		 * lower bits of the unique id.
+		 * rw locks 34 to ECIO_RWL_PER_NODE -1
+		 */
+		idx = (((objid & ((1 << mdc1_shift) - 1)) |
+			(objid_uniq(objid) << mdc1_shift)) %
+			(ECIO_RWL_PER_NODE - ECIO_SND_RW - ECIO_FST_RW)) +
+			ECIO_SND_RW + ECIO_FST_RW;
+
+	return idx;
+}
+
+/*
+ * Alloc and init object layout; non-arg fields and all strip descriptor
+ * fields are set to 0/UNDEF/NONE; no auxiliary object info is allocated.
+ *
+ * Returns NULL if allocation fails.
+ */
+struct ecio_layout_descriptor *
+ecio_layout_alloc(
+	struct mpool_descriptor    *mp,
+	struct mpool_uuid          *uuid,
+	u64                         objid,
+	u64                         gen,
+	u64                         mblen,
+	u32                         zcnt,
+	bool                        need_ref)
+{
+	struct ecio_layout_descriptor  *layout;
+	struct rw_semaphore            *rwl;
+
+	u32    rwidx;
+
+	rwidx = ecio_objid2rwidx(objid, mp->pds_mda.mdi_slotvcnt_shift);
+
+	rwl = numa_elmset_addr(mp->pds_ecio_layout_rwl, numa_node(rwidx), rwidx);
+	if (ev(!rwl))
+		return NULL;
+
+	__builtin_prefetch(rwl, 1);
+
+	layout = kmem_cache_zalloc(ecio_layout_desc_cache, GFP_KERNEL);
+	if (ev(!layout))
+		return NULL;
+
+	if (pmd_objid_type(objid) == OMF_OBJ_MLOG) {
+		layout->eld_mlo =
+			kmem_cache_zalloc(ecio_layout_mlo_cache, GFP_KERNEL);
+		if (ev(!layout->eld_mlo)) {
+			kmem_cache_free(ecio_layout_desc_cache, layout);
+			return NULL;
+		}
+		layout->eld_mlo->mlo_layout = layout;
+		mpool_uuid_copy(&layout->eld_uuid, uuid);
+	}
+
+	layout->eld_magic     = (uintptr_t)layout;
+	layout->eld_objid     = objid;
+	layout->eld_gen       = gen;
+	layout->eld_mblen     = mblen;
+	layout->eld_state     = ECIO_LYT_NONE;
+	layout->eld_rwlock    = rwl;
+	layout->eld_ld.ol_zcnt = zcnt;
+
+	/*
+	 * must set stype=UNDEF in all strips; pmd_layout_free()
+	 * assumes this to deal with failure cases where not every strip
+	 * has an smap allocation
+	 */
+	layout->eld_ld.ol_pdh = 0;
+	layout->eld_ld.ol_zaddr = 0;
+
+	if (need_ref)
+		layout->eld_refcnt = 1; /* for newly allocated object */
+	else
+		layout->eld_refcnt = 0; /* for instantiated layouts */
+
+	return layout;
+}
+
+/*
+ * Deallocate all memory associated with object layout.
+ */
+void ecio_layout_free(struct ecio_layout_descriptor *layout)
+{
+	struct ecio_layout_mlo *mlo;
+
+	if (ev(!layout))
+		return;
+
+	WARN(layout->eld_magic != (uintptr_t)layout,
+	     "%s: %px, magic %lx, objid %lx, refcnt %u",
+	     __func__, layout, layout->eld_magic,
+	     (ulong)layout->eld_objid, layout->eld_refcnt);
+
+	assert(layout->eld_magic == (uintptr_t)layout);
+
+	layout->eld_magic = ~layout->eld_magic;
+
+	mlo = layout->eld_mlo;
+	if (mlo && mlo->mlo_lstat)
+		mp_pr_warn("eld_lstat object %p not freed properly", mlo);
+
+	/*
+	 * Free the performance counter set instance associated to the mlog.
+	 * There is no perf counters associated to an mblock.
+	 */
+	if (pmd_objid_type(layout->eld_objid) == OMF_OBJ_MLOG) {
+		assert(mlo != NULL);
+		kmem_cache_free(ecio_layout_mlo_cache, mlo);
+	}
+
+	kmem_cache_free(ecio_layout_desc_cache, layout);
+}
+
+inline u32
+ecio_zonepg(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout)
+{
+	return mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_parm.dpr_zonepg;
+}
+
+inline u32
+ecio_sectorsz(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout)
+{
+	struct pd_prop *prop;
+
+	prop = &(mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_prop);
+
+	return PD_SECTORSZ(prop);
+}
+
+u64
+ecio_obj_get_cap_from_layout(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout)
+{
+	enum obj_type_omf otype = pmd_objid_type(layout->eld_objid);
+
+	switch (otype) {
+	case OMF_OBJ_MBLOCK:
+	case OMF_OBJ_MLOG:
+		return (ecio_zonepg(mp, layout) * layout->eld_ld.ol_zcnt) <<
+			PAGE_SHIFT;
+
+	case OMF_OBJ_UHANDLE:
+	case OMF_OBJ_UNDEF:
+		break;
+	}
+
+	mp_pr_warn("mpool %s objid 0x%lx, undefined object type %d",
+		   mp->pds_name, (ulong)layout->eld_objid, otype);
+
+	return 0;
+}
+
+merr_t
+ecio_mblock_flush(
+	struct mpool_descriptor        *mp,
+	struct ecio_layout_descriptor  *layout,
+	struct ecio_err_report         *erpt)
+{
+	struct mpool_dev_info  *pd;
+
+	merr_t err;
+
+	erpt_init(erpt);
+
+	err = ecio_object_valid(mp, layout, OMF_OBJ_MBLOCK);
+	if (ev(err))
+		return err;
+
+	pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
+
+	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
+		return merr(ev(EIO));
+
+	err = pd_bio_flush_sync(pd);
+
+	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+
+	return err;
+}

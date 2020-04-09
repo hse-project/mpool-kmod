@@ -1,0 +1,20 @@
+obj-m = @KMOD_NAME@.o
+
+@KMOD_NAME@-objs = @KMOD_OBJS@
+
+KBUILD_EXTRA_SYMBOLS = @KBUILD_EXTRA_SYMBOLS@
+
+ccflags-y += -Wall
+ccflags-y += -Werror
+ccflags-y += -Wlogical-op
+ccflags-y += -Wno-missing-field-initializers
+ccflags-y += -Wuninitialized
+ccflags-y += -Wmaybe-uninitialized
+ccflags-y += -Wextra
+ccflags-y += -Wno-conversion
+ccflags-y += -Wno-sign-conversion
+ccflags-y += -Wno-sign-compare
+ccflags-y += -Wno-unused-parameter
+
+ccflags-y += @KMOD_CDEFS@
+ccflags-y += @KMOD_CCFLAGS@
