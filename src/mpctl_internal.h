@@ -22,7 +22,7 @@ struct mpc_mbinfo {
 
 struct mpc_vma {
 	struct rb_node              mcm_rnode;
-	int                         mcm_rgn;
+	uint                        mcm_rgn;
 	u32                         mcm_magic;
 	size_t                      mcm_bktsz;
 	uint                        mcm_mbinfoc;

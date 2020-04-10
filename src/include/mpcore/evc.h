@@ -17,14 +17,16 @@ struct evc {
 	u32             evc_flags;
 } ____cacheline_aligned;
 
+#define _evc_section       __attribute__((__section__("mpool_evc")))
+
 #define ev(_expr)						\
 	({							\
-		static struct evc _evc = {			\
+		static struct evc _evc _evc_section = {		\
 			.evc_odometer = ATOMIC_INIT(0),		\
 			.evc_trip_odometer = 0,			\
 			.evc_flags = 0,				\
 		};						\
-		typeof(_expr) _tmp = _expr;			\
+		typeof(_expr) _tmp = (_expr);			\
 								\
 		unlikely(_tmp) ? (evc_count(&_evc), _tmp) : _tmp;	\
 	})
