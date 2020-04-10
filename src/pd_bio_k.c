@@ -15,15 +15,6 @@
 
 #include "mpcore_defs.h"
 
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0)
-#define REQ_PREFLUSH REQ_FLUSH
-#endif
-
-#ifndef IOV_MAX
-#define IOV_MAX         (1024)
-#endif
-
 static const fmode_t    pd_bio_fmode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
 static char            *pd_bio_holder = "mpool";
 
@@ -132,15 +123,12 @@ pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
 	 * Zero filling LBA range either using write-same if device supports,
 	 * or writing zeros as a fallback
 	 */
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
-	err = blkdev_issue_zeroout(bdev, sector, nr_sects,
-		GFP_KERNEL, 0);
+	err = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO, 0);
 #elif LINUX_VERSION_CODE > KERNEL_VERSION(4, 0, 0)
-	err = blkdev_issue_zeroout(bdev, sector, nr_sects,
-		GFP_KERNEL, true);
+	err = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO, true);
 #else
-	err = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_KERNEL);
+	err = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO);
 #endif
 
 	return ev(err);
@@ -152,7 +140,7 @@ pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
 	  ((b) & PD_ERASE_READS_ERASED))
 
 /**
- * pd_bio_erase_sync() - issue write-zeros or discard commands to erase PD
+ * pd_bio_erase() - issue write-zeros or discard commands to erase PD
  * @pd
  * @zoneaddr:
  * @zonecnt:
@@ -160,7 +148,7 @@ pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
  * @afp:
  */
 merr_t
-pd_bio_erase_sync(
+pd_bio_erase(
 	struct mpool_dev_info  *pd,
 	u64                     zoneaddr,
 	u32                     zonecnt,
@@ -235,48 +223,14 @@ merr_t pd_bio_flush(struct mpool_dev_info *pd)
 #define SUBMIT_BIO_WAIT(op, bio)       submit_bio_wait((op), (bio))
 #endif
 
-/**
- * Call back passed to the driver along with a bio.
- * Called by the driver.
- */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
-static void pd_bio_rw_cb(struct bio *bio, int err)
-#else
-static void pd_bio_rw_cb(struct bio *bio)
-#endif
-{
-	struct cb_context  *cbctx;
-
-	cbctx = bio->bi_private;
-	if (!cbctx) {
-		bio_put(bio);
-		return;
-	}
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
-	atomic_cmpxchg(&cbctx->cb_ioerr, 0,
-		       blk_status_to_errno(bio->bi_status));
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
-	atomic_cmpxchg(&cbctx->cb_ioerr, 0, bio->bi_error);
-#else
-	atomic_cmpxchg(&cbctx->cb_ioerr, 0, err);
-#endif
-
-	if (atomic_dec_and_test(&cbctx->cb_iocnt))
-		complete(&cbctx->cb_iodone);
-
-	bio_put(bio);
-}
 
 static __always_inline void
 pd_bio_init(
 	struct bio             *bio,
 	struct block_device    *bdev,
 	int                     rw,
-	u64                     off,
-	int                     op_flags,
-	struct cb_context      *cbctx,
-	bio_end_io_t            endio)
+	loff_t                  off,
+	int                     op_flags)
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 	bio_set_op_attrs(bio, rw, op_flags);
@@ -304,13 +258,15 @@ pd_bio_chain(
 
 	new = bio_alloc(gfp, nr_pages);
 
-	if (target) {
-		if (new) {
-			bio_chain(target, new);
-			SUBMIT_BIO(op, target);
-		} else {
-			SUBMIT_BIO_WAIT(op, target);
-		}
+	if (!target)
+		return new;
+
+	if (new) {
+		bio_chain(target, new);
+		SUBMIT_BIO(op, target);
+	} else {
+		SUBMIT_BIO_WAIT(op, target);
+		bio_put(target);
 	}
 
 	return new;
@@ -345,10 +301,9 @@ pd_bio_rw(
 	struct mpool_dev_info  *pd,
 	struct iovec           *iov,
 	int                     iovcnt,
-	u64                     off,
+	loff_t                  off,
 	int                     rw,
-	int                     op_flags,
-	struct cb_context      *cbctx)
+	int                     op_flags)
 {
 	struct block_device    *bdev;
 	struct bio             *bio;
@@ -357,7 +312,7 @@ pd_bio_rw(
 	merr_t                  err = 0;
 	u64                     iov_base, sector_mask;
 	u32                     tot_pages, tot_len, len, iov_len, left;
-	u32                     iolimit = BIO_MAX_PAGES;
+	u32                     iolimit;
 	int                     i, cc, op, rc;
 
 	if (iovcnt < 1)
@@ -426,6 +381,10 @@ pd_bio_rw(
 	if (tot_len == 0)
 		return 0;
 
+	/* IO size for each bio is determined by the chunker size. */
+	iolimit = mpc_chunker_size >> PAGE_SHIFT;
+	iolimit = clamp_t(u32, iolimit, 32, BIO_MAX_PAGES);
+
 	/*
 	 * TODO: the fix for the linux bug will be included in kernel 4.12
 	 * we can remove this DIF workaround, once we move to 4.12 or beyond.
@@ -433,14 +392,14 @@ pd_bio_rw(
 	q = bdev_get_queue(bdev);
 	if (q && (pd->pdi_cmdopt & PD_CMD_DIF_ENABLED))
 		iolimit = min_t(u32, iolimit,
-				q->limits.max_sectors * KSECSZ / PAGE_SIZE);
+				(q->limits.max_sectors << 9) >> PAGE_SHIFT);
 
 	left = 0;
 	bio = NULL;
 	op = (rw == REQ_OP_READ) ? READ : WRITE;
 
 	for (i = 0; i < iovcnt; i++) {
-		iov_base = (u64) iov[i].iov_base;
+		iov_base = (u64)iov[i].iov_base;
 		iov_len = iov[i].iov_len;
 
 		while (iov_len > 0) {
@@ -448,13 +407,10 @@ pd_bio_rw(
 				left = min_t(size_t, tot_pages, iolimit);
 
 				bio = pd_bio_chain(bio, op, left, GFP_NOIO);
-				if (!bio) {
-					err = merr(ENOMEM);
-					goto err_exit;
-				}
+				if (!bio)
+					return merr(ENOMEM);
 
-				pd_bio_init(bio, bdev, rw, off, op_flags,
-					    cbctx, pd_bio_rw_cb);
+				pd_bio_init(bio, bdev, rw, off, op_flags);
 			}
 
 			len = min_t(size_t, PAGE_SIZE, iov_len);
@@ -469,38 +425,27 @@ pd_bio_rw(
 					left = 0;
 					continue;
 				}
+
 				bio_io_error(bio);
-				err = merr(ev(EBUG));
-				goto err_exit;
+				bio_put(bio);
+				return merr(EBUG);
 			}
 
 			iov_len -= len;
 			iov_base += len;
+			off += len;
 			left--;
 			tot_pages--;
-			off += len;
 		}
 	}
 
-	if (bio) {
-		/* Issue the last bio */
-		assert(tot_pages == 0);
+	assert(bio);
+	assert(tot_pages == 0);
 
-		if (cbctx) {
-			bio->bi_private = cbctx;
-			bio->bi_end_io = pd_bio_rw_cb;
-			atomic_inc(&cbctx->cb_iocnt);
-			SUBMIT_BIO(op, bio);
-		} else {
-			rc = SUBMIT_BIO_WAIT(op, bio);
-			if (rc)
-				err = merr(rc);
-		}
-	}
-
-err_exit:
-	if (!err && cbctx && atomic_dec_and_test(&cbctx->cb_iocnt))
-		complete(&cbctx->cb_iodone);
+	rc = SUBMIT_BIO_WAIT(op, bio);
+	if (rc)
+		err = merr(rc);
+	bio_put(bio);
 
 	return err;
 }

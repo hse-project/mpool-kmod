@@ -41,8 +41,6 @@ struct mp_obj_descriptor; /* for any mpool object: mblock, mlog, etc... */
 
 #define MPOOL_DRIVES_MAX           MP_MED_NUMBER
 
-#define MPOOL_CHUNKER_CACHE_MAX    5
-
 /**
  * enum mpool_status -
  * @MPOOL_STAT_UNDEF:

@@ -80,8 +80,7 @@ struct ecio_layout_mlo {
  * @eld_mblen:   Amount of data written in the mblock in bytes (0 for mlogs)
  * @eld_isdel:   true if object is logically deleted
  * @eld_state:   enum ecio_layout_state
- * @eld_flags:   enum mlog_open_flags for mlogs,
- *               enum mblock_layout_flags for mblocks
+ * @eld_flags:   enum mlog_open_flags for mlogs
  * @eld_refcnt:  user ref count from alloc/get/put
  * @eld_nodemdc: for both ucobj and obj rbtrees, obj. only in one tree
  * @eld_objid:   object id associated with layout
@@ -346,91 +345,7 @@ void ecio_layout_free(struct ecio_layout_descriptor *layout);
  * ecio internal functions
  */
 
-/**
- * struct iov_cursor
- *
- * This structure is used to traverse source and target iovec lists.
- *
- * @ic_iov:            Pointer to the iovec list
- * @ic_iovcnt:         The number of valid iovecs in the list
- * @ic_iovs_allocated: The number of iovecs that will fit in ic_iov (limited
- *                     by the size allocated, which is normally a single page)
- * @ic_idx:            Persistent index/cursor for traversal of the iovec list.
- *                     Valid range is (0 <= ic_idx <= min(ic_iovcnt,
- *                     ic_iovs_allocated)
- * @ic_pgcachetoken    If page came from reserved pool
- * @ic_soff:           On cursors for target strip I/Os, this field is used
- *                     for the base offset within the strip.
- */
-struct iov_cursor {
-	struct iovec *ic_iov;            /* iovec list */
-	int           ic_iovcnt;         /* number of valid iovecs <= iovcnt */
-	int           ic_iovs_allocated; /* allocated number of iovecs */
-	int           ic_idx;            /* current iovec (cursor) */
-	u32           ic_pgcachetoken;   /* private cache token */
-	u64           ic_off;            /* offset into current iovec */
-	u64           ic_soff;           /* offset into the strip */
-};
-
-/**
- * struct tgt_cursor_set
- *
- * This is a set of iov_cursors, generally one per strip, for executing
- * back-end (pd) I/O.
- *
- * These are built by calling passing a source cursor (built from a caller's
- * iovec list) to the build_strip_cursor_set() function, which builds the
- * appropriate tgt_cursor_set based on the topology of the object (mlog or
- * mblock).
- *
- * @ti_strip_ct: The number of iov_cursors in the set
- * @ti_curslst:  The array of iov_cursors
- */
-struct tgt_cursor_set {
-	int                ti_strip_ct; /* # of strips == # of cursors */
-	struct iov_cursor *ti_curslst;  /* cursor list */
-};
-
 extern int mpc_chunker_size;
-
-static inline u32 get_max_iovecs(void)
-{
-	int max_iovecs = PAGE_SIZE / sizeof(struct iovec);
-
-	int num_iovecs = (READ_ONCE(mpc_chunker_size) + PAGE_SIZE - 1)
-			/ PAGE_SIZE;
-
-	if (num_iovecs > 0 && num_iovecs < max_iovecs)
-		return num_iovecs;
-
-	return max_iovecs;
-}
-
-static inline u32 get_max_mlog_iovecs(void)
-{
-	return PAGE_SIZE / sizeof(struct iovec);
-}
-
-/*
- * Asynchronous completion handling.
- */
-
-/*
- * To save sidx, and the buffer containing the chksums to be written.
- * AKA SIDX_AFAN
- * This information is for a given pd.
- */
-#define ECIO_UPL 1
-
-
-/*
- * Information for the IO completion path (Completion Info).
- * Passed back to ecio on completion path of a read or a write.
- */
-struct ecio_rw_af_ci {
-	struct mpool_descriptor		*rwi_mp;
-	struct ecio_layout_descriptor	*rwi_layout;
-};
 
 extern struct shash_desc *mpool_shash_desc_crc32c;
 extern struct shash_desc *mpool_shash_desc_sha256;
@@ -460,7 +375,6 @@ u64
 ecio_obj_get_cap_from_layout(
 	struct mpool_descriptor       *mp,
 	struct ecio_layout_descriptor *layout);
-
 static inline void erpt_init(struct ecio_err_report *erpt)
 {
 	erpt->eer_errs = 0;
@@ -500,39 +414,5 @@ static inline bool erpt_eio(struct ecio_err_report *erpt, u8 idx)
 {
 	return (erpt->eer_pdeio & (1 << idx));
 }
-
-/**
- * ecio_user_layout_alloc() - Allocate a minimal layout descriptor for
- * user space mlogs support
- *
- * @mp:
- * @objid:
- * @gen:
- */
-struct ecio_layout_descriptor *
-ecio_user_layout_alloc(
-	struct mpool_descriptor   *mp,
-	struct mpool_uuid           *uuid,
-	u64                        objid,
-	u64                        gen);
-
-/**
- * ecio_user_layout_free() - Free the layout descriptor used for user-space
- * mlogs
- *
- * @layout:
- */
-void ecio_user_layout_free(struct ecio_layout_descriptor *layout);
-
-/**
- * ecio_user_layout_set() - Set the generation and state in the layout. Used
- * only for user space mlog support
- *
- * @layout:
- * @gen:
- * @state:
- */
-merr_t
-ecio_user_layout_set(struct ecio_layout_descriptor *layout, u64 gen, u8 state);
 
 #endif

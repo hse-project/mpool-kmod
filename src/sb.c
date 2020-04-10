@@ -159,7 +159,7 @@ static merr_t sb_read_sbx(struct mpool_dev_info *pd, char *inbuf, u32 idx)
 	iovbuf.iov_len = SB_AREA_SZ;
 
 	woff = sb_idx2woff(pd, idx);
-	err = pd_zone_preadv_sync(pd, &iovbuf, 1, 0, woff);
+	err = pd_zone_preadv(pd, &iovbuf, 1, 0, woff);
 	/* Reset rval as per api */
 	if (err >= 0)
 		err = 0;
@@ -215,7 +215,7 @@ int sb_magic_check(struct mpool_dev_info *pd)
 	for (i = 0; i < SB_SB_COUNT; i++) {
 		u64 woff = sb_idx2woff(pd, i);
 
-		err = pd_zone_preadv_sync(pd, &iovbuf, 1, 0, woff);
+		err = pd_zone_preadv(pd, &iovbuf, 1, 0, woff);
 		if (err) {
 			rval = merr_errno(err);
 			mp_pr_err("sb(%s, %d) magic: read failed, woff %lu",

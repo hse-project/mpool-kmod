@@ -250,7 +250,7 @@ mpool_mdc0_alloc(
 		/*
 		 * mdc0 log1/2 alloced on first 2 * zcnt zone's
 		 */
-		err = pd_bio_erase_sync(pd, cnt, zcnt * 2, fzero_flag);
+		err = pd_bio_erase(pd, cnt, zcnt * 2, fzero_flag);
 		if (err) {
 			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 				     "erase MDC0 failed on %s %u %lu",

@@ -28,12 +28,6 @@ enum pd_erase_flags {
  * Common defs
  */
 
-struct cb_context {
-	struct completion   cb_iodone;
-	atomic_t            cb_ioerr;
-	atomic_t            cb_iocnt;
-};
-
 /**
  * struct pd_dev_parm -
  * @dpr_prop:		drive properties including zone parameters
@@ -88,7 +82,7 @@ merr_t pd_dev_init(struct pd_dev_parm *dparm, struct pd_prop *pd_prop);
 merr_t pd_bio_dev_open(const char *path, struct pd_dev_parm *dparm);
 
 /**
- * pd_bio_erase_sync() -
+ * pd_bio_erase() -
  * @pd:
  * @zoneaddr:
  * @zonecnt:
@@ -97,7 +91,7 @@ merr_t pd_bio_dev_open(const char *path, struct pd_dev_parm *dparm);
  * Return:
  */
 merr_t
-pd_bio_erase_sync(
+pd_bio_erase(
 	struct mpool_dev_info  *pd,
 	u64                     zoneaddr,
 	u32                     zonecnt,
@@ -124,17 +118,15 @@ merr_t pd_bio_dev_close(struct pd_dev_parm *dparm);
  * @off:
  * @rw:
  * @op_flags:
- * @cbctx:
  */
 merr_t
 pd_bio_rw(
 	struct mpool_dev_info  *pd,
 	struct iovec           *iov,
 	int                     iovcnt,
-	u64                     off,
+	loff_t                  off,
 	int                     rw,
-	int                     op_flags,
-	struct cb_context      *cbctx);
+	int                     op_flags);
 
 /*
  * pd API functions - device dependent operations
@@ -157,9 +149,8 @@ pd_zone_pwritev(
 	struct iovec           *iov,
 	int                     iovcnt,
 	u64                     zoneaddr,
-	u64                     boff,
-	int                     op_flags,
-	struct cb_context      *cbctx);
+	loff_t                  boff,
+	int                     op_flags);
 
 /**
  * pd_zone_pwritev_sync() -
@@ -177,7 +168,7 @@ pd_zone_pwritev_sync(
 	struct iovec           *iov,
 	int                     iovcnt,
 	u64                     zoneaddr,
-	u64                     boff);
+	loff_t                  boff);
 
 /**
  * pd_zone_preadv() -
@@ -195,26 +186,7 @@ pd_zone_preadv(
 	struct iovec           *iov,
 	int                     iovcnt,
 	u64                     zoneaddr,
-	u64                     boff,
-	struct cb_context      *cbctx);
-
-/**
- * pd_zone_preadv_sync() -
- * @pd:
- * @iov:
- * @iovcnt:
- * @zoneaddr: target zone for this I/O
- * @boff:    byte offset into the target zone
- *
- * Return:
- */
-merr_t
-pd_zone_preadv_sync(
-	struct mpool_dev_info  *pd,
-	struct iovec           *iov,
-	int                     iovcnt,
-	u64                     zoneaddr,
-	u64                     boff);
+	loff_t                  boff);
 
 /**
  * pd_dev_set_unavail() -
