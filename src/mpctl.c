@@ -182,7 +182,6 @@ mpc_physio(
 	struct iovec               *uiov,
 	int                         uioc,
 	off_t                       offset,
-	u64                         mblock_cap,
 	enum mp_obj_type            objtype,
 	int                         rw);
 
@@ -3563,7 +3562,7 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw)
 	} else {
 		err = mpc_physio(mpool->mp_desc, obj.ro_value,
 				 kiov, mbrw->mb_iov_cnt, mbrw->mb_offset,
-				 obj.ro_priv1, MP_OBJ_MBLOCK,
+				 MP_OBJ_MBLOCK,
 				 (cmd == MPIOC_MB_READ) ? READ : WRITE);
 		err = merr(err);
 	}
@@ -3893,7 +3892,7 @@ merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi)
 		err = merr(EFAULT);
 	} else {
 		err = mpc_physio(unit->un_mpool->mp_desc, obj.ro_value, kiov,
-				 mi->mi_iovc, mi->mi_off, 0, MP_OBJ_MLOG,
+				 mi->mi_iovc, mi->mi_off, MP_OBJ_MLOG,
 				 (mi->mi_op == MPOOL_OP_READ) ? READ : WRITE);
 		ev(err);
 	}
@@ -4393,49 +4392,14 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 }
 
 /**
- * free_pages_asyncio - free pinned pages after IO is complete
- * @p:
- * @iov_base:
- * @iovcnt:
- * @pagesc:
- * @pagesvsz:
- */
-void
-free_pages_asyncio(
-	void          **p,
-	struct iovec   *iov_base,
-	int             iovcnt,
-	int             pagesc,
-	int             pagesvsz)
-{
-	struct page   **pagesv = (struct page **)p;
-	struct iovec   *iov;
-	int             i;
-
-	for (i = 0, iov = iov_base; i < pagesc; ++i, ++iov) {
-		if (i < iovcnt)
-			kunmap(pagesv[i]);
-		put_page(pagesv[i]);
-	}
-
-	if (pagesvsz <= PAGE_SIZE * 2)
-		kfree(pagesv);
-	else
-		vfree(pagesv);
-}
-
-/**
- * mpc_physio - Generic raw device mblock read/write routine.
+ * mpc_physio() - Generic raw device mblock read/write routine.
  * @mpd:      mpool descriptor
  * @desc:     mblock or mlog descriptor
  * @uiov:     vector of iovecs that describe user-space segments
  * @uioc:     count of elements in uiov[]
  * @offset:   offset into the mblock at which to start reading
- * @mbcap:    mblock capacity
  * @objtype:  mblock or mlog
  * @rw:       READ or WRITE in regards to the media.
- *		Note that "READ" means writing in user space pages receiving
- *		the data, and vice versa for "WRITE".
  *
  * This function creates an array of iovec objects each of which
  * map a portion of the user request into kernel space so that
@@ -4454,7 +4418,6 @@ mpc_physio(
 	struct iovec               *uiov,
 	int                         uioc,
 	off_t                       offset,
-	u64                         mbcap,
 	enum mp_obj_type            objtype,
 	int                         rw)
 {
@@ -4595,7 +4558,17 @@ mpc_physio(
 	}
 
 errout:
-	free_pages_asyncio((void **)pagesv, iov_base, niov, pagesc, pagesvsz);
+	for (i = 0, iov = iov_base; i < pagesc; ++i, ++iov) {
+		if (i < niov)
+			kunmap(pagesv[i]);
+		put_page(pagesv[i]);
+	}
+
+	if (pagesvsz <= PAGE_SIZE * 2)
+		kfree(pagesv);
+	else
+		vfree(pagesv);
+
 	return err;
 }
 
