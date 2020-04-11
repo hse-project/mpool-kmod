@@ -183,7 +183,9 @@ mpc_physio(
 	int                         uioc,
 	off_t                       offset,
 	enum mp_obj_type            objtype,
-	int                         rw);
+	int                         rw,
+	void                       *stkbuf,
+	size_t                      stkbufsz);
 
 static int mpc_readpage_impl(struct page *page, struct mpc_vma *map);
 
@@ -3490,32 +3492,27 @@ out_err:
  * @mbiov:  mblock parameter block
  */
 static merr_t
-mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw)
+mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
+	    void *stkbuf, size_t stkbufsz)
 {
-	struct iovec        kiov_buf[MPIOC_KIOV_MIN];
 	struct refmap_obj   obj;
-	struct mpc_mpool   *mpool;
 	struct iovec       *kiov;
-	merr_t              err;
-	size_t              kiovsz;
-	u64                 objid;
-	char               *op_str;
-	bool                loaded = false;
+
+	bool    loaded = false, xfree = false;
+	size_t  kiovsz;
+	u64     objid;
+	merr_t  err;
 
 	if (!unit || !mbrw || !unit->un_mpool)
 		return merr(EINVAL);
-
-	mpool = unit->un_mpool;
 
 	if (!mbrw->mb_handle)
 		return merr(EINVAL);
 
 	objid = mblock_uhandle_to_objid(mbrw->mb_handle);
 
-	op_str = (cmd == MPIOC_MB_READ) ? "READ" : "WRITE";
-
 	err = mpc_mblock_resolve(unit, objid, &obj);
-	ev(err);
+
 	if (merr_errno(err) == ENOENT) {
 		/* TODO:
 		 * The caller used a handle that is not in the refmap, which
@@ -3523,16 +3520,10 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw)
 		 * drop this call when we no longer allow it:
 		 */
 		err = mpc_mblock_find_once(unit, objid, &obj, &loaded);
-		ev(err);
 	}
 
 	if (err)
 		return err;
-
-	if (loaded) {
-		mp_pr_notice("(%s): caller skipped get %lx",
-			     op_str, (ulong)objid);
-	}
 
 	/* For read(2), reading at or past EOF returns success with zero
 	 * bytes transferred.  But (AFAIK) mpool returns failure if it
@@ -3542,32 +3533,37 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw)
 		return merr(EIO);
 
 	/* For small iovec counts we simply copyin the array of iovecs
-	 * to local storage (kiov_buf).  Otherwise, we must kmalloc a
+	 * to local storage (stkbuf).  Otherwise, we must kmalloc a
 	 * buffer into which to perform the copyin.
 	 */
+	if (mbrw->mb_iov_cnt > MPIOC_KIOV_MAX)
+		return merr(EINVAL);
+
 	kiovsz = mbrw->mb_iov_cnt * sizeof(*kiov);
-	kiov = kiov_buf;
 
-	if (mbrw->mb_iov_cnt > MPIOC_KIOV_MIN) {
-		if (mbrw->mb_iov_cnt > MPIOC_KIOV_MAX)
-			return merr(EINVAL);
-
+	if (kiovsz > stkbufsz) {
 		kiov = kmalloc(kiovsz, GFP_KERNEL);
 		if (!kiov)
 			return merr(ENOMEM);
+
+		xfree = true;
+	} else {
+		kiov = stkbuf;
+		stkbuf += kiovsz;
+		stkbufsz -= kiovsz;
 	}
 
 	if (copy_from_user(kiov, mbrw->mb_iov, kiovsz)) {
 		err = merr(EFAULT);
 	} else {
-		err = mpc_physio(mpool->mp_desc, obj.ro_value,
+		err = mpc_physio(unit->un_mpool->mp_desc, obj.ro_value,
 				 kiov, mbrw->mb_iov_cnt, mbrw->mb_offset,
 				 MP_OBJ_MBLOCK,
-				 (cmd == MPIOC_MB_READ) ? READ : WRITE);
-		err = merr(err);
+				 (cmd == MPIOC_MB_READ) ? READ : WRITE,
+				 stkbuf, stkbufsz);
 	}
 
-	if (kiov != kiov_buf)
+	if (xfree)
 		kfree(kiov);
 
 	return err;
@@ -3856,14 +3852,15 @@ merr_t mpioc_mlog_open(struct mpc_unit *unit, struct mpioc_mlog *ml)
 	return 0;
 }
 
-merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi)
+merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi,
+		     void *stkbuf, size_t stkbufsz)
 {
-	struct iovec        kiov_buf[MPIOC_KIOV_MIN];
 	struct refmap_obj   obj;
 	struct iovec       *kiov;
 
-	size_t kiovsz;
-	merr_t err;
+	bool    xfree = false;
+	size_t  kiovsz;
+	merr_t  err;
 
 	if (!mi || !unit || !unit->un_mpool)
 		return merr(EINVAL);
@@ -3876,16 +3873,21 @@ merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi)
 	 * to the the stack (kiov_buf). Otherwise, we must kmalloc a
 	 * buffer into which to perform the copyin.
 	 */
+	if (mi->mi_iovc > MPIOC_KIOV_MAX)
+		return merr(EINVAL);
+
 	kiovsz = mi->mi_iovc * sizeof(*kiov);
-	kiov   = kiov_buf;
 
-	if (mi->mi_iovc > MPIOC_KIOV_MIN) {
-		if (mi->mi_iovc > MPIOC_KIOV_MAX)
-			return merr(EINVAL);
-
+	if (kiovsz > stkbufsz) {
 		kiov = kmalloc(kiovsz, GFP_KERNEL);
 		if (!kiov)
 			return merr(ENOMEM);
+
+		xfree = true;
+	} else {
+		kiov = stkbuf;
+		stkbuf += kiovsz;
+		stkbufsz -= kiovsz;
 	}
 
 	if (copy_from_user(kiov, mi->mi_iov, kiovsz)) {
@@ -3893,11 +3895,11 @@ merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi)
 	} else {
 		err = mpc_physio(unit->un_mpool->mp_desc, obj.ro_value, kiov,
 				 mi->mi_iovc, mi->mi_off, MP_OBJ_MLOG,
-				 (mi->mi_op == MPOOL_OP_READ) ? READ : WRITE);
-		ev(err);
+				 (mi->mi_op == MPOOL_OP_READ) ? READ : WRITE,
+				 stkbuf, stkbufsz);
 	}
 
-	if (kiov != kiov_buf)
+	if (xfree)
 		kfree(kiov);
 
 	return err;
@@ -4184,10 +4186,11 @@ static merr_t mpioc_test(struct mpc_unit *unit, struct mpioc_test *test)
  */
 static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 {
-	struct mpc_unit    *unit;
 	union mpioc_union   argbuf;
+	struct mpc_unit    *unit;
 
-	void       *argp;
+	void       *argp, *stkbuf = NULL;
+	size_t      stkbufsz = 0;
 	merr_t      err;
 	ulong       iosz;
 	int         rc;
@@ -4223,18 +4226,26 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	iosz = _IOC_SIZE(cmd);
 	argp = (void *)arg;
 
-	/* Copy in write requests, and reject requests that won't fit
-	 * comfortably on the stack (i.e., larger than argbuf).
+	if (iosz > sizeof(argbuf))
+		return -EINVAL;
+
+	/* Copy in write requests, and reject requests that won't
+	 * fit comfortably on the stack (i.e., larger than argbuf).
 	 */
 	if (_IOC_DIR(cmd) & (_IOC_READ | _IOC_WRITE)) {
-		if (iosz > sizeof(argbuf))
-			return ev(-EINVAL);
+		if (iosz < sizeof(struct mpioc_cmn))
+			return -EINVAL;
 
 		argp = &argbuf;
 
 		if (_IOC_DIR(cmd) & _IOC_WRITE) {
 			if (copy_from_user(argp, (void *)arg, iosz))
 				return ev(-EFAULT);
+
+			if (argbuf.mpu_cmn.mc_rcode || argbuf.mpu_cmn.mc_err)
+				return -EINVAL;
+		} else {
+			memset(&argbuf.mpu_cmn, 0, sizeof(argbuf.mpu_cmn));
 		}
 	}
 
@@ -4302,7 +4313,11 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 	case MPIOC_MB_READ:
 	case MPIOC_MB_WRITE:
-		err = mpioc_mb_rw(unit, cmd, argp);
+		assert(roundup(iosz, 16) < sizeof(argbuf));
+		stkbufsz = sizeof(argbuf) - roundup(iosz, 16);
+		stkbuf = (char *)&argbuf + roundup(iosz, 16);
+
+		err = mpioc_mb_rw(unit, cmd, argp, stkbuf, stkbufsz);
 		break;
 
 	case MPIOC_MLOG_ALLOC:
@@ -4338,7 +4353,11 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 	case MPIOC_MLOG_READ:
 	case MPIOC_MLOG_WRITE:
-		err = mpioc_mlog_rw(unit, argp);
+		assert(roundup(iosz, 16) < sizeof(argbuf));
+		stkbufsz = sizeof(argbuf) - roundup(iosz, 16);
+		stkbuf = (char *)&argbuf + roundup(iosz, 16);
+
+		err = mpioc_mlog_rw(unit, argp, stkbuf, stkbufsz);
 		break;
 
 	case MPIOC_MLOG_ERASE:
@@ -4400,6 +4419,8 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
  * @offset:   offset into the mblock at which to start reading
  * @objtype:  mblock or mlog
  * @rw:       READ or WRITE in regards to the media.
+ * @stkbuf:   caller provided scratch space
+ * @stkbufsz: size of stkbuf
  *
  * This function creates an array of iovec objects each of which
  * map a portion of the user request into kernel space so that
@@ -4419,22 +4440,24 @@ mpc_physio(
 	int                         uioc,
 	off_t                       offset,
 	enum mp_obj_type            objtype,
-	int                         rw)
+	int                         rw,
+	void                       *stkbuf,
+	size_t                      stkbufsz)
 {
-	struct iovec   *iov_base, *iov;
-	struct iov_iter iter;
-	struct page   **pagesv;
-	merr_t          err;
+	struct iovec       *iov_base, *iov;
+	struct iov_iter     iter;
+	struct page       **pagesv;
 
-	ssize_t cc;
+	void    (*xfree)(const void *);
 	size_t  pagesvsz, pgbase, length;
 	int     pagesc, niov, i;
+	ssize_t cc;
+	merr_t  err;
 
 	iov = NULL;
 	niov = 0;
 	err = 0;
 
-	__builtin_prefetch(desc);
 	length = iov_length(uiov, uioc);
 
 	if (length < PAGE_SIZE || !IS_ALIGNED(length, PAGE_SIZE))
@@ -4443,22 +4466,32 @@ mpc_physio(
 	/* Allocate an array of page pointers for iov_iter_get_pages()
 	 * and an array of iovecs for mblock_read() and mblock_write().
 	 *
-	 * Note: the only way we can calculate the number of required iovecs in
-	 * advance is to assume that we need one per page.
+	 * Note: the only way we can calculate the number of required
+	 * iovecs in advance is to assume that we need one per page.
 	 */
-	pagesc = (length + PAGE_SIZE - 1) / PAGE_SIZE;
+	pagesc = length / PAGE_SIZE;
 	pagesvsz = (sizeof(*pagesv) + sizeof(*iov)) * pagesc;
-	pagesvsz = ALIGN(pagesvsz, SMP_CACHE_BYTES);
 
 	/* pagesvsz may be big, and it will not be used as the iovec_list
 	 * for the block stack - ecio will chunk it up to the underlying
 	 * devices (with another iovec list per pd), so we know we can get
-	 * away with vmalloc here if it's > PAGE_SIZE
+	 * away with vmalloc here its large.
 	 */
-	if (pagesvsz <= PAGE_SIZE * 2)
-		pagesv = kmalloc(pagesvsz, GFP_KERNEL);
-	else
-		pagesv = vmalloc(pagesvsz);
+	if (pagesvsz > stkbufsz) {
+		pagesv = NULL;
+		xfree = kfree;
+
+		if (pagesvsz <= PAGE_SIZE * 4)
+			pagesv = kmalloc(pagesvsz, GFP_NOWAIT);
+
+		if (!pagesv) {
+			pagesv = vmalloc(pagesvsz);
+			xfree = vfree;
+		}
+	} else {
+		pagesv = stkbuf;
+		xfree = NULL;
+	}
 
 	if (!pagesv)
 		return merr(ENOMEM);
@@ -4471,7 +4504,6 @@ mpc_physio(
 #else
 	iov_iter_init(&iter, uiov, uioc, length, 0);
 #endif
-	mp_obj_rwl_prefetch((struct mp_obj_descriptor *)desc, rw == WRITE);
 
 	for (i = 0, cc = 0; i < pagesc; i += (cc / PAGE_SIZE)) {
 
@@ -4502,7 +4534,6 @@ mpc_physio(
 		 */
 		if (cc > 0)
 			cc = cc * PAGE_SIZE;
-
 #endif
 
 		if (cc < 0) {
@@ -4564,10 +4595,8 @@ errout:
 		put_page(pagesv[i]);
 	}
 
-	if (pagesvsz <= PAGE_SIZE * 2)
-		kfree(pagesv);
-	else
-		vfree(pagesv);
+	if (xfree)
+		xfree(pagesv);
 
 	return err;
 }
