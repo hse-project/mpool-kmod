@@ -98,13 +98,6 @@ pd_bio_erase(
 	enum pd_erase_flags     flag);
 
 /**
- * pd_bio_flush()- issue an empty write command with REQ_FUA and
- *     REQ_PREFLUSH flags set to force device to do a write cache flush
- * @pd:
- */
-merr_t pd_bio_flush(struct mpool_dev_info *pd);
-
-/**
  * pd_bio_dev_close() -
  * @pd:
  */

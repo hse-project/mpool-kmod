@@ -225,17 +225,6 @@ ecio_mblock_erase(
 	struct mpool_descriptor        *mp,
 	struct ecio_layout_descriptor  *layout,
 	struct ecio_err_report         *erpt);
-/**
- * ecio_mblock_flush() - Issue flush commands to PDs in layout
- * @mp:
- * @layout:
- * @erpt:
- */
-merr_t
-ecio_mblock_flush(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout,
-	struct ecio_err_report        *erpt);
 
 /**
  * ecio_mlog_write() - write to an mlog

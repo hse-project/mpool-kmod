@@ -191,29 +191,6 @@ pd_bio_erase(
 	return ev(err);
 }
 
-merr_t pd_bio_flush(struct mpool_dev_info *pd)
-{
-	struct block_device    *bdev;
-	merr_t                  err = 0;
-	int                     rc;
-	sector_t                esect;
-
-	bdev = pd->pdi_parm.dpr_dev_private;
-	if (!bdev) {
-		err = merr(EINVAL);
-		mp_pr_err("bdev %s not registered", err, pd->pdi_name);
-		return err;
-	}
-
-	rc = blkdev_issue_flush(bdev, GFP_NOIO, &esect);
-	if (rc) {
-		err = merr(rc);
-		mp_pr_err("Flush failed for %s at sector %lu",
-			  err, pd->pdi_name, (ulong)esect);
-	}
-
-	return err;
-}
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 #define SUBMIT_BIO(op, bio)            submit_bio((bio))

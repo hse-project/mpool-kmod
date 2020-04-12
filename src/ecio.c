@@ -371,34 +371,6 @@ ecio_mblock_erase(
 	return err;
 }
 
-merr_t
-ecio_mblock_flush(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	struct ecio_err_report         *erpt)
-{
-	struct mpool_dev_info  *pd;
-
-	merr_t err;
-
-	erpt_init(erpt);
-
-	err = ecio_object_valid(mp, layout, OMF_OBJ_MBLOCK);
-	if (ev(err))
-		return err;
-
-	pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
-
-	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
-		return merr(ev(EIO));
-
-	err = pd_bio_flush(pd);
-
-	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
-
-	return err;
-}
-
 /*
  * Caller MUST hold pmd_obj_wrlock() on layout.
  *
