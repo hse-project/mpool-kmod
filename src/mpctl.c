@@ -267,6 +267,14 @@ unsigned int mpc_vma_size_max __read_mostly = 30;
 module_param(mpc_vma_size_max, uint, 0444);
 MODULE_PARM_DESC(mpc_vma_size_max, " max vma size log2");
 
+unsigned int mpc_rwsz_max __read_mostly = 32;
+module_param(mpc_rwsz_max, uint, 0444);
+MODULE_PARM_DESC(mpc_rwsz_max, " max mblock/mlog r/w size (mB)");
+
+unsigned int mpc_rwconc_max __read_mostly = 8;
+module_param(mpc_rwconc_max, uint, 0444);
+MODULE_PARM_DESC(mpc_rwconc_max, " max mblock/mlog large r/w concurrency");
+
 /* mpc_chunker_size is the number of pages that fit in a one-page iovec list
  * (PAGE_SIZE / sizeof(struct iovec)) * PAGE_SIZE, because each iovec maps
  * one page
@@ -3491,6 +3499,7 @@ out_err:
  * @cmd:    MPIOC_MB_READ or MPIOC_MB_WRITE
  * @mbiov:  mblock parameter block
  */
+__attribute__((__noinline__))
 static merr_t
 mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 	    void *stkbuf, size_t stkbufsz)
@@ -3852,6 +3861,7 @@ merr_t mpioc_mlog_open(struct mpc_unit *unit, struct mpioc_mlog *ml)
 	return 0;
 }
 
+__attribute__((__noinline__))
 merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi,
 		     void *stkbuf, size_t stkbufsz)
 {
@@ -4411,6 +4421,70 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 }
 
 /**
+ * struct vcache -  very-large-buffer cache...
+ */
+struct vcache {
+	spinlock_t  vc_lock;
+	void       *vc_head;
+	size_t      vc_size;
+} ____cacheline_aligned;
+
+static struct vcache mpc_physio_vcache;
+
+static void *
+mpc_vcache_alloc(struct vcache *vc, size_t sz)
+{
+	void *p;
+
+	if (!vc || sz > vc->vc_size)
+		return NULL;
+
+	spin_lock(&vc->vc_lock);
+	if ((p = vc->vc_head))
+		vc->vc_head = *(void **)p;
+	spin_unlock(&vc->vc_lock);
+
+	return p;
+}
+
+static void
+mpc_vcache_free(struct vcache *vc, void *p)
+{
+	if (!vc || !p)
+		return;
+
+	spin_lock(&vc->vc_lock);
+	*(void **)p = vc->vc_head;
+	vc->vc_head = p;
+	spin_unlock(&vc->vc_lock);
+}
+
+static merr_t
+mpc_vcache_init(struct vcache *vc, size_t sz, size_t n)
+{
+	if (!vc || sz < PAGE_SIZE || n < 1)
+		return merr(EINVAL);
+
+	spin_lock_init(&vc->vc_lock);
+	vc->vc_head = NULL;
+	vc->vc_size = sz;
+
+	while (n-- > 0)
+		mpc_vcache_free(vc, vmalloc(sz));
+
+	return vc->vc_head ? 0 : merr(ENOMEM);
+}
+
+static void
+mpc_vcache_fini(struct vcache *vc)
+{
+	void *p;
+
+	while ((p = mpc_vcache_alloc(vc, PAGE_SIZE)))
+	       vfree(p);
+}
+
+/**
  * mpc_physio() - Generic raw device mblock read/write routine.
  * @mpd:      mpool descriptor
  * @desc:     mblock or mlog descriptor
@@ -4448,7 +4522,6 @@ mpc_physio(
 	struct iov_iter     iter;
 	struct page       **pagesv;
 
-	void    (*xfree)(const void *);
 	size_t  pagesvsz, pgbase, length;
 	int     pagesc, niov, i;
 	ssize_t cc;
@@ -4463,6 +4536,9 @@ mpc_physio(
 	if (length < PAGE_SIZE || !IS_ALIGNED(length, PAGE_SIZE))
 		return merr(EINVAL);
 
+	if (length > (mpc_rwsz_max << 20))
+		return merr(EINVAL);
+
 	/* Allocate an array of page pointers for iov_iter_get_pages()
 	 * and an array of iovecs for mblock_read() and mblock_write().
 	 *
@@ -4474,23 +4550,21 @@ mpc_physio(
 
 	/* pagesvsz may be big, and it will not be used as the iovec_list
 	 * for the block stack - ecio will chunk it up to the underlying
-	 * devices (with another iovec list per pd), so we know we can get
-	 * away with vmalloc here its large.
+	 * devices (with another iovec list per pd).
 	 */
 	if (pagesvsz > stkbufsz) {
 		pagesv = NULL;
-		xfree = kfree;
 
-		if (pagesvsz <= PAGE_SIZE * 4)
-			pagesv = kmalloc(pagesvsz, GFP_NOWAIT);
+		if (pagesvsz <= PAGE_SIZE * 2)
+			pagesv = kmalloc(pagesvsz, GFP_NOIO);
 
-		if (!pagesv) {
-			pagesv = vmalloc(pagesvsz);
-			xfree = vfree;
+		while (!pagesv) {
+			pagesv = mpc_vcache_alloc(&mpc_physio_vcache, pagesvsz);
+			if (!pagesv)
+				usleep_range(750, 1250);
 		}
 	} else {
 		pagesv = stkbuf;
-		xfree = NULL;
 	}
 
 	if (!pagesv)
@@ -4563,6 +4637,7 @@ mpc_physio(
 
 		if (!iov->iov_base) {
 			err = merr(EINVAL);
+			pagesc = i + 1;
 			goto errout;
 		}
 	}
@@ -4595,8 +4670,12 @@ errout:
 		put_page(pagesv[i]);
 	}
 
-	if (xfree)
-		xfree(pagesv);
+	if (pagesvsz > stkbufsz) {
+		if (pagesvsz > PAGE_SIZE * 2)
+			mpc_vcache_free(&mpc_physio_vcache, pagesv);
+		else
+			kfree(pagesv);
+	}
 
 	return err;
 }
@@ -4692,12 +4771,26 @@ static __init int mpc_init(void)
 	mpc_vma_max = clamp_t(uint, mpc_vma_max, 1024, 1u << 30);
 	mpc_vma_size_max = clamp_t(ulong, mpc_vma_size_max, 27, 32);
 
+	mpc_rwsz_max = clamp_t(ulong, mpc_rwsz_max, 1, 128);
+	mpc_rwconc_max = clamp_t(ulong, mpc_rwconc_max, 1, 32);
+
 	mpc_reap_init();
 
 	rc = mpc_sysctl_register();
 	if (rc) {
 		errmsg = "mpc sysctl register failed";
 		err = merr(rc);
+		goto errout;
+	}
+
+	/* Must be same as mpc_physio() pagesvsz calculation.
+	 */
+	sz = (mpc_rwsz_max << 20) / PAGE_SIZE;
+	sz *= (sizeof(void *) + sizeof(struct iovec));
+
+	err = mpc_vcache_init(&mpc_physio_vcache, sz, mpc_rwconc_max);
+	if (err) {
+		errmsg = "vcache init failed";
 		goto errout;
 	}
 
@@ -4866,6 +4959,8 @@ errout:
 
 	kmem_cache_destroy(mpc_vma_cache[0]);
 	mpc_vma_cache[0] = NULL;
+
+	mpc_vcache_fini(&mpc_physio_vcache);
 
 	mpc_sysctl_unregister();
 
