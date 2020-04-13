@@ -15,6 +15,10 @@
 
 #include "mpcore_defs.h"
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+#define SECTOR_SHIFT   9
+#endif
+
 static const fmode_t    pd_bio_fmode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
 static char            *pd_bio_holder = "mpool";
 
@@ -81,7 +85,8 @@ static merr_t pd_bio_discard(struct mpool_dev_info  *pd, u64 off, size_t len)
 		return err;
 	}
 
-	rc = blkdev_issue_discard(bdev, off >> 9, len >> 9, GFP_NOIO, 0);
+	rc = blkdev_issue_discard(bdev, off >> SECTOR_SHIFT,
+				  len >> SECTOR_SHIFT, GFP_NOIO, 0);
 	if (rc) {
 		err = merr(rc);
 		mp_pr_err("bdev %s, offset 0x%lx len 0x%lx, discard faiure",
@@ -116,8 +121,8 @@ pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
 	}
 
 	zonelen = (u64)pd->pdi_parm.dpr_zonepg << PAGE_SHIFT;
-	sector = zoneaddr * zonelen / KSECSZ;
-	nr_sects = zonecnt * zonelen / KSECSZ;
+	sector = (zoneaddr * zonelen) >> SECTOR_SHIFT;
+	nr_sects = (zonecnt * zonelen) >> SECTOR_SHIFT;
 
 	/*
 	 * Zero filling LBA range either using write-same if device supports,
@@ -211,10 +216,10 @@ pd_bio_init(
 {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
 	bio_set_op_attrs(bio, rw, op_flags);
-	bio->bi_iter.bi_sector = off >> 9;
+	bio->bi_iter.bi_sector = off >> SECTOR_SHIFT;
 #else
 	bio->bi_rw = op_flags;
-	bio->bi_sector = off >> 9;
+	bio->bi_sector = off >> SECTOR_SHIFT;
 #endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)

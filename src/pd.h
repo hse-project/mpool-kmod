@@ -12,8 +12,6 @@
 struct mpool_dev_info;
 struct pd_dev_parm;
 
-#define KSECSZ     512
-
 /**
  * pd_erase_flags
  * PD_ERASE_FZERO:        force to write zeros to PD
