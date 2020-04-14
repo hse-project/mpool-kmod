@@ -45,18 +45,17 @@ pd_zone_pwritev(
 	struct iovec           *iov,
 	int                     iovcnt,
 	u64                     zoneaddr,
-	u64                     boff,
-	int                     op_flags,
-	struct cb_context      *cbctx)
+	loff_t                  boff,
+	int                     op_flags)
 {
-	u64    woff;
+	loff_t woff;
 
 	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
 		return merr(ev(EIO));
 
 	woff = ((u64)pd->pdi_zonepg << PAGE_SHIFT) * zoneaddr + boff;
 
-	return pd_bio_rw(pd, iov, iovcnt, woff, REQ_OP_WRITE, op_flags, cbctx);
+	return pd_bio_rw(pd, iov, iovcnt, woff, REQ_OP_WRITE, op_flags);
 }
 
 merr_t
@@ -65,12 +64,12 @@ pd_zone_pwritev_sync(
 	struct iovec           *iov,
 	int                     iovcnt,
 	u64                     zoneaddr,
-	u64                     boff)
+	loff_t                  boff)
 {
 	merr_t		        err;
 	struct block_device    *bdev;
 
-	err = pd_zone_pwritev(pd, iov, iovcnt, zoneaddr, boff, REQ_FUA, NULL);
+	err = pd_zone_pwritev(pd, iov, iovcnt, zoneaddr, boff, REQ_FUA);
 	if (ev(err))
 		return err;
 
@@ -93,28 +92,16 @@ pd_zone_preadv(
 	struct iovec           *iov,
 	int                     iovcnt,
 	u64                     zoneaddr,
-	u64                     boff,
-	struct cb_context      *cbctx)
+	loff_t                  boff)
 {
-	u64    roff;
+	loff_t roff;
 
 	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
 		return merr(ev(EIO));
 
 	roff = ((u64)pd->pdi_zonepg << PAGE_SHIFT) * zoneaddr + boff;
 
-	return pd_bio_rw(pd, iov, iovcnt, roff, REQ_OP_READ, 0, cbctx);
-}
-
-merr_t
-pd_zone_preadv_sync(
-	struct mpool_dev_info  *pd,
-	struct iovec           *iov,
-	int                     iovcnt,
-	u64                     zoneaddr,
-	u64                     boff)
-{
-	return pd_zone_preadv(pd, iov, iovcnt, zoneaddr, boff, NULL);
+	return pd_bio_rw(pd, iov, iovcnt, roff, REQ_OP_READ, 0);
 }
 
 void

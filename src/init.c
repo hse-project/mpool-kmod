@@ -34,7 +34,6 @@ struct kmem_cache  *ecio_layout_mlo_cache;
 struct kmem_cache  *uuid_to_idx_rb_cache;
 struct kmem_cache  *u64_to_u64_rb_cache;
 struct kmem_cache  *pmd_obj_erase_work_cache;
-struct kmem_cache  *chunker_cache[MPOOL_CHUNKER_CACHE_MAX];
 
 /**
  * shash_desc_alloc() - Allocate a crypto descriptor.
@@ -251,39 +250,11 @@ int mpool_mod_init(void)
 		return -merr_errno(ENOMEM);
 	}
 
-	for (i = 0; i < MPOOL_CHUNKER_CACHE_MAX; i++) {
-		size_t sz;
-		char   name[20];
-		int    n, nchunks;
-
-		/* Buckets are 8, 16, 32, 64... chunks */
-		nchunks = (1 << (i + 3));
-
-		n = snprintf(name, sizeof(name), "mpool_chunker-%d", nchunks);
-		if (n < 1 || n >= sizeof(name)) {
-			mpool_mod_exit();
-			return -merr_errno(EINVAL);
-		}
-
-		sz = nchunks * sizeof(struct cb_context);
-		chunker_cache[i] = kmem_cache_create(name, sz, 0,
-				SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
-		if (!chunker_cache[i]) {
-			err = merr(ENOMEM);
-			mp_pr_err("kmem_cache_create(mpool_chunker-%d, %zu) "
-				  "failed", err, nchunks, sz);
-			mpool_mod_exit();
-			return -merr_errno(ENOMEM);
-		}
-	}
-
 	return 0;
 }
 
 void mpool_mod_exit(void)
 {
-	int    i;
-
 	assert(atomic_read(&mpool_mod_refcnt) > 0);
 
 	if (atomic_dec_return(&mpool_mod_refcnt) > 0)
@@ -300,11 +271,6 @@ void mpool_mod_exit(void)
 	u64_to_u64_rb_cache = NULL;
 	kmem_cache_destroy(pmd_obj_erase_work_cache);
 	pmd_obj_erase_work_cache = NULL;
-
-	for (i = 0; i < MPOOL_CHUNKER_CACHE_MAX; i++) {
-		kmem_cache_destroy(chunker_cache[i]);
-		chunker_cache[i] = NULL;
-	}
 
 	shash_desc_freeall();
 }

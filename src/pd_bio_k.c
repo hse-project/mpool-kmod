@@ -15,13 +15,8 @@
 
 #include "mpcore_defs.h"
 
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0)
-#define REQ_PREFLUSH REQ_FLUSH
-#endif
-
-#ifndef IOV_MAX
-#define IOV_MAX         (1024)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+#define SECTOR_SHIFT   9
 #endif
 
 static const fmode_t    pd_bio_fmode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
@@ -55,26 +50,18 @@ merr_t pd_bio_dev_close(struct pd_dev_parm *dparm)
 }
 
 /**
- * pd_bio_discard_sync() - issue discard command to erase a byte-aligned region
+ * pd_bio_discard_() - issue discard command to erase a byte-aligned region
  * @pd:
  * @off:
  * @len:
  */
-merr_t pd_bio_discard_sync(struct mpool_dev_info  *pd, u64 off, size_t len)
+static merr_t pd_bio_discard(struct mpool_dev_info  *pd, u64 off, size_t len)
 {
 	struct block_device    *bdev;
-	struct bio	       *bio;
-	u64                     sector_mask;
-	struct request_queue   *q;
-	size_t                  max_discard_sectors;
-	size_t                  granularity;
-	size_t                  sector;
-	size_t                  bi_size;
 	merr_t                  err = 0;
 	int                     rc;
 
 	bdev = pd->pdi_parm.dpr_dev_private;
-
 	if (!bdev) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s not registered", err, pd->pdi_name);
@@ -82,8 +69,7 @@ merr_t pd_bio_discard_sync(struct mpool_dev_info  *pd, u64 off, size_t len)
 	}
 
 	/* Validate I/O offset is sector-aligned */
-	sector_mask = PD_SECTORMASK(&pd->pdi_prop);
-	if (off & sector_mask) {
+	if (off & PD_SECTORMASK(&pd->pdi_prop)) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s, offset 0x%lx not multiple of sec size %u",
 			  err, pd->pdi_name, (ulong)off,
@@ -99,71 +85,15 @@ merr_t pd_bio_discard_sync(struct mpool_dev_info  *pd, u64 off, size_t len)
 		return err;
 	}
 
-	q = bdev_get_queue(bdev);
-	if (!q) {
-		err = merr(ev(ENXIO));
-		mp_pr_err("bdev %s, no request queue", err, pd->pdi_name);
-		return err;
+	rc = blkdev_issue_discard(bdev, off >> SECTOR_SHIFT,
+				  len >> SECTOR_SHIFT, GFP_NOIO, 0);
+	if (rc) {
+		err = merr(rc);
+		mp_pr_err("bdev %s, offset 0x%lx len 0x%lx, discard faiure",
+			  err, pd->pdi_name,
+			  (ulong)off, (ulong)len);
 	}
 
-	if (!blk_queue_discard(q)) {
-		err = merr(EOPNOTSUPP);
-		mp_pr_err("bdev %s, Discard command not supported",
-			  err, pd->pdi_name);
-		return err;
-	}
-
-	granularity = max_t(u32, q->limits.discard_granularity / KSECSZ, 1U);
-	max_discard_sectors = min_t(u32, q->limits.max_discard_sectors,
-				UINT_MAX / KSECSZ);
-	max_discard_sectors -= max_discard_sectors % granularity;
-	sector = off / KSECSZ;
-
-	while (len > 0) {
-		bio = bio_alloc(GFP_KERNEL, 1);
-		if (!bio) {
-			err = merr(ev(ENOMEM));
-			goto out;
-		}
-
-		bi_size = min_t(size_t, max_discard_sectors * KSECSZ, len);
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-		bio->bi_iter.bi_sector = sector;
-		bio->bi_iter.bi_size   = bi_size;
-#else
-		bio->bi_max_vecs = 1;
-		bio->bi_io_vec   = bio->bi_inline_vecs;
-		bio->bi_sector   = sector;
-		bio->bi_size     = bi_size;
-#endif
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-		bio_set_dev(bio, bdev);
-#else
-		bio->bi_bdev = bdev;
-#endif
-
-#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 10, 0) || defined(MPOOL_DISTRO_EL74)
-		bio_set_op_attrs(bio, REQ_OP_DISCARD, 0);
-#else
-		bio->bi_rw = REQ_OP_DISCARD;
-#endif
-
-		sector += bi_size / KSECSZ;
-		len -= bi_size;
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
-		rc = submit_bio_wait(bio);
-#else
-		rc = submit_bio_wait(WRITE, bio);
-#endif
-		bio_put(bio);
-
-		if (rc)
-			err = merr(rc);
-	}
-out:
 	return err;
 }
 
@@ -191,22 +121,19 @@ pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
 	}
 
 	zonelen = (u64)pd->pdi_parm.dpr_zonepg << PAGE_SHIFT;
-	sector = zoneaddr * zonelen / KSECSZ;
-	nr_sects = zonecnt * zonelen / KSECSZ;
+	sector = (zoneaddr * zonelen) >> SECTOR_SHIFT;
+	nr_sects = (zonecnt * zonelen) >> SECTOR_SHIFT;
 
 	/*
 	 * Zero filling LBA range either using write-same if device supports,
 	 * or writing zeros as a fallback
 	 */
-
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
-	err = blkdev_issue_zeroout(bdev, sector, nr_sects,
-		GFP_KERNEL, 0);
+	err = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO, 0);
 #elif LINUX_VERSION_CODE > KERNEL_VERSION(4, 0, 0)
-	err = blkdev_issue_zeroout(bdev, sector, nr_sects,
-		GFP_KERNEL, true);
+	err = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO, true);
 #else
-	err = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_KERNEL);
+	err = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO);
 #endif
 
 	return ev(err);
@@ -218,7 +145,7 @@ pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
 	  ((b) & PD_ERASE_READS_ERASED))
 
 /**
- * pd_bio_erase_sync() - issue write-zeros or discard commands to erase PD
+ * pd_bio_erase() - issue write-zeros or discard commands to erase PD
  * @pd
  * @zoneaddr:
  * @zonecnt:
@@ -226,7 +153,7 @@ pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
  * @afp:
  */
 merr_t
-pd_bio_erase_sync(
+pd_bio_erase(
 	struct mpool_dev_info  *pd,
 	u64                     zoneaddr,
 	u32                     zonecnt,
@@ -263,94 +190,68 @@ pd_bio_erase_sync(
 		size_t zlen;
 
 		zlen = pd->pdi_parm.dpr_zonepg << PAGE_SHIFT;
-		err = pd_bio_discard_sync(pd, zoneaddr * zlen, zonecnt * zlen);
+		err = pd_bio_discard(pd, zoneaddr * zlen, zonecnt * zlen);
 	}
 
 	return ev(err);
 }
 
-merr_t pd_bio_flush_sync(struct mpool_dev_info *pd)
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
+#define SUBMIT_BIO(op, bio)            submit_bio((bio))
+#define SUBMIT_BIO_WAIT(op, bio)       submit_bio_wait((bio))
+#else
+#define SUBMIT_BIO(op, bio)            submit_bio((op), (bio))
+#define SUBMIT_BIO_WAIT(op, bio)       submit_bio_wait((op), (bio))
+#endif
+
+
+static __always_inline void
+pd_bio_init(
+	struct bio             *bio,
+	struct block_device    *bdev,
+	int                     rw,
+	loff_t                  off,
+	int                     op_flags)
 {
-	struct block_device    *bdev;
-	struct bio             *bio;
-	merr_t                  err = 0;
-	int                     rc;
-
-	bdev = pd->pdi_parm.dpr_dev_private;
-
-	if (!bdev) {
-		err = merr(EINVAL);
-		mp_pr_err("bdev %s not registered", err, pd->pdi_name);
-		return err;
-	}
-
-	/* Alloc BIO with zero iovec, since this is an empty flush IO */
-	bio = bio_alloc(GFP_KERNEL, 0);
-	if (!bio)
-		return merr(ENOMEM);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+	bio_set_op_attrs(bio, rw, op_flags);
+	bio->bi_iter.bi_sector = off >> SECTOR_SHIFT;
+#else
+	bio->bi_rw = op_flags;
+	bio->bi_sector = off >> SECTOR_SHIFT;
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 	bio_set_dev(bio, bdev);
 #else
 	bio->bi_bdev = bdev;
 #endif
-
-#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 10, 0) || defined(MPOOL_DISTRO_EL7)
-	bio_set_op_attrs(bio, REQ_OP_WRITE, REQ_PREFLUSH);
-#else
-	bio->bi_rw    = REQ_OP_PREFLUSH;
-#endif
-
-	/*
-	 * Submit an empty flush BIO to block layer. Block layer will decide
-	 * if an flush request needs to be issued. If device doesn't
-	 * have volatile write cache, this empty flush BIO will be a no-op.
-	 */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
-	rc = submit_bio_wait(bio);
-#else
-	rc = submit_bio_wait(WRITE_FLUSH, bio);
-#endif
-	bio_put(bio);
-
-	if (rc)
-		err = merr(rc);
-
-	return err;
 }
 
-/**
- * Call back passed to the driver along with a bio.
- * Called by the driver.
- */
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 2, 0)
-static void pd_bio_rw_cb(struct bio *bio, int err)
-#else
-static void pd_bio_rw_cb(struct bio *bio)
-#endif
+static __always_inline struct bio *
+pd_bio_chain(
+	struct bio         *target,
+	int                 op,
+	unsigned int        nr_pages,
+	gfp_t               gfp)
 {
-	struct cb_context  *cbctx;
+	struct bio *new;
 
-	cbctx = bio->bi_private;
-	if (!cbctx) {
-		bio_put(bio);
-		return;
+	new = bio_alloc(gfp, nr_pages);
+
+	if (!target)
+		return new;
+
+	if (new) {
+		bio_chain(target, new);
+		SUBMIT_BIO(op, target);
+	} else {
+		SUBMIT_BIO_WAIT(op, target);
+		bio_put(target);
 	}
 
-	/* Store the first error occurence in the callback object. */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
-	atomic_cmpxchg(&cbctx->cb_ioerr, 0,
-		       blk_status_to_errno(bio->bi_status));
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 2, 0)
-	atomic_cmpxchg(&cbctx->cb_ioerr, 0, bio->bi_error);
-#else
-	atomic_cmpxchg(&cbctx->cb_ioerr, 0, err);
-#endif
-
-	if (atomic_dec_and_test(&cbctx->cb_iocnt))
-		complete(&cbctx->cb_iodone);
-
-	bio_put(bio);
+	return new;
 }
 
 /*
@@ -366,33 +267,35 @@ static void pd_bio_rw_cb(struct bio *bio)
  * @off: offset in bytes on disk
  * @rw:
  * @op_flags:
+ *
+ * NOTE:
+ * If the size of an I/O is bigger than "Max data transfer size(MDTS),
+ * block layer will split the I/O. MDTS is also known as "max_sector_kb"
+ * in sysfs. Due to a bug in linux kernel, when DIF is enabled all the
+ * split I/Os share the same buffer to hold DIF tags.  All the split writes
+ * are issued to the device with the same set of DIF tags, which are generated
+ * for the first split write. Except the first split write device will reject
+ * all other split writes, due to mismatch between data and DIF tags.
+ * In order to use DIF with stock linux kernel, do not IOs larger than MDTS.
  */
 merr_t
 pd_bio_rw(
 	struct mpool_dev_info  *pd,
 	struct iovec           *iov,
 	int                     iovcnt,
-	u64                     off,
+	loff_t                  off,
 	int                     rw,
-	int                     op_flags,
-	struct cb_context      *cbctx)
+	int                     op_flags)
 {
 	struct block_device    *bdev;
 	struct bio             *bio;
-	merr_t                  err = 0;
-	u32                     left;
-	u32                     tot_pages;
-	u32                     tot_len;
-	u32                     len;
-	u64                     iov_base;
-	u32                     iov_len;
-	int                     i;
-	u64                     sector_mask;
 	struct page            *page;
-	int                     cc;
-	u32                     iolimit = BIO_MAX_PAGES;
 	struct request_queue   *q;
-	int                     rc;
+	merr_t                  err = 0;
+	u64                     iov_base, sector_mask;
+	u32                     tot_pages, tot_len, len, iov_len, left;
+	u32                     iolimit;
+	int                     i, cc, op, rc;
 
 	if (iovcnt < 1)
 		return 0;
@@ -404,7 +307,6 @@ pd_bio_rw(
 		return err;
 	}
 
-	/* Validate I/O offset is sector-aligned */
 	sector_mask = PD_SECTORMASK(&pd->pdi_prop);
 	if (ev(off & sector_mask)) {
 		err = merr(EINVAL);
@@ -424,11 +326,6 @@ pd_bio_rw(
 		return err;
 	}
 
-	/*
-	 * Validate each iovec
-	 * 1) base is page-aligned
-	 * 2) len is sector-aligned
-	 */
 	tot_pages = 0;
 	tot_len = 0;
 	for (i = 0; i < iovcnt; i++) {
@@ -444,7 +341,6 @@ pd_bio_rw(
 			return err;
 		}
 
-		/* Count number of pages in this iovec */
 		iov_len = iov[i].iov_len;
 		tot_len += iov_len;
 		while (iov_len > 0) {
@@ -467,92 +363,36 @@ pd_bio_rw(
 	if (tot_len == 0)
 		return 0;
 
-	left = 0;
-	bio = NULL;
+	/* IO size for each bio is determined by the chunker size. */
+	iolimit = mpc_chunker_size >> PAGE_SHIFT;
+	iolimit = clamp_t(u32, iolimit, 32, BIO_MAX_PAGES);
 
 	/*
-	 * If the size of an I/O is bigger than "Max data transfer size(MDTS),
-	 * block layer will split the I/O. MDTS is also known as
-	 * "max_sector_kb" in sysfs. Due to a bug in linux kernel, when DIF
-	 * is enabled all the split I/Os share the same buffer to hold DIF tags.
-	 * All the split writes are issued to the device with the same set of
-	 * DIF tags, which are generated for the first split write. Except the
-	 * first split write device will reject all other split writes, due to
-	 * mismatch between data and DIF tags, In order to allow customers to
-	 * use DIF with stock linux kernel, we splits big I/Os to avoid sending
-	 * I/Os, whose size are bigger than MDTS.
-	 *
 	 * TODO: the fix for the linux bug will be included in kernel 4.12
-	 * we can remove this workaround, once we move to 4.12 or beyond
+	 * we can remove this DIF workaround, once we move to 4.12 or beyond.
 	 */
 	q = bdev_get_queue(bdev);
 	if (q && (pd->pdi_cmdopt & PD_CMD_DIF_ENABLED))
 		iolimit = min_t(u32, iolimit,
-				q->limits.max_sectors * KSECSZ / PAGE_SIZE);
+				(q->limits.max_sectors << 9) >> PAGE_SHIFT);
+
+	left = 0;
+	bio = NULL;
+	op = (rw == REQ_OP_READ) ? READ : WRITE;
 
 	for (i = 0; i < iovcnt; i++) {
-		iov_base = (u64) iov[i].iov_base;
+		iov_base = (u64)iov[i].iov_base;
 		iov_len = iov[i].iov_len;
-		/*
-		 * Add pages in this iovec into bio. If bio contains more
-		 * than 256 (BIO_MAX_PAGES) pages, issue the bio. then
-		 * allocate a new one
-		 */
+
 		while (iov_len > 0) {
 			if (left == 0) {
-				/*
-				 * No space left in the current bio, or we
-				 * need to allocate the first bio
-				 */
-				if (bio) {
-					if (cbctx) {
-						atomic_inc(&cbctx->cb_iocnt);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
-						submit_bio(bio);
-#else
-						submit_bio((rw == REQ_OP_READ) ?
-							   READ : WRITE, bio);
-#endif
-					} else {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
-						rc = submit_bio_wait(bio);
-#else
-						rc = submit_bio_wait((
-							rw == REQ_OP_READ) ?
-							READ : WRITE, bio);
-#endif
-						bio_put(bio);
-						if (rc)
-							err = merr(rc);
-					}
-				}
-
-				/* Allocate a new bio */
 				left = min_t(size_t, tot_pages, iolimit);
-				bio = bio_alloc(GFP_KERNEL, left);
-				if (!bio) {
-					err = merr(ENOMEM);
-					goto out;
-				}
 
-				if (cbctx) {
-					bio->bi_private = cbctx;
-					bio->bi_end_io = pd_bio_rw_cb;
-				}
+				bio = pd_bio_chain(bio, op, left, GFP_NOIO);
+				if (!bio)
+					return merr(ENOMEM);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-				bio_set_op_attrs(bio, rw, op_flags);
-				bio->bi_iter.bi_sector = off / KSECSZ;
-#else
-				bio->bi_rw = op_flags;
-				bio->bi_sector = off / KSECSZ;
-#endif
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-				bio_set_dev(bio, bdev);
-#else
-				bio->bi_bdev = bdev;
-#endif
+				pd_bio_init(bio, bdev, rw, off, op_flags);
 			}
 
 			len = min_t(size_t, PAGE_SIZE, iov_len);
@@ -564,56 +404,30 @@ pd_bio_rw(
 
 			if (cc != len) {
 				if (cc == 0 && bio->bi_vcnt > 0) {
-					/*
-					 * Failed to add this page to the
-					 * current bio, issue the current
-					 * bio, then retry adding this page
-					 * in the next bio.
-					 */
 					left = 0;
 					continue;
 				}
 
+				bio_io_error(bio);
 				bio_put(bio);
-				bio = NULL;
-				err = merr(ev(EINVAL));
-				goto out;
+				return merr(EBUG);
 			}
 
-			/* Update the progress */
 			iov_len -= len;
 			iov_base += len;
+			off += len;
 			left--;
 			tot_pages--;
-			off += len;
 		}
 	}
 
-	if (bio) {
-		/* Issue the last bio */
-		assert(tot_pages == 0);
-		if (cbctx) {
-			atomic_inc(&cbctx->cb_iocnt);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
-			submit_bio(bio);
-#else
-			submit_bio((rw == REQ_OP_READ) ? READ : WRITE, bio);
-#endif
-		} else {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
-			rc = submit_bio_wait(bio);
-#else
-			rc = submit_bio_wait((rw == REQ_OP_READ) ?
-					     READ : WRITE, bio);
-#endif
-			bio_put(bio);
-			if (rc)
-				err = merr(rc);
-		}
-	}
+	assert(bio);
+	assert(tot_pages == 0);
 
-	if (cbctx && atomic_dec_and_test(&cbctx->cb_iocnt))
-		complete(&cbctx->cb_iodone);
-out:
+	rc = SUBMIT_BIO_WAIT(op, bio);
+	if (rc)
+		err = merr(rc);
+	bio_put(bio);
+
 	return err;
 }

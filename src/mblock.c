@@ -271,19 +271,12 @@ do {									\
 merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 {
 	struct ecio_layout_descriptor  *layout;
-	struct ecio_err_report          erpt;
 	merr_t                          err;
 
 	layout = mblock2layout(mbh);
 	if (ev(!layout)) {
 		mp_pr_layout_not_found(mp, mbh);
 		return merr(EINVAL);
-	}
-
-	if (layout->eld_flags & MB_FLG_NEED_FLUSH) {
-		err = ecio_mblock_flush(mp, layout, &erpt);
-		if (ev(err))
-			return err;
 	}
 
 	/* Commit will fail with EBUSY if aborting flag set.
