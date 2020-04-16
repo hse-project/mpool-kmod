@@ -45,6 +45,7 @@
 #include "mpctl_params.h"
 #include "mpctl_reap.h"
 #include "refmap.h"
+#include "init.h"
 
 #ifndef vm_fault_t
 typedef int vm_fault_t;
@@ -274,6 +275,9 @@ MODULE_PARM_DESC(mpc_rwsz_max, " max mblock/mlog r/w size (mB)");
 unsigned int mpc_rwconc_max __read_mostly = 8;
 module_param(mpc_rwconc_max, uint, 0444);
 MODULE_PARM_DESC(mpc_rwconc_max, " max mblock/mlog large r/w concurrency");
+
+module_param(mpc_rsvd_bios_max, uint, 0444);
+MODULE_PARM_DESC(mpc_rsvd_bios_max, "max reserved bios in mpool bioset");
 
 /* mpc_chunker_size is the number of pages that fit in a one-page iovec list
  * (PAGE_SIZE / sizeof(struct iovec)) * PAGE_SIZE, because each iovec maps

@@ -238,7 +238,11 @@ pd_bio_chain(
 {
 	struct bio *new;
 
-	new = bio_alloc(gfp, nr_pages);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+	new = bio_alloc_bioset(gfp, nr_pages, &mpool_bioset);
+#else
+	new = bio_alloc_bioset(gfp, nr_pages, mpool_bioset);
+#endif
 
 	if (!target)
 		return new;

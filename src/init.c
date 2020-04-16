@@ -35,6 +35,14 @@ struct kmem_cache  *uuid_to_idx_rb_cache;
 struct kmem_cache  *u64_to_u64_rb_cache;
 struct kmem_cache  *pmd_obj_erase_work_cache;
 
+unsigned int mpc_rsvd_bios_max __read_mostly = 16;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+struct bio_set mpool_bioset;
+#else
+struct bio_set *mpool_bioset;
+#endif
+
 /**
  * shash_desc_alloc() - Allocate a crypto descriptor.
  * @name:
@@ -140,7 +148,7 @@ int mpool_mod_init(void)
 
 	size_t msdsz;
 	merr_t err;
-	int    rc, i;
+	int    rc = 0, i;
 
 	if (atomic_inc_return(&mpool_mod_refcnt) > 1)
 		return 0;
@@ -250,6 +258,27 @@ int mpool_mod_init(void)
 		return -merr_errno(ENOMEM);
 	}
 
+	mpc_rsvd_bios_max = clamp_t(uint, mpc_rsvd_bios_max, 1, 1024);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+	rc = bioset_init(&mpool_bioset, mpc_rsvd_bios_max, 0,
+			 BIOSET_NEED_BVECS);
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
+	mpool_bioset = bioset_create(mpc_rsvd_bios_max, 0, BIOSET_NEED_BVECS);
+	if (!mpool_bioset)
+		rc = -ENOMEM;
+#else
+	mpool_bioset = bioset_create(mpc_rsvd_bios_max, 0);
+	if (!mpool_bioset)
+		rc = -ENOMEM;
+#endif
+	if (rc) {
+		err = merr(rc);
+		mp_pr_err("mpool bioset init failed", err);
+		mpool_mod_exit();
+		return rc;
+	}
+
 	return 0;
 }
 
@@ -273,4 +302,11 @@ void mpool_mod_exit(void)
 	pmd_obj_erase_work_cache = NULL;
 
 	shash_desc_freeall();
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+	bioset_exit(&mpool_bioset);
+#else
+	bioset_free(mpool_bioset);
+#endif
+
 }
