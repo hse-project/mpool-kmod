@@ -2388,26 +2388,6 @@ pmd_obj_wrunlock(
 	up_write(layout->eld_rwlock);
 }
 
-void
-pmd_mdc0_class(
-	struct mpool_descriptor *mp,
-	enum mp_cksum_type	*cktype,
-	enum mp_media_classp	*mclassp)
-{
-	struct media_class *mc;
-
-	assert(mp->pds_mdparm.mdc_mcid != MCID_INVALID);
-	mc = mc_id2class(mp, mp->pds_mdparm.mdc_mcid);
-	if (mclassp != NULL)
-		*mclassp = mc->mc_parms.mcp_classp;
-	if (cktype == NULL)
-		return;
-	if (mc->mc_parms.mcp_features & OMF_MC_FEAT_CHECKSUM)
-		*cktype  = MP_CK_DIF;
-	else
-		*cktype  = MP_CK_NONE;
-}
-
 merr_t
 pmd_mdc_alloc(
 	struct mpool_descriptor    *mp,
@@ -2485,15 +2465,8 @@ pmd_mdc_alloc(
 	}
 	cinew->mmi_credit.ci_slot = mdcslot;
 
-	/*
-	 * Get the media class and the number of PDs of the class used by MDC0
-	 */
-	pmd_mdc0_class(mp, NULL, &mclassp);
-	err = mc_get_pdcnt(mp, mclassp, &pdcnt);
-	if (ev(err)) {
-		msg = "Can't find media class of MDC0";
-		goto exit;
-	}
+	mclassp = MP_MED_CAPACITY;
+	pdcnt = 1;
 
 	/*
 	 * Create new mdcs with same parameters and on same media class
@@ -3694,9 +3667,7 @@ void pmd_mdc_alloc_set(struct mpool_descriptor *mp)
 			(u8)(MDC_SLOTS - (mp->pds_mda.mdi_slotvcnt)));
 
 	for (sidx = 1; sidx <= mdc_cnt; sidx++) {
-		/* err = pmd_mdc_alloc(mp, mp->pds_params.mp_mdcncap); */
-
-		err = pmd_mdc_alloc_wrapper(mp);
+		err = pmd_mdc_alloc(mp, mp->pds_params.mp_mdcncap, 0);
 		if (err) {
 			mp_pr_err("mpool %s, only %u of %u MDCs created",
 				  err, mp->pds_name, sidx-1, mdc_cnt);

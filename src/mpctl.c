@@ -2586,8 +2586,8 @@ mpioc_mp_create(
 	mdparm.mdp_mclassp = mp->mp_params.mp_mclassp;
 
 	err = mpool_create(mp->mp_params.mp_name, mp->mp_flags, &mdparm,
-			   mp->mp_dpathc, *dpathv, pd_prop, &mpc_params,
-			   MPOOL_ROOT_LOG_CAP, devrpt);
+			   *dpathv, pd_prop, &mpc_params, MPOOL_ROOT_LOG_CAP,
+			   devrpt);
 	if (err) {
 		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 			     "%s: mpool %s, create failed",

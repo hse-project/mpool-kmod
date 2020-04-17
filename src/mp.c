@@ -341,8 +341,6 @@ mpool_desc_pdmc_add(
 	struct mpool_dev_info  *pd = NULL;
 	struct media_class     *mc;
 	struct mc_parms		mc_parms;
-	enum mc_perf_cksum      capacity_cksummed;
-	enum mc_perf_cksum      ingest_cksummed;
 
 	u16    mcdcnt = 0;
 	merr_t err;
@@ -372,37 +370,6 @@ mpool_desc_pdmc_add(
 			     "device %s sectors are not updatable",
 			     pd->pdi_name);
 		return merr(EINVAL);
-	}
-
-	/*
-	 * Check if the checksum provided by the PD is compatible with the
-	 * checksum of the PDs already in the CAPACITY and STAGING classes.
-	 */
-	if ((mc_parms.mcp_classp == MP_MED_CAPACITY) ||
-		(mc_parms.mcp_classp == MP_MED_STAGING)) {
-		/*
-		 * All devices across MP_MED_CAPACITY and MP_MED_STAGING
-		 * classes must be all checksummed or none. No mix allowed.
-		 */
-		capacity_cksummed = mc_perf_cksummed(mp, MP_MED_CAPACITY);
-		ingest_cksummed = mc_perf_cksummed(mp, MP_MED_STAGING);
-		if ((capacity_cksummed == MC_CKSUM_USED ||
-		     ingest_cksummed == MC_CKSUM_USED) &&
-		    !(mc_parms.mcp_features & OMF_MC_FEAT_CHECKSUM)) {
-			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-				     "drive add %s failed, checksum required",
-				     pd->pdi_name);
-			return merr(EINVAL);
-		}
-
-		if ((capacity_cksummed == MC_CKSUM_NOTUSED ||
-		     ingest_cksummed == MC_CKSUM_NOTUSED) &&
-		    (mc_parms.mcp_features & OMF_MC_FEAT_CHECKSUM)) {
-			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-				     "drive add %s failed, checksum disallowed",
-				     pd->pdi_name);
-			return merr(EINVAL);
-		}
 	}
 
 	/*
@@ -491,78 +458,38 @@ mpool_dev_check_new(
 static merr_t
 mpool_desc_init_newpool(
 	struct mpool_descriptor    *mp,
-	u32			    flags,
+	u32                         flags,
 	struct mpool_mdparm        *mdparm,
 	struct mpool_devrpt        *devrpt)
 {
 	u64    pdh = 0;
 	merr_t err;
-	struct media_class *mcmeta;
 
 	if (!(flags & (1 << MP_FLAGS_FORCE))) {
-		for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
-			err = mpool_dev_check_new(
-				mp, &mp->pds_pdv[pdh], devrpt);
-			if (ev(err))
-				return err;
-		}
-	}
-
-	for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
-		merr_t  err;
-
-		/*
-		 * add drive in its media class. That may create the class
-		 * if first drive of the class.
-		 */
-		err = mpool_desc_pdmc_add(mp, flags, pdh, NULL, false, devrpt);
-		if (err) {
-			struct mpool_dev_info  *pd __maybe_unused;
-
-			if (devrpt->mdr_rcode == MPOOL_RC_NONE)
-				mpool_devrpt(devrpt, MPOOL_RC_MIXED, pdh, NULL);
-
-			pd = &mp->pds_pdv[pdh];
-
-			mp_pr_err("mpool %s, initialization of mpool desc, adding drive %s in a media class failed",
-				  err, mp->pds_name, pd->pdi_name);
+		err = mpool_dev_check_new(mp, &mp->pds_pdv[pdh], devrpt);
+		if (ev(err))
 			return err;
-		}
 	}
 
 	/*
-	 * Select the media class for the metadata.
-	 * Note1: the media classes are already created because the PDs
-	 *	have been added in them previously.
-	 * Note2: we ignore the checksum specification requested for the
-	 *	metadata.
-	 * Note3: We use the slowest class having enough PDs to insure the
-	 *	redundancy level needed for the mpool metadata.
+	 * add drive in its media class. That may create the class
+	 * if first drive of the class.
 	 */
-	err = mc_get_meta_class_candidate(mp, mdparm->mdp_mclassp, 1, &mcmeta);
+	err = mpool_desc_pdmc_add(mp, flags, pdh, NULL, false, devrpt);
 	if (err) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-			     "can't select a media class for mpool metadata");
+		struct mpool_dev_info  *pd __maybe_unused;
+
+		if (devrpt->mdr_rcode == MPOOL_RC_NONE)
+			mpool_devrpt(devrpt, MPOOL_RC_MIXED, pdh, NULL);
+
+		pd = &mp->pds_pdv[pdh];
+
+		mp_pr_err("mpool %s, initialization of mpool desc, adding drive %s in a media class failed",
+			  err, mp->pds_name, pd->pdi_name);
 		return err;
 	}
 
-	if (mcmeta == NULL) {
-		if (mdparm->mdp_mclassp == MP_MED_ANY)
-			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-				     "not enough devices in any mclass to meet avalability criteria for mpool metadata %s",
-				     mp->pds_name);
-		else
-			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-				     "not enough devices in media class %u to meet avalability criteria for mpool metadata %s",
-				     mdparm->mdp_mclassp, mp->pds_name);
-
-		return merr(EINVAL);
-	}
-
-	assert((mdparm->mdp_mclassp == MP_MED_ANY) ||
-		(mcmeta->mc_parms.mcp_classp == mdparm->mdp_mclassp));
-
-	mp->pds_mdparm.mdc_mcid = mcmeta->mc_id;
+	mp->pds_mdparm.mdc_mcid = mp->pds_pdv[pdh].pdi_mcid;
 
 	return 0;
 }
@@ -669,9 +596,8 @@ mpool_mdc_cap_init(struct mpool_descriptor *mp, struct mpool_dev_info *pd)
 merr_t
 mpool_create(
 	const char             *mpname,
-	u32			flags,
+	u32                     flags,
 	struct mpool_mdparm    *mdparm,
-	u64                     dcnt,
 	char                  **dpaths,
 	struct pd_prop	       *pd_prop,
 	struct mpcore_params   *params,
@@ -689,16 +615,13 @@ mpool_create(
 
 	mpool_devrpt_init(devrpt);
 
-	if (!mpname || !*mpname || dcnt > MPOOL_DRIVES_MAX ||
-	    (mdparm->mdp_mclassp != MP_MED_ANY &&
+	if (!mpname || !*mpname || (mdparm->mdp_mclassp != MP_MED_ANY &&
 	     !mclassp_valid(mdparm->mdp_mclassp))) {
 		err = merr(EINVAL);
-		mp_pr_err("mpool %s, drive cnt %lu class perf %u",
-			  err, mpname ? mpname : "?",
-			  (ulong)dcnt, mdparm->mdp_mclassp);
+		mp_pr_err("mpool %s, class perf %u",
+			  err, mpname ? mpname : "?", mdparm->mdp_mclassp);
 		return err;
 	}
-	assert(dcnt == 1);
 
 	mdc01 = mdc02 = NULL;
 	active = sbvalid = false;
@@ -712,7 +635,7 @@ mpool_create(
 	}
 
 	sbmdc0 = &(mp->pds_sbmdc0);
-	strlcpy((char *) mp->pds_name, mpname, sizeof(mp->pds_name));
+	strlcpy((char *)mp->pds_name, mpname, sizeof(mp->pds_name));
 	mpool_generate_uuid(&mp->pds_poolid);
 
 	if (params)
@@ -737,18 +660,14 @@ mpool_create(
 	 * Set the devices parameters from the ones placed by the discovery
 	 * in pd_prop.
 	 */
-	err = mpool_dev_init_all(mp->pds_pdv, dcnt, dpaths, devrpt, pd_prop);
+	err = mpool_dev_init_all(mp->pds_pdv, 1, dpaths, devrpt, pd_prop);
 	if (err) {
 		mp_pr_err("mpool %s, failed to get device parameters",
 			  err, mpname);
 		goto errout;
 	}
 
-	/*
-	 * set mp.pdvcnt so dpaths will get closed in cleanup
-	 * if create fails
-	 */
-	mp->pds_pdvcnt = dcnt;
+	mp->pds_pdvcnt = 1;
 
 	mpool_mdc_cap_init(mp, &mp->pds_pdv[0]);
 
@@ -908,37 +827,6 @@ errout:
 	return err;
 }
 
-/**
- * mpool_desc_mdc0_uadd() - returns the number of PDs holding MDC0, that are
- *	unavailable.
- * @mp:
- * @sbmdc0:
- */
-static merr_t
-mpool_desc_mdc0_uadd(
-	struct mpool_descriptor    *mp,
-	struct omf_sb_descriptor   *sbmdc0)
-{
-	/*
-	 * assume state of unavailable mdc0 drives is ACTIVE pre mpool
-	 * activation; drive state will get updated as required during
-	 * activation
-	 */
-	merr_t              err = 0;
-	struct media_class *mc;
-
-	mc = mc_id2class(mp, mp->pds_mdparm.mdc_mcid);
-
-	if (!uuid_to_idx_search(&mp->pds_dev2pdh,
-				&sbmdc0->osb_mdc0dev.odp_devid)) {
-		mc->mc_uacnt += 1;
-		err = mpool_desc_unavail_add(mp, OMF_PD_ACTIVE,
-					     &sbmdc0->osb_mdc0dev);
-	}
-
-	return ev(err);
-}
-
 static struct mpool_descriptor *
 uuid_to_mpdesc_search(struct rb_root *root, struct mpool_uuid *key_uuid)
 {
@@ -948,7 +836,7 @@ uuid_to_mpdesc_search(struct rb_root *root, struct mpool_uuid *key_uuid)
 		struct mpool_descriptor    *data =  rb_entry(
 			node, struct mpool_descriptor, pds_node);
 
-		int     result = mpool_uuid_compare(key_uuid, &data->pds_poolid);
+		int  result = mpool_uuid_compare(key_uuid, &data->pds_poolid);
 
 		if (result < 0)
 			node = node->rb_left;
@@ -1267,7 +1155,6 @@ mpool_activate(
 
 	u64     mdcmax, mdcnum, mdcncap, mdc0cap;
 	bool    active, uafound;
-	u16     mduacnt;
 	int     dup, doff, cnt;
 	u32     mcid, pdh;
 	bool    mc_resize[MP_MED_NUMBER] = { };
@@ -1361,25 +1248,11 @@ mpool_activate(
 		goto errout;
 	}
 
-	/*
-	 * add unavailable drive entries for any missing mdc0 drives
-	 * including those with reserved strips; tolerate unavail drives
-	 * only if force flag specified
-	 */
-	err = mpool_desc_mdc0_uadd(mp, sbmdc0);
-	if (ev(err)) {
-		mp_pr_err("mpool %s, add missing MDC0 for missing drives",
-			  err, mp->pds_name);
-		goto errout;
-	}
-
 	mcmeta = mc_id2class(mp, mp->pds_mdparm.mdc_mcid);
-	mduacnt = mcmeta->mc_uacnt;
-	if (mduacnt > 0) {
+	if (!mcmeta) {
 		err = merr(ENODEV);
-		mp_pr_err("mpool %s, too many unavailable drives, %d %d %u",
-			  err, mp->pds_name, force, mcmeta->mc_id,
-			  mduacnt);
+		mp_pr_err("mpool %s, too many unavailable drives",
+			  err, mp->pds_name);
 		goto errout;
 	}
 
@@ -2260,17 +2133,14 @@ static merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 	u64     root_mlog_id[2];
 	int     i;
 
-	enum mp_media_classp		mclassp;
-	struct mlog_descriptor         *ml_desc;
-	struct mlog_props               mlprops;
-	struct mlog_capacity            mlcap = {
+	enum mp_media_classp    mclass;
+	struct mlog_descriptor *ml_desc;
+	struct mlog_props       mlprops;
+	struct mlog_capacity    mlcap = {
 		.lcp_captgt = mlog_cap,
 	};
 
-	/*
-	 * Use the class used to support mdc0.
-	 */
-	pmd_mdc0_class(mp, NULL, &mclassp);
+	mclass = MP_MED_CAPACITY;
 
 	mlog_lookup_rootids(&root_mlog_id[0], &root_mlog_id[1]);
 
@@ -2284,7 +2154,7 @@ static merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 		if (merr_errno(err) == ENOENT) { /* mlog doesn't exist */
 
 			err = mlog_realloc(mp, root_mlog_id[i], &mlcap,
-					   mclassp, &mlprops, &ml_desc);
+					   mclass, &mlprops, &ml_desc);
 			if (err) {
 				mp_pr_err("mpool %s, re-allocation of root mlog 0x%lx failed",
 					  err, mp->pds_name,
@@ -2623,19 +2493,4 @@ mpool_config_fetch(struct mpool_descriptor *mp, struct mpool_config *cfg)
 	*cfg = mp->pds_cfg;
 
 	return 0;
-}
-
-/*
- *
- * pmd_mdc_alloc_wrapper() - wrapper function for pmd_mdc_alloc
- *
- * @mp: mpool descriptor
- *
- * Could not get mock function to work for code coverage so using a wrapper
- * function in this file as a workaround for now.
- */
-
-merr_t pmd_mdc_alloc_wrapper(struct mpool_descriptor *mp)
-{
-	return pmd_mdc_alloc(mp, mp->pds_params.mp_mdcncap, 0);
 }

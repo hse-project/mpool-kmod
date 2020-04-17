@@ -862,19 +862,6 @@ pmd_obj_alloc_cmn(
 void pmd_layout_shuffle_pds(u16 *pdmc, u16 pdcnt);
 
 /**
- * pmd_mdc0_class() - return the cktype and mclassp used by the media class
- *	supporting the metadata (mdci).
- * @mp: input
- * @cktype: output. If passed NULL, not updated.
- * @mclassp: output. If passed in NULL, not updated.
- */
-void
-pmd_mdc0_class(
-	struct mpool_descriptor *mp,
-	enum mp_cksum_type	*cktype,
-	enum mp_media_classp	*mclassp);
-
-/**
  * pmd_precompact_start() - start MDC1/255 precompaction
  * @mp:
  */

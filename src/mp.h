@@ -380,7 +380,4 @@ mpool_desc_pdmc_add(
 	bool				 check_only,
 	struct mpool_devrpt             *devrpt);
 
-/* Added as a workaround for code coverage */
-merr_t pmd_mdc_alloc_wrapper(struct mpool_descriptor *mp);
-
 #endif

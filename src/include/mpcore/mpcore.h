@@ -253,7 +253,6 @@ mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen);
  * @mpname:
  * @flags: enum mp_mgmt_flags
  * @mdparm:
- * @dcnt:
  * @dpaths:
  * @pd_prop: PDs properties obtained by mpool_create() caller.
  * @params:  mpcore parameters
@@ -272,7 +271,6 @@ mpool_create(
 	const char              *name,
 	u32			 flags,
 	struct mpool_mdparm     *mdparm,
-	u64                      dcnt,
 	char                   **dpaths,
 	struct pd_prop	        *pd_prop,
 	struct mpcore_params    *params,
