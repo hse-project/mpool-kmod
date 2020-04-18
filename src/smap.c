@@ -32,7 +32,7 @@ merr_t smap_mpool_init(struct mpool_descriptor *mp)
 		struct mc_smap_parms   mcsp;
 
 		pd = &mp->pds_pdv[pdh];
-		mc = mc_id2class(mp, pd->pdi_mcid);
+		mc = &mp->pds_mc[pd->pdi_mclass];
 		err = mc_smap_parms_get(mp, mc->mc_parms.mcp_classp, &mcsp);
 		if (ev(err))
 			break;
@@ -66,16 +66,15 @@ void smap_mpool_free(struct mpool_descriptor *mp)
  * See smap.h.
  */
 void
-smap_mpool_usage(struct mpool_descriptor *mp, u32 mcid, struct mp_usage *usage)
+smap_mpool_usage(struct mpool_descriptor *mp, u8 mclass, struct mp_usage *usage)
 {
-	if (mcid == MCID_ALL) {
+	if (mclass == MP_MED_ALL) {
 		u32 i;
-		u32 mccnt = mc_cnt(mp);
 
-		for (i = 0; i < mccnt; i++)
+		for (i = 0; i < MP_MED_NUMBER; i++)
 			smap_mclass_usage(mp, i, usage);
 	} else {
-		smap_mclass_usage(mp, mcid, usage);
+		smap_mclass_usage(mp, mclass, usage);
 	}
 }
 
@@ -85,12 +84,10 @@ smap_drive_spares(
 	enum mp_media_classp	 mclassp,
 	u8                       spzone)
 {
-	u64                    mcdcnt = 0;
-	u64                    idx = 0;
 	struct mpool_dev_info *pd = NULL;
 	struct media_class    *mc;
-	u32		       mcid;
 	merr_t                 err;
+	u8                     i;
 
 	if (!mclassp_valid(mclassp) || spzone > 100) {
 		err = merr(EINVAL);
@@ -100,39 +97,32 @@ smap_drive_spares(
 	}
 
 	/* Loop on all classes matching mclassp. */
-	for (mcid = 0; mcid < mc_cnt(mp); mcid++) {
-		mc = mc_id2class(mp, mcid);
-		if (mc->mc_parms.mcp_classp != mclassp)
+	for (i = 0; i < MP_MED_NUMBER; i++) {
+		mc = &mp->pds_mc[i];
+		if (mc->mc_parms.mcp_classp != mclassp || mc->mc_pdmc < 0)
 			continue;
 
-		mcdcnt = mc->mc_pdmc[0];
-		if (!mcdcnt)
-			continue;
+		pd = &mp->pds_pdv[mc->mc_pdmc];
 
-		for (idx = 1; idx < mcdcnt + 1; idx++) {
-			pd = &mp->pds_pdv[mc->mc_pdmc[idx]];
-
-			spin_lock(&pd->pdi_ds.sda_dalock);
-			/*
-			 * adjust utgt but not uact; possible for uact > utgt
-			 * due to spzone change
-			 */
-			pd->pdi_ds.sda_utgt =
-				(pd->pdi_ds.sda_zoneeff * (100 - spzone)) / 100;
-			/*
-			 * adjust stgt and sact maintaining invariant that
-			 * sact <= stgt
-			 */
-			pd->pdi_ds.sda_stgt =
-				pd->pdi_ds.sda_zoneeff - pd->pdi_ds.sda_utgt;
-			if (pd->pdi_ds.sda_sact > pd->pdi_ds.sda_stgt) {
-				pd->pdi_ds.sda_uact +=
-					(pd->pdi_ds.sda_sact -
-					pd->pdi_ds.sda_stgt);
-				pd->pdi_ds.sda_sact = pd->pdi_ds.sda_stgt;
-			}
-			spin_unlock(&pd->pdi_ds.sda_dalock);
+		spin_lock(&pd->pdi_ds.sda_dalock);
+		/*
+		 * adjust utgt but not uact; possible for uact > utgt
+		 * due to spzone change
+		 */
+		pd->pdi_ds.sda_utgt =
+			(pd->pdi_ds.sda_zoneeff * (100 - spzone)) / 100;
+		/*
+		 * adjust stgt and sact maintaining invariant that
+		 * sact <= stgt
+		 */
+		pd->pdi_ds.sda_stgt =
+			pd->pdi_ds.sda_zoneeff - pd->pdi_ds.sda_utgt;
+		if (pd->pdi_ds.sda_sact > pd->pdi_ds.sda_stgt) {
+			pd->pdi_ds.sda_uact +=
+				(pd->pdi_ds.sda_sact - pd->pdi_ds.sda_stgt);
+			pd->pdi_ds.sda_sact = pd->pdi_ds.sda_stgt;
 		}
+		spin_unlock(&pd->pdi_ds.sda_dalock);
 
 	}
 	return 0;
@@ -145,7 +135,7 @@ merr_t smap_drive_badzone(struct mpool_descriptor *mp, u16 pdh, u32 badcnt)
 	 * periodically queries the number of bad zones on mpool drives
 	 */
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
-	struct media_class    *mc = mc_id2class(mp, pd->pdi_mcid);
+	struct media_class    *mc = &mp->pds_mc[pd->pdi_mclass];
 	u8                     spzone = mc->mc_sparms.mcsp_spzone;
 	merr_t                 err;
 
@@ -272,7 +262,7 @@ void smap_drive_free(struct mpool_descriptor *mp, u16 pdh)
 		struct media_class     *mc;
 		struct mc_smap_parms    mcsp;
 
-		mc = mc_id2class(mp, pd->pdi_mcid);
+		mc = &mp->pds_mc[pd->pdi_mclass];
 		(void)mc_smap_parms_get(mp, mc->mc_parms.mcp_classp, &mcsp);
 
 		for (rgn = 0; rgn < mcsp.mcsp_rgnc; rgn++) {
@@ -464,7 +454,7 @@ smap_alloc(
 	assert(is_power_of_2(align));
 
 	ds = &pd->pdi_ds;
-	mc = mc_id2class(mp, pd->pdi_mcid);
+	mc = &mp->pds_mc[pd->pdi_mclass];
 	err = mc_smap_parms_get(mp, mc->mc_parms.mcp_classp, &mcsp);
 	if (ev(err))
 		return err;
@@ -754,51 +744,33 @@ merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh)
 }
 
 void
-smap_mclass_usage(struct mpool_descriptor *mp, u32 mcid, struct mp_usage *usage)
+smap_mclass_usage(
+	struct mpool_descriptor    *mp,
+	u8                          mclass,
+	struct mp_usage            *usage)
 {
-	struct media_class *mc;
+	struct media_class         *mc;
+	struct smap_dev_znstats     zones;
+	struct mpool_dev_info      *pd;
+	u32                         zonepg = 0;
 
-	u16    mcdcnt;
-	u16    pdhsame = 0;
-	int    idx = 0;
-	u32    zonepg = 0;
-
-	mc = mc_id2class(mp, mcid);
-	if (mc == NULL)
+	mc = &mp->pds_mc[mclass];
+	if (mc->mc_pdmc < 0)
 		return;
 
-	mcdcnt = mc->mc_pdmc[0];
-	if (mcdcnt < 1)
-		return;
+	pd = &mp->pds_pdv[mc->mc_pdmc];
+	zonepg = pd->pdi_zonepg;
 
-	/* zone parm are same for all drives in mclass by definition */
-	pdhsame = mc->mc_pdmc[1];
-	zonepg = mp->pds_pdv[pdhsame].pdi_parm.dpr_zonepg;
+	spin_lock(&pd->pdi_ds.sda_dalock);
+	smap_calc_znstats(pd, &zones);
+	spin_unlock(&pd->pdi_ds.sda_dalock);
 
-	/* add in per drive stats */
-	for (idx = 1; idx <= mcdcnt; idx++) {
-		struct smap_dev_znstats   zones;
-		struct mpool_dev_info     *pd;
-
-		pd = &mp->pds_pdv[mc->mc_pdmc[idx]];
-
-		spin_lock(&pd->pdi_ds.sda_dalock);
-		smap_calc_znstats(pd, &zones);
-		spin_unlock(&pd->pdi_ds.sda_dalock);
-
-		usage->mpu_total  += ((zones.sdv_total * zonepg) <<
-				      PAGE_SHIFT);
-		usage->mpu_usable += ((zones.sdv_usable * zonepg) <<
-				      PAGE_SHIFT);
-		usage->mpu_used   += ((zones.sdv_used * zonepg) <<
-				      PAGE_SHIFT);
-		usage->mpu_spare  += ((zones.sdv_spare * zonepg) <<
-				      PAGE_SHIFT);
-		usage->mpu_fspare += ((zones.sdv_fspare * zonepg) <<
-				      PAGE_SHIFT);
-		usage->mpu_fusable +=
-			((zones.sdv_fusable * zonepg) << PAGE_SHIFT);
-	}
+	usage->mpu_total  += ((zones.sdv_total * zonepg) << PAGE_SHIFT);
+	usage->mpu_usable += ((zones.sdv_usable * zonepg) << PAGE_SHIFT);
+	usage->mpu_used   += ((zones.sdv_used * zonepg) << PAGE_SHIFT);
+	usage->mpu_spare  += ((zones.sdv_spare * zonepg) << PAGE_SHIFT);
+	usage->mpu_fspare += ((zones.sdv_fspare * zonepg) << PAGE_SHIFT);
+	usage->mpu_fusable += ((zones.sdv_fusable * zonepg) << PAGE_SHIFT);
 }
 
 /*
@@ -1083,13 +1055,9 @@ smap_addr2rgn(
 	struct mpool_dev_info    *pd,
 	u64                       zoneaddr)
 {
-	struct media_class    *mc;
 	struct mc_smap_parms   mcsp;
 
-	mc = mc_id2class(mp, pd->pdi_mcid);
-	(void)mc_smap_parms_get(mp,
-				mc ? mc->mc_parms.mcp_classp : pd->pdi_mclassp,
-				&mcsp);
+	mc_smap_parms_get(mp, pd->pdi_mclass, &mcsp);
 
 	if (zoneaddr >= pd->pdi_ds.sda_rgnladdr)
 		return mcsp.mcsp_rgnc - 1;
@@ -1118,7 +1086,7 @@ void smap_log_mpool_usage(struct work_struct *ws)
 	mp = smapu->smapu_mp;
 
 	/* Get the current mpool space usage stats */
-	smap_mpool_usage(mp, MCID_ALL, &usage);
+	smap_mpool_usage(mp, MP_MED_ALL, &usage);
 
 	if (usage.mpu_usable == 0) {
 		merr_t err = merr(EINVAL);

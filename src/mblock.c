@@ -88,10 +88,6 @@ mblock_getprops_cmn(
 	struct ecio_layout_descriptor  *layout,
 	struct mblock_props            *prop)
 {
-	struct media_class *mc;
-
-	u32    mcid;
-
 	assert(layout);
 	assert(prop);
 
@@ -99,13 +95,7 @@ mblock_getprops_cmn(
 	prop->mpr_alloc_cap   = ecio_obj_get_cap_from_layout(mp, layout);
 	prop->mpr_write_len   = layout->eld_mblen;
 	prop->mpr_stripe_len  = ecio_mblock_stripe_size(mp, layout);
-	mcid = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_mcid;
-	if (unlikely(mcid == MCID_INVALID)) {
-		prop->mpr_mclassp = MP_MED_INVALID;
-	} else {
-		mc = mc_id2class(mp, mcid);
-		prop->mpr_mclassp = mc->mc_parms.mcp_classp;
-	}
+	prop->mpr_mclassp = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_mclass;
 	prop->mpr_iscommitted = layout->eld_state & ECIO_LYT_COMMITTED;
 }
 

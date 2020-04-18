@@ -11,10 +11,6 @@
  * private to mpool core.
  */
 
-/* Invalid media class id. */
-#define MCID_INVALID       ((u32)(-1))
-#define MCID_ALL           (MCID_INVALID - 1)
-
 /**
  * struct mc_parms - media class parameters
  * @mcp_classp:    class performance characteristics, enum mp_media_classp
@@ -50,7 +46,6 @@ struct mc_smap_parms {
  * struct media_class - define a media class
  * @mc_parms:  define a media class, content differ for each media class
  * @mc_sparms: space map params for this media class
- * @mc_id:     media class id (index in mca_array[])
  * @mc_pdmc:   active pdv entries grouped by media class array
  * @mc_uacnt:  UNAVAIL status drive count in each media class
  *
@@ -60,38 +55,9 @@ struct mc_smap_parms {
 struct media_class {
 	struct mc_parms        mc_parms;
 	struct mc_smap_parms   mc_sparms;
-	u32		       mc_id;
-	u16                    mc_pdmc[MPOOL_DRIVES_MAX + 1];
-	u16                    mc_uacnt;
+	s8                     mc_pdmc;
+	u8                     mc_uacnt;
 };
-
-/**
- * struct mc_array - array of media classes.
- * @mca_cnt:   number of media classes with drives.
- * @mca_array: table of media class structures
- *
- * Locking:
- *    Protected by mp.pds_pdvlock.
- */
-struct mc_array {
-	u16                 mca_cnt;
-	struct media_class  mca_array[MP_MED_NUMBER];
-};
-
-/**
- * mc_cnt() - return the number of media classes
- * @mp:
- *
- * Some of the classes may not have PDs.
- */
-u32 mc_cnt(struct mpool_descriptor *mp);
-
-/**
- * mc_id2class() - get the pointer on media_class from the media class id.
- * @mp:
- * @mcid: media class id.
- */
-struct media_class *mc_id2class(struct mpool_descriptor *mp, u32 mcid);
 
 /**
  * mc_pd_prop2mc_parms() -  Convert PD properties into media class parameters.
@@ -138,56 +104,6 @@ mc_cmp_omf_devparm(
 	struct omf_devparm_descriptor *omf_devparm2);
 
 /**
- * mc_add_class() - add a new media class
- * @mp:
- * @mc_parms: parameters of the media class (input)
- * @mcsp:     smap parameters for mc
- * @mc:       media class corresponding to the media class parameters
- * @check_only: if true, the call doesn't change any state, it only check
- *	if the new media class can be added.
- *
- * Add a new media class, but if a media class with the same parameters (as
- *	the new one to be added) already exists, then do not create a new
- *	class but return a pointer on the existing one.
- *	This function is called when a PD is added in its class. Can be during
- *	create or activate, or when a PD is added to a activated mpool. At that
- *	point a new media class may need to be created.
- *
- * Locking:
- *	Should be called with mp.pds_pdvlock held in write.
- *	Except if mpool is single threaded (during activate for example).
- */
-merr_t
-mc_add_class(
-	struct mpool_descriptor     *mp,
-	struct mc_parms             *mc_parms,
-	struct mc_smap_parms        *mcsp,
-	struct media_class         **mc,
-	bool                         check_only);
-
-/**
- * mc_perfc2mclass() - return the first media class corresponding to classp.
- * @mp:
- * @classp:
- */
-struct media_class *mc_perf2mclass(struct mpool_descriptor *mp, u8 classp);
-
-/**
- * mc_get_media_class() - select a class based on inputs.
- * @mp:
- * @mclassp:
- * @cktype: if MP_CK_UNDEF, this input is ignored to select the media class.
- *
- * Select first class corresponding to inputs.
- * No locking is needed because media classes structures are not going away.
- */
-struct media_class *
-mc_get_media_class(
-	struct mpool_descriptor    *mp,
-	enum mp_media_classp        mclassp,
-	enum mp_cksum_type          cktype);
-
-/**
  * mc_init_class() - initialize a media class
  * @mc:
  * @mc_parms: parameters of the media class
@@ -200,39 +116,38 @@ mc_init_class(
 	struct mc_smap_parms   *mcsp);
 
 /**
- * mc_set_spzone() - set the percent spare on the media class mclassp.
+ * mc_set_spzone() - set the percent spare on the media class mclass.
  * @mp:
- * @mclassp:
+ * @mclass:
  * @spzone:
  *
- * Return: MERR_SUCCESS, or merr(ENOENT) if there is no media class
- *	corresponding to mclassp.
+ * Return: 0, or merr(ENOENT) if the specified mclass doesn't exist.
  */
 merr_t
 mc_set_spzone(
 	struct mpool_descriptor *mp,
-	enum mp_media_classp     mclassp,
-	u8			 spzone);
+	enum mp_media_classp     mclass,
+	u8                       spzone);
 
 /**
  * mclassp_valid() - Return true if the media class is valid.
- * @mclassp:
+ * @mclass:
  */
-static inline bool mclassp_valid(enum mp_media_classp mclassp)
+static inline bool mclassp_valid(enum mp_media_classp mclass)
 {
-	return (mclassp >= 0 && mclassp < MP_MED_NUMBER);
+	return (mclass >= 0 && mclass < MP_MED_NUMBER);
 };
 
 /**
  * mc_smap_parms_get() - get space map params for the specified mclass.
  * @mp:
- * @mclassp:
+ * @mclass:
  * @mcsp: (output)
  */
 merr_t
 mc_smap_parms_get(
 	struct mpool_descriptor    *mp,
-	enum mp_media_classp        mclassp,
+	enum mp_media_classp        mclass,
 	struct mc_smap_parms       *mcsp);
 
 #endif

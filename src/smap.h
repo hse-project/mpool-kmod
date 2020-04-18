@@ -164,10 +164,10 @@ void smap_mpool_free(struct mpool_descriptor *mp);
 /**
  * smap_mpool_usage() - present stats of smap usage
  * @mp: struct mpool_descriptor *
- * @mcid: media class id or MCID_ALL for all classes
+ * @mclass: media class or MP_MED_ALL for all classes
  * @usage: struct mp_usage *
  *
- * Fill in stats with space usage for media class[es]; if MCID_ALL
+ * Fill in stats with space usage for media class; if MP_MED_ALL
  * report on all media classes; caller must hold mp.pdvlock.
  *
  * Locking: the caller should hold the pds_pdvlock at least in read to
@@ -176,7 +176,10 @@ void smap_mpool_free(struct mpool_descriptor *mp);
  * Return: 0 if successful, merr_t otherwise...
  */
 void
-smap_mpool_usage(struct mpool_descriptor *mp, u32 mcid, struct mp_usage *usage);
+smap_mpool_usage(
+	struct mpool_descriptor    *mp,
+	u8                          mclass,
+	struct mp_usage            *usage);
 
 /**
  * smap_drive_spares() - Set percentage of zones to set aside as spares
@@ -329,9 +332,9 @@ smap_drive_alloc(
 merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh);
 
 /**
- * smap_mpool_usage() - Get the media class usage for a given mcid.
+ * smap_mpool_usage() - Get the media class usage for a given mclass.
  * @mp:
- * @mcid: if MCID_ALL, return the sum of the stats for all media class,
+ * @mclass: if MP_MED_ALL, return the sum of the stats for all media class,
  *	else the stats only for one media class.
  * @usage: output
  *
@@ -341,7 +344,7 @@ merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh);
 void
 smap_mclass_usage(
 	struct mpool_descriptor    *mp,
-	u32                         mcid,
+	u8                          mclass,
 	struct mp_usage            *usage);
 
 merr_t

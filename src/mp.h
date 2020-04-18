@@ -62,7 +62,6 @@ struct rmbkt {
 /**
  * struct mpool_dev_info - Pool drive state, status, and params
  * @pdi_devid:    UUID for this drive
- * @pdi_mcid:     media class id of drive
  * @pdi_parm:     drive parms
  * @pdi_status:   enum pd_status value: drive status
  * @pdi_state:    drive state
@@ -88,7 +87,6 @@ struct rmbkt {
  */
 struct mpool_dev_info {
 	atomic_t                pdi_status; /* Barriers or acq/rel required */
-	u32                     pdi_mcid;
 	struct pd_dev_parm      pdi_parm;
 	enum pd_state_omf       pdi_state;
 	struct smap_dev_alloc   pdi_ds;
@@ -103,7 +101,7 @@ struct mpool_dev_info {
 #define pdi_zonetot   pdi_parm.dpr_prop.pdp_zparam.dvb_zonetot
 #define pdi_devtype   pdi_parm.dpr_prop.pdp_devtype
 #define pdi_cmdopt    pdi_parm.dpr_prop.pdp_cmdopt
-#define pdi_mclassp   pdi_parm.dpr_prop.pdp_mclassp
+#define pdi_mclass    pdi_parm.dpr_prop.pdp_mclassp
 #define pdi_devsz     pdi_parm.dpr_prop.pdp_devsz
 #define pdi_sectorsz  pdi_parm.dpr_prop.pdp_sectorsz
 #define pdi_prop      pdi_parm.dpr_prop
@@ -124,10 +122,10 @@ struct uuid_to_mpdesc_rb {
 
 /**
  * struct mpdesc_mdparm - parameters used for the MDCs of the mpool.
- * @mdc_mcid:    media class id of the media class used for the mpool metadata
+ * @md_mclass:  media class used for the mpool metadata
  */
 struct mpdesc_mdparm {
-	u32		   mdc_mcid;
+	u8     md_mclass;
 };
 
 /**
@@ -158,7 +156,7 @@ struct pre_compact_ctrl {
  *		  node type: uuid_to_idx_rb
  * @pds_cfg:      mpool config
  * @pds_pdvcnt:   cnt of valid pdv entries
- * @pds_mca       table of media classes
+ * @pds_mc        table of media classes
  * @pds_uctxt     used by user-space mlogs to indicate the context
  * @pds_node:     for linking this object into an rbtree
  * @pds_params:   Per mpool parameters
@@ -174,8 +172,8 @@ struct pre_compact_ctrl {
  *    oml: protected by omlock
  *    dev2pdh protected by mpool_s_lock (see note)
  *    pdv: see note
- *    pds_mca: protected by pds_pdvlock
- *	Update of pds_mca.mca_array[].mc_spzone must also be enclosed
+ *    pds_mc: protected by pds_pdvlock
+ *	Update of pds_mc[].mc_sparams.mc_spzone must also be enclosed
  *	with mpool_s_lock to serialize the spzone updates, because they include
  *	an append of an MDC0 record on top of updating mc_spzone.
  *    all other fields: protected by pds_pdvlock (as is pds_pdv[x].state)
@@ -190,11 +188,6 @@ struct pre_compact_ctrl {
  *    mpool_dev_info.
  *    pds_dev2pdh and mc_spzone are written and read only by mpool functions
  *    that are serialized via mpool_s_lock.
- *
- * NOTE2:
- *    + pds_mca.mca_array[mcid].mc_pdmc[0] is the count of pds_pdv entries in
- *	the vector mc_pdmc[] for the media class whose id is mcid.
- *      all drives in vector are in an active state (not DEFUNCT)
  */
 struct mpool_descriptor {
 	struct rw_semaphore         pds_pdvlock;
@@ -216,7 +209,7 @@ struct mpool_descriptor {
 	struct workqueue_struct    *pds_erase_wq;
 	struct workqueue_struct    *pds_precompact_wq;
 
-	struct mc_array             pds_mca;
+	struct media_class          pds_mc[MP_MED_NUMBER];
 	struct mpcore_params        pds_params;
 	struct omf_sb_descriptor    pds_sbmdc0;
 	struct pre_compact_ctrl     pds_pco;

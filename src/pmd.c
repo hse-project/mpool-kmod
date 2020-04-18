@@ -277,7 +277,7 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 	struct uuid_to_idx_rb  *uuid_idx_rb_elem = NULL;
 	u64                     pdh = 0;
 	enum mp_media_classp    mclassp;
-	u16                     ftmax = 0;
+	u8                      ftmax = 0;
 	struct media_class      *mc;
 	int                      spzone[MP_MED_NUMBER];
 
@@ -440,13 +440,13 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 
 	/* check for zombie drives and recompute uacnt[] */
 	if (!err) {
-		for (i = 0; i < mc_cnt(mp); i++) {
-			mc = mc_id2class(mp, i);
+		for (i = 0; i < MP_MED_NUMBER; i++) {
+			mc = &mp->pds_mc[i];
 			mc->mc_uacnt = 0;
 		}
 
 		for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
-			mc = mc_id2class(mp, mp->pds_pdv[pdh].pdi_mcid);
+			mc = &mp->pds_mc[mp->pds_pdv[pdh].pdi_mclass];
 			if (mp->pds_pdv[pdh].pdi_state == OMF_PD_DEFUNCT) {
 				char uuid_str[40];
 
@@ -477,11 +477,11 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 
 		if (!err) {
 			ftmax = 0;
-			for (i = 0; i < mc_cnt(mp); i++) {
-				mc = mc_id2class(mp, i);
+			for (i = 0; i < MP_MED_NUMBER; i++) {
+				mc = &mp->pds_mc[i];
 				ftmax = max(ftmax, mc->mc_uacnt);
 			}
-			if (ftmax >= mc_cnt(mp)) {
+			if (ftmax >= MP_MED_NUMBER) {
 				err = merr(EINVAL);
 				mpool_devrpt(devrpt, MPOOL_RC_MDC, 0, NULL);
 				mp_pr_err("mpool %s, not enough good drives %d",
@@ -1511,7 +1511,6 @@ pmd_log_all_mdc_cobjs(
 static merr_t pmd_log_mdc0_cobjs(struct mpool_descriptor *mp)
 {
 	struct mpool_dev_info    *pd;
-	struct mc_array          *mca;
 	merr_t                    err = 0;
 	int                       i;
 	/*
@@ -1530,18 +1529,19 @@ static merr_t pmd_log_mdc0_cobjs(struct mpool_descriptor *mp)
 	/*
 	 * Log a media class spare record (OMF_MDR_MCSPARE) for every media
 	 * class.
-	 * mca_cnt can't change now. Because the MDC0 compact lock is held
+	 * mc count can't change now. Because the MDC0 compact lock is held
 	 * and that blocks the addition of PDs in the  mpool.
 	 */
-	mca = &(mp->pds_mca);
-	for (i = 0; i < mca->mca_cnt; i++) {
+	for (i = 0; i < MP_MED_NUMBER; i++) {
 		struct media_class *mc;
 
-		mc = &(mca->mca_array[i]);
-		err = pmd_prop_mcspare(mp, mc->mc_parms.mcp_classp,
-			mc->mc_sparms.mcsp_spzone, true);
-		if (ev(err))
-			return err;
+		mc = &mp->pds_mc[i];
+		if (mc->mc_pdmc >= 0) {
+			err = pmd_prop_mcspare(mp, mc->mc_parms.mcp_classp,
+				mc->mc_sparms.mcsp_spzone, true);
+			if (ev(err))
+				return err;
+		}
 	}
 
 	err = pmd_prop_mpconfig(mp, &mp->pds_cfg, true);
@@ -2791,14 +2791,9 @@ pmd_layout_calculate(
 	u64                       *zcnt,
 	enum obj_type_omf          otype)
 {
-	u16    pdhsame;
 	u32    zonepg;
 
-	/*
-	 * note: zone parms same for all drives in the media class.
-	 */
-	pdhsame   = mc->mc_pdmc[1];
-	zonepg = mp->pds_pdv[pdhsame].pdi_parm.dpr_zonepg;
+	zonepg = mp->pds_pdv[mc->mc_pdmc].pdi_parm.dpr_zonepg;
 
 	if (!ocap->moc_captgt) {
 		/* Obj capacity not specified; use one zone. */
@@ -2832,7 +2827,7 @@ pmd_layout_alloc(
 
 	u64     zoneaddr;
 	u64     align;
-	u16     pdh;
+	u8      pdh;
 	merr_t  err;
 
 	spctype = SMAP_SPC_USABLE_ONLY;
@@ -2849,7 +2844,7 @@ pmd_layout_alloc(
 	align = min_t(u64, zcnt, mcsp.mcsp_align);
 	align = roundup_pow_of_two(align);
 
-	pdh = mc->mc_pdmc[1];
+	pdh = mc->mc_pdmc;
 	err = smap_alloc(mp, pdh, zcnt, spctype, &zoneaddr, align);
 	if (ev(err))
 		return err;
@@ -3080,27 +3075,14 @@ retry:
 	down_read(&mp->pds_pdvlock);
 
 	do {
-		bool   nospc = false;
-		/*
-		 * MP_CK_UNDEF is passed in because the checksum type
-		 * requested for the object is disregarded.
-		 */
-		mc = mc_get_media_class(mp, mclassp, MP_CK_UNDEF);
-		if (mc) {
-			/*
-			 * Sanity check media class drive count before
-			 * allocating an objid uniquifier.
-			 */
-			if (mc->mc_pdmc[0] > 0)
-				break;
-
-			nospc = true;
-		}
+		mc = &mp->pds_mc[mclassp];
+		if (mc->mc_pdmc >= 0)
+			break;
 
 		if (ev(!beffort || ++mclassp >= MP_MED_NUMBER)) {
 			up_read(&mp->pds_pdvlock);
 
-			return nospc ? merr(ENOSPC) : merr(ENOENT);
+			return merr(ENOENT);
 		}
 	} while (beffort);
 

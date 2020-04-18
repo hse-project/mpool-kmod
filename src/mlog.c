@@ -90,17 +90,12 @@ mlog_getprops_cmn(
 	struct ecio_layout_descriptor *layout,
 	struct mlog_props             *prop)
 {
-	u32		    mcid;
-	struct media_class *mc;
-
 	memcpy(prop->lpr_uuid.b, layout->eld_uuid.uuid, MPOOL_UUID_SIZE);
 	prop->lpr_objid       = layout->eld_objid;
 	prop->lpr_alloc_cap   = ecio_obj_get_cap_from_layout(mp, layout);
 	prop->lpr_gen         = layout->eld_gen;
 	prop->lpr_iscommitted = layout->eld_state & ECIO_LYT_COMMITTED;
-	mcid = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_mcid;
-	mc = mc_id2class(mp, mcid);
-	prop->lpr_mclassp    = mc->mc_parms.mcp_classp;
+	prop->lpr_mclassp    = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_mclass;
 }
 
 

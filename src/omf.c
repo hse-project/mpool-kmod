@@ -462,7 +462,7 @@ omf_ecio_layout_pack_htole(
 	ocre_omf = (struct mdcrec_data_ocreate_omf *)outbuf;
 	omf_set_pdrc_rtype(ocre_omf, rtype);
 	omf_set_pdrc_mclass(ocre_omf,
-			    mp->pds_pdv[ecl->eld_ld.ol_pdh].pdi_mclassp);
+			    mp->pds_pdv[ecl->eld_ld.ol_pdh].pdi_mclass);
 	omf_set_pdrc_objid(ocre_omf, ecl->eld_objid);
 	omf_set_pdrc_gen(ocre_omf, ecl->eld_gen);
 	omf_set_pdrc_mblen(ocre_omf, ecl->eld_mblen);
@@ -587,7 +587,7 @@ omf_ecio_layout_unpack_letoh(
 	ecl->eld_ld.ol_zaddr = cdr->u.obj.omd_old.ol_zaddr;
 
 	for (i = 0; i < mp->pds_pdvcnt; i++) {
-		if (mp->pds_pdv[i].pdi_mclassp == cdr->u.obj.omd_mclass) {
+		if (mp->pds_pdv[i].pdi_mclass == cdr->u.obj.omd_mclass) {
 			ecl->eld_ld.ol_pdh = i;
 			break;
 		}

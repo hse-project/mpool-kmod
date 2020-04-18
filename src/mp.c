@@ -217,9 +217,9 @@ mpool_mdc0_alloc(
 		u32    cnt;
 
 		pd = &mp->pds_pdv[pdh];
-		mc = mc_id2class(mp, pd->pdi_mcid);
+		mc = &mp->pds_mc[pd->pdi_mclass];
 
-		if (pd->pdi_mcid != mp->pds_mdparm.mdc_mcid)
+		if (pd->pdi_mclass != mp->pds_mdparm.md_mclass)
 			continue;
 
 		alloc = true;
@@ -312,15 +312,15 @@ mpool_dev_sbwrite_newpool(
 	for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
 		pd = &mp->pds_pdv[pdh];
 
-		if (pd->pdi_mcid == mp->pds_mdparm.mdc_mcid)
+		if (pd->pdi_mclass == mp->pds_mdparm.md_mclass)
 			err = mpool_dev_sbwrite(mp, pd, sbmdc0);
 		else
 			err = mpool_dev_sbwrite(mp, pd, NULL);
 		if (err) {
 			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 				     "superblock write %s failed, %d %d %d",
-				     pd->pdi_name, pd->pdi_mcid,
-				     mp->pds_mdparm.mdc_mcid,
+				     pd->pdi_name, pd->pdi_mclass,
+				     mp->pds_mdparm.md_mclass,
 				     merr_errno(err));
 			break;
 		}
@@ -342,7 +342,6 @@ mpool_desc_pdmc_add(
 	struct media_class     *mc;
 	struct mc_parms		mc_parms;
 
-	u16    mcdcnt = 0;
 	merr_t err;
 
 	pd = &mp->pds_pdv[pdh];
@@ -376,8 +375,8 @@ mpool_desc_pdmc_add(
 	 * Enforce that for a same media class, all drives of the mpool
 	 * have the same parameters (listed in mc_parms).
 	 */
-	mc = mc_perf2mclass(mp, mc_parms.mcp_classp);
-	if (mc == NULL) {
+	mc = &mp->pds_mc[mc_parms.mcp_classp];
+	if (mc->mc_pdmc < 0) {
 		struct mc_smap_parms   mcsp;
 		/*
 		 * No media class corresponding to the PD class yet, create one.
@@ -386,9 +385,8 @@ mpool_desc_pdmc_add(
 		if (ev(err))
 			return err;
 
-		err = mc_add_class(mp, &mc_parms, &mcsp, &mc, check_only);
-		if (ev(err))
-			return err;
+		if (!check_only)
+			mc_init_class(mc, &mc_parms, &mcsp);
 	} else {
 		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 			     "drive add %s failed, only 1 device allowed per mclass",
@@ -400,10 +398,7 @@ mpool_desc_pdmc_add(
 	if (check_only)
 		return 0;
 
-	mcdcnt = mc->mc_pdmc[0];
-	pd->pdi_mcid = mc->mc_id;
-	mc->mc_pdmc[0] = mcdcnt + 1;
-	mc->mc_pdmc[mcdcnt + 1] = pdh;
+	mc->mc_pdmc = pdh;
 
 	return 0;
 }
@@ -489,7 +484,7 @@ mpool_desc_init_newpool(
 		return err;
 	}
 
-	mp->pds_mdparm.mdc_mcid = mp->pds_pdv[pdh].pdi_mcid;
+	mp->pds_mdparm.md_mclass = mp->pds_pdv[pdh].pdi_mclass;
 
 	return 0;
 }
@@ -527,8 +522,6 @@ mpool_dev_init_all(
 			break;
 		}
 
-		/* PD not yet assigned to a media class. */
-		pdv[idx].pdi_mcid  = MCID_INVALID;
 		pdv[idx].pdi_state = OMF_PD_ACTIVE;
 
 		pdname = strrchr(dpaths[idx], '/');
@@ -890,9 +883,7 @@ mpool_desc_init_sb(
 
 	for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
 		struct omf_devparm_descriptor  *dparm;
-		struct media_class             *mc;
-
-		bool   resize = false;
+		bool                            resize = false;
 
 		pd = &mp->pds_pdv[pdh];
 
@@ -1110,15 +1101,10 @@ mpool_desc_init_sb(
 		 * Record the media class used by the MDC0 metadata.
 		 */
 		if (mdc0found)
-			mp->pds_mdparm.mdc_mcid = pd->pdi_mcid;
+			mp->pds_mdparm.md_mclass = pd->pdi_mclass;
 
-		if (resize && mc_resize) {
-			mc = mc_id2class(mp, pd->pdi_mcid);
-			if (mc) {
-				assert(mc->mc_parms.mcp_classp < MP_MED_NUMBER);
-				mc_resize[mc->mc_parms.mcp_classp] = resize;
-			}
-		}
+		if (resize && mc_resize)
+			mc_resize[pd->pdi_mclass] = resize;
 	}
 
 	if (!mdc0found) {
@@ -1155,8 +1141,8 @@ mpool_activate(
 
 	u64     mdcmax, mdcnum, mdcncap, mdc0cap;
 	bool    active, uafound;
-	int     dup, doff, cnt;
-	u32     mcid, pdh;
+	int     dup, doff, cnt, i;
+	u8      pdh;
 	bool    mc_resize[MP_MED_NUMBER] = { };
 
 	mpool_devrpt_init(devrpt);
@@ -1248,8 +1234,8 @@ mpool_activate(
 		goto errout;
 	}
 
-	mcmeta = mc_id2class(mp, mp->pds_mdparm.mdc_mcid);
-	if (!mcmeta) {
+	mcmeta = &mp->pds_mc[mp->pds_mdparm.md_mclass];
+	if (mcmeta->mc_pdmc < 0) {
 		err = merr(ENODEV);
 		mp_pr_err("mpool %s, too many unavailable drives",
 			  err, mp->pds_name);
@@ -1274,12 +1260,10 @@ mpool_activate(
 
 	for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
 		struct mpool_dev_info  *pd;
-		struct media_class     *mc;
 
 		pd = &mp->pds_pdv[pdh];
 
-		mc = mc_id2class(mp, pd->pdi_mcid);
-		if (mc && mc_resize[mc->mc_parms.mcp_classp]) {
+		if (mc_resize[pd->pdi_mclass]) {
 			err = pmd_prop_mcconfig(mp, pd, false);
 			if (err) {
 				mp_pr_err("mpool %s, updating MCCONFIG record for resize failed",
@@ -1288,16 +1272,16 @@ mpool_activate(
 			}
 		}
 
-		if (mc->mc_parms.mcp_classp == MP_MED_CAPACITY)
+		if (pd->pdi_mclass == MP_MED_CAPACITY)
 			mpool_mdc_cap_init(mp, pd);
 	}
 
 	/* tolerate unavailable drives only if force flag specified */
 	uafound = false;
-	for (mcid = 0; mcid < mc_cnt(mp); mcid++) {
+	for (i = 0; i < MP_MED_NUMBER; i++) {
 		struct media_class *mc;
 
-		mc = mc_id2class(mp, mcid);
+		mc = &mp->pds_mc[i];
 		if (mc->mc_uacnt) {
 			uafound = true;
 			break;
@@ -1771,7 +1755,7 @@ mpool_drive_add(
 
 	/* Get percent spare */
 	down_read(&mp->pds_pdvlock);
-	err = mc_smap_parms_get(mp, pd->pdi_mclassp, &mcsp);
+	err = mc_smap_parms_get(mp, pd->pdi_mclass, &mcsp);
 	up_read(&mp->pds_pdvlock);
 	if (ev(err))
 		goto errout;
@@ -1849,14 +1833,15 @@ errout:
 
 void mpool_mclass_get_cnt(struct mpool_descriptor *mp, u32 *cnt)
 {
-	u32		    mcid;
-	struct media_class *mc;
+	int    i;
 
 	*cnt = 0;
 	down_read(&mp->pds_pdvlock);
-	for (mcid = 0; mcid < mc_cnt(mp); mcid++) {
-		mc = mc_id2class(mp, mcid);
-		if (mc->mc_pdmc[0])
+	for (i = 0; i < MP_MED_NUMBER; i++) {
+		struct media_class *mc;
+
+		mc = &mp->pds_mc[i];
+		if (mc->mc_pdmc >= 0)
 			(*cnt)++;
 	}
 	up_read(&mp->pds_pdvlock);
@@ -1868,8 +1853,7 @@ mpool_mclass_get(
 	u32                        *mcxc,
 	struct mpool_mclass_xprops *mcxv)
 {
-	struct media_class *mc;
-	int                 i, n;
+	int    i, n;
 
 	if (!mp || !mcxc || !mcxv)
 		return merr(EINVAL);
@@ -1877,21 +1861,22 @@ mpool_mclass_get(
 	mutex_lock(&mpool_s_lock);
 	down_read(&mp->pds_pdvlock);
 
-	for (n = i = 0; i < mc_cnt(mp) && n < *mcxc; i++) {
-		mc = mc_id2class(mp, i);
-		if (!mc->mc_pdmc[0])
+	for (n = i = 0; i < MP_MED_NUMBER && n < *mcxc; i++) {
+		struct media_class *mc;
+
+		mc = &mp->pds_mc[i];
+		if (mc->mc_pdmc < 0)
 			continue;
 
 		mcxv->mc_mclass = mc->mc_parms.mcp_classp;
 		mcxv->mc_devtype = mc->mc_parms.mcp_devtype;
-		mcxv->mc_pdcnt = mc->mc_pdmc[0];
 		mcxv->mc_spare = mc->mc_sparms.mcsp_spzone;
 
 		mcxv->mc_zonepg = mc->mc_parms.mcp_zonepg;
 		mcxv->mc_sectorsz = mc->mc_parms.mcp_sectorsz;
 		mcxv->mc_features = mc->mc_parms.mcp_features;
 		mcxv->mc_uacnt = mc->mc_uacnt;
-		smap_mclass_usage(mp, mc->mc_id, &mcxv->mc_usage);
+		smap_mclass_usage(mp, i, &mcxv->mc_usage);
 
 		++mcxv;
 		++n;
@@ -1927,7 +1912,7 @@ mpool_drive_spares(
 	 * no PDs in the specified media class.
 	 */
 	down_read(&mp->pds_pdvlock);
-	mc = mc_perf2mclass(mp, mclassp);
+	mc = &mp->pds_mc[mclassp];
 	up_read(&mp->pds_pdvlock);
 
 	if (!mc) {
@@ -1997,9 +1982,8 @@ mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops)
 	for (mclassp = 0; mclassp < MP_MED_NUMBER; mclassp++) {
 		xprops->ppx_pd_mclassv[mclassp] = MP_MED_INVALID;
 
-		mc = mc_perf2mclass(mp, mclassp);
-		if (!mc) {
-			xprops->ppx_tdcnt[mclassp] = 0;
+		mc = &mp->pds_mc[mclassp];
+		if (mc->mc_pdmc < 0) {
 			xprops->ppx_drive_spares[mclassp] = 0;
 			xprops->ppx_uacnt[mclassp] = 0;
 
@@ -2007,11 +1991,10 @@ mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops)
 			continue;
 		}
 
-		xprops->ppx_tdcnt[mclassp] = mc->mc_pdmc[0];
 		xprops->ppx_drive_spares[mclassp] = mc->mc_sparms.mcsp_spzone;
 		xprops->ppx_uacnt[mclassp] = mc->mc_uacnt;
 		ftmax = max((u16)ftmax, (u16)(xprops->ppx_uacnt[mclassp]));
-		if (mc->mc_id == mp->pds_mdparm.mdc_mcid)
+		if (mclassp == mp->pds_mdparm.md_mclass)
 			xprops->ppx_mdparm.mdp_mclassp = mclassp;
 
 		xprops->ppx_params.mp_mblocksz[mclassp] =
@@ -2019,8 +2002,8 @@ mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops)
 	}
 
 	for (i = 0; i < mp->pds_pdvcnt; ++i) {
-		mc = mc_id2class(mp, mp->pds_pdv[i].pdi_mcid);
-		if (!mc)
+		mc = &mp->pds_mc[mp->pds_pdv[i].pdi_mclass];
+		if (mc->mc_pdmc < 0)
 			continue;
 
 		xprops->ppx_pd_mclassv[i] = mc->mc_parms.mcp_classp;
@@ -2059,7 +2042,7 @@ fill_in_devprops(
 	pd = &mp->pds_pdv[pdh];
 	memcpy(dprop->pdp_devid.b, pd->pdi_devid.uuid, MPOOL_UUID_SIZE);
 
-	mc = mc_id2class(mp, pd->pdi_mcid);
+	mc = &mp->pds_mc[pd->pdi_mclass];
 	dprop->pdp_mclassp   = mc->mc_parms.mcp_classp;
 	dprop->pdp_status    = mpool_pd_status_get(pd);
 	dprop->pdp_state     = pd->pdi_state;
@@ -2097,30 +2080,25 @@ mpool_get_usage(
 	enum mp_media_classp        mclassp,
 	struct mp_usage            *usage)
 {
-	u32    mcid;
-
 	memset(usage, 0, sizeof(*usage));
 
 	down_read(&mp->pds_pdvlock);
-	if (mclassp == MCLASS_ALL) {
-		mcid = MCID_ALL;
-	} else {
+	if (mclassp != MP_MED_ALL) {
 		struct media_class *mc;
 
-		mc = mc_perf2mclass(mp, mclassp);
-		if (mc == NULL) {
+		assert(mclassp < MP_MED_NUMBER);
+		mc = &mp->pds_mc[mclassp];
+		if (mc->mc_pdmc < 0) {
 			/* Not an error, this media class is empty. */
 			up_read(&mp->pds_pdvlock);
 			return;
 		}
-		mcid = mc->mc_id;
 	}
-	smap_mpool_usage(mp, mcid, usage);
+	smap_mpool_usage(mp, mclassp, usage);
 	up_read(&mp->pds_pdvlock);
 
-	if (mclassp == MCLASS_ALL)
+	if (mclassp == MP_MED_ALL)
 		pmd_mpool_usage(mp, usage);
-
 }
 
 /*
@@ -2233,6 +2211,7 @@ struct mpool_descriptor *mpool_desc_alloc(void)
 	struct mpool_descriptor    *mp;
 	struct mpool_dev_info      *pd;
 	struct uuid_to_idx_rb      *urb_elem;
+	int                         i;
 
 	mp = kzalloc(sizeof(*mp), GFP_KERNEL);
 	if (!mp)
@@ -2262,7 +2241,7 @@ struct mpool_descriptor *mpool_desc_alloc(void)
 	mutex_init(&mp->pds_omlock);
 	mp->pds_oml = RB_ROOT;
 
-	mp->pds_mdparm.mdc_mcid = MCID_INVALID;
+	mp->pds_mdparm.md_mclass = MP_MED_INVALID;
 
 	/* Allocate rw lock pool for ecio objects layouts.
 	 */
@@ -2275,6 +2254,9 @@ struct mpool_descriptor *mpool_desc_alloc(void)
 	}
 
 	mpcore_params_defaults(&mp->pds_params);
+
+	for (i = 0; i < MP_MED_NUMBER; i++)
+		mp->pds_mc[i].mc_pdmc = -1;
 
 	return mp;
 }
