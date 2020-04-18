@@ -53,7 +53,7 @@ mpool_mdc0_sb2obj(
 	/* mdc0 mlog1 layout */
 	*l1 = ecio_layout_alloc(mp, &sb->osb_mdc01uuid, MDC0_OBJID_LOG1,
 				sb->osb_mdc01gen, 0,
-				sb->osb_mdc01desc.ol_zcnt, true);
+				sb->osb_mdc01desc.ol_zcnt);
 	if (!*l1) {
 		*l1 = NULL;
 		*l2 = NULL;
@@ -87,7 +87,7 @@ mpool_mdc0_sb2obj(
 	/* mdc0 mlog2 layout */
 	*l2 = ecio_layout_alloc(mp, &sb->osb_mdc02uuid, MDC0_OBJID_LOG2,
 				sb->osb_mdc02gen, 0,
-				sb->osb_mdc02desc.ol_zcnt, true);
+				sb->osb_mdc02desc.ol_zcnt);
 	if (!*l2) {
 		ecio_layout_free(*l1);
 		*l1 = NULL;

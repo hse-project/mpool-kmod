@@ -58,12 +58,14 @@ mblock2layout(struct mblock_descriptor *mbh)
 	if (ev(!mbh))
 		return NULL;
 
-	WARN(layout->eld_magic != (uintptr_t)layout,
-	     "%s: %px, magic %lx, objid %lx, refcnt %u",
+#ifndef MPOOL_BUILD_RELEASE
+	WARN(layout->eld_magic != layout->eld_objid,
+	     "%s: %px, magic %lx, objid %lx, refcnt %ld",
 	     __func__, layout, layout->eld_magic,
 	     (ulong)layout->eld_objid, layout->eld_refcnt);
 
-	assert(layout->eld_magic == (uintptr_t)layout);
+	assert(layout->eld_magic == layout->eld_objid);
+#endif
 
 	return mblock_objid(layout->eld_objid) ? layout : NULL;
 }

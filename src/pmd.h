@@ -349,11 +349,13 @@ struct pmd_mda_info {
  * struct pmd_obj_erase_work - workqueue job struct for object erase and free
  * @oef_mp:             mpool
  * @oef_layout:         object layout
+ * @oef_cache:          kmem cache to free work (or NULL)
  * @oef_wqstruct:	workq struct
  */
 struct pmd_obj_erase_work {
 	struct mpool_descriptor        *oef_mp;
 	struct ecio_layout_descriptor  *oef_layout;
+	struct kmem_cache              *oef_cache;
 	struct work_struct              oef_wqstruct;
 };
 

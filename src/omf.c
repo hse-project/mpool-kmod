@@ -576,7 +576,7 @@ omf_ecio_layout_unpack_letoh(
 	ecl = ecio_layout_alloc(mp, &cdr->u.obj.omd_uuid,
 				cdr->u.obj.omd_objid, cdr->u.obj.omd_gen,
 				cdr->u.obj.omd_mblen,
-				cdr->u.obj.omd_old.ol_zcnt, false);
+				cdr->u.obj.omd_old.ol_zcnt);
 	if (!ecl) {
 		err = merr(ENOMEM);
 		mp_pr_err("mpool %s, unpacking layout failed, could not allocate layout structure",

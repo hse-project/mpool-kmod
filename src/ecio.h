@@ -76,34 +76,33 @@ struct ecio_layout_mlo {
  *   See the comments associated with struct pmd_mdc_info for
  *   further details.
  *
+ * @eld_nodemdc: for both ucobj and obj rbtrees, obj. only in one tree
+ * @eld_objid:   object id associated with layout
  * @eld_rwlock:  implements pmd_obj_*lock() for this layout
  * @eld_mblen:   Amount of data written in the mblock in bytes (0 for mlogs)
  * @eld_isdel:   true if object is logically deleted
  * @eld_state:   enum ecio_layout_state
  * @eld_flags:   enum mlog_open_flags for mlogs
- * @eld_refcnt:  user ref count from alloc/get/put
- * @eld_nodemdc: for both ucobj and obj rbtrees, obj. only in one tree
- * @eld_objid:   object id associated with layout
  * @eld_mlo:     info. specific to an mlog, NULL for mblocks.
  * @eld_gen:     object generation
+ * @eld_refcnt:  user ref count from alloc/get/put
  * @eld_ld:
  */
 struct ecio_layout_descriptor {
-	uintptr_t                       eld_magic;
+	struct rb_node                  eld_nodemdc;
 	u64                             eld_objid;
 	struct rw_semaphore            *eld_rwlock;
 	u32                             eld_mblen;
 	bool                            eld_isdel;
 	u8                              eld_state;
 	u8                              eld_flags;
-	u8                              eld_refcnt;
-
-	struct rb_node                  eld_nodemdc;
 
 	struct ecio_layout_mlo         *eld_mlo;
 	u64                             eld_gen;
 
+	long                            eld_refcnt;
 	struct omf_layout_descriptor    eld_ld;
+	uintptr_t                       eld_magic;
 };
 
 /* Shortcuts */
@@ -293,8 +292,7 @@ ecio_mlog_erase(
 	struct ecio_err_report         *erpt);
 
 /**
- * @ecio_layout_alloc() - allocate an ecio_layout_descriptor
- *
+ * ecio_layout_alloc() - allocate an ecio_layout_descriptor
  * @mp:        To get the mpool uuid necessary to hook up performance counters
  *             of the family "MLOG" in preformance counters tree. If passed,
  *             no performance counter will be associated to that layout.
@@ -302,7 +300,6 @@ ecio_mlog_erase(
  * @gen:       u64, generation for this descriptor
  * @mblen:     u64 for mblock length of data written in it
  * @zcnt:      number of zones in a strip
- * @need_ref:  if true, refcount is set to 1, otherwise, set to 0
  *
  * Alloc and init object layout; non-arg fields and all strip descriptor
  * fields are set to 0/UNDEF/NONE; no auxiliary object info is allocated.
@@ -311,13 +308,12 @@ ecio_mlog_erase(
  */
 struct ecio_layout_descriptor *
 ecio_layout_alloc(
-	struct mpool_descriptor *mp,
-	struct mpool_uuid         *uuid,
-	u64                      objid,
-	u64                      gen,
-	u64                      mblen,
-	u32                      zcnt,
-	bool                     need_ref);
+	struct mpool_descriptor    *mp,
+	struct mpool_uuid          *uuid,
+	u64                         objid,
+	u64                         gen,
+	u64                         mblen,
+	u32                         zcnt);
 
 /**
  * ecio_layout_free() - free ecio_layout_descriptor and internal elements

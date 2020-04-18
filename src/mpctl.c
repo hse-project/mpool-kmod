@@ -103,7 +103,6 @@ struct mpc_unit {
 	bool                        un_transient;
 	const struct mpc_uinfo     *un_uinfo;
 	struct mpc_mpool           *un_mpool;
-	struct refmap              *un_mb_refmap;   /* Mblock refmap */
 	struct refmap              *un_ml_refmap;   /* Mlog refmap */
 	struct mpc_metamap         *un_metamap;
 	struct address_space       *un_mapping;
@@ -610,21 +609,6 @@ mpc_mpool_open(
 	return 0;
 }
 
-static void refmap_mblock_destructor(struct refmap_node *node, void *arg)
-{
-	struct mpool_descriptor  *mp = arg;
-	struct mblock_descriptor *mb;
-
-	if (ev(!node || !mp))
-		return;
-
-	mb = node->rn_obj.ro_value;
-	if (mb)
-		mblock_put(mp, mb);
-
-	refmap_node_free(node, arg);
-}
-
 static void refmap_mlog_destructor(struct refmap_node *node, void *arg)
 {
 	struct mpool_descriptor    *mp = arg;
@@ -696,17 +680,9 @@ mpc_unit_create(
 	unit->un_refcnt = 2;
 	unit->un_ss = ss;
 	unit->un_mpool = mpool;
-	unit->un_mb_refmap = NULL;
 	unit->un_ml_refmap = NULL;
 
 	if (needs_refmap) {
-		/* Create an empty refmap for mblock */
-		err = refmap_create(mpc_refmap_session,
-				    refmap_mblock_destructor,
-				    unit->un_mpool->mp_desc,
-				    &unit->un_mb_refmap);
-		if (err)
-			goto errout;
 
 		/* Create an empty refmap for mlog */
 		err = refmap_create(mpc_refmap_session,
@@ -751,12 +727,6 @@ errout:
 			unit->un_ml_refmap = NULL;
 		}
 
-		if (unit->un_mb_refmap) {
-			refmap_drop(unit->un_mb_refmap, NULL, NULL);
-			refmap_put(unit->un_mb_refmap);
-			unit->un_mb_refmap = NULL;
-		}
-
 		kfree(unit);
 		unit = NULL;
 	}
@@ -787,12 +757,6 @@ static void mpc_unit_destroy(struct mpc_unit *unit)
 	mutex_lock(&ss->ss_lock);
 	ss->ss_unitv[MINOR(unit->un_devno)] = NULL;
 	mutex_unlock(&ss->ss_lock);
-
-	if (unit->un_mb_refmap) {
-		refmap_drop(unit->un_mb_refmap, &nodes, &refs);
-
-		refmap_put(unit->un_mb_refmap);
-	}
 
 	if (unit->un_ml_refmap) {
 		refmap_drop(unit->un_ml_refmap, &nodes, &refs);
@@ -1797,8 +1761,7 @@ static int mpc_open(struct inode *ip, struct file *fp)
 		}
 	}
 
-	if (mpc_unit_ismpooldev(unit) &&
-	    (!unit->un_mb_refmap || !unit->un_ml_refmap)) {
+	if (mpc_unit_ismpooldev(unit) && !unit->un_ml_refmap) {
 		err = merr(EINVAL);
 		goto unlock;
 	}
@@ -1870,7 +1833,7 @@ static int mpc_release(struct inode *ip, struct file *fp)
 {
 	struct mpc_unit    *unit;
 
-	int     bnodes, brefs, lnodes, lrefs;
+	int     lnodes, lrefs;
 	bool    lastclose;
 
 	unit = fp->private_data;
@@ -1895,7 +1858,6 @@ static int mpc_release(struct inode *ip, struct file *fp)
 #endif
 	}
 
-	refmap_drop(unit->un_mb_refmap, &bnodes, &brefs);
 	refmap_drop(unit->un_ml_refmap, &lnodes, &lrefs);
 
 	unit->un_open_excl = false;
@@ -1949,144 +1911,6 @@ static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 	mpc_reap_vma_add(unit->un_ds_reap, meta);
 
 	return 0;
-}
-
-/**
- * mpc_mblock_put() - Put an mblock ref, via the refmap.
- *
- * If the refmap_node ref goes to zero, the node will be dropped
- * from the refmap, and the node destructor will put the
- * back-end ref on the mblock layout.
- */
-static int mpc_mblock_put(struct mpc_unit *unit, u64 objid)
-{
-	return refmap_obj_put(unit->un_mb_refmap, objid);
-}
-
-/**
- * mpc_mblock_find_get_impl() - Find an object in a refmap
- *
- * @unit
- * @objid
- * @obj    - struct refmap_obj, returned if found
- * @once   - Special temporary functionality.  once=1 means that if the object
- *           is missing from the refmap, add it with a refmap of 1.  If the
- *           object is already in the refmap, return its refmap_obj but do not
- *           increment the refcount on the refmap_node.  This is needed for
- *           callers that do not call mpc_mblock_find_get() for themselves
- *           (which is true of KVDB as of 6/2017, but will soon be fixed).
- * @loaded - If the loaded ptr is not null, store @true there if this call
- *           resulted in loading the node into the refmap.  This is to catch
- *           cases where the node should have already been present, for debug
- *           of programs that don't do "get" when they should.
- */
-static merr_t
-mpc_mblock_find_get_impl(
-	struct mpc_unit        *unit,
-	u64                     objid,
-	struct refmap_obj      *obj,
-	bool                    once,
-	bool                    resolve,
-	bool                   *loaded)
-{
-	struct mblock_descriptor   *mblock;
-	struct mblock_props         props;
-	struct refmap_node         *ref;
-	merr_t                      err;
-	u64                         gen;
-
-	if (loaded)
-		*loaded = false;
-
-	if (!objid)
-		return merr(EINVAL);
-
-again:
-	if (resolve || once) {
-		/* If it's in the refmap, "once" means use that without
-		 * incrementing the refcount
-		 */
-		err = refmap_obj_resolve(unit->un_mb_refmap, objid, &gen, obj);
-		ev(err);
-	} else {
-		err = refmap_obj_find_get(unit->un_mb_refmap, objid, &gen, obj);
-		ev(err);
-	}
-
-	/* This returns the entry if found, with a new ref on it: */
-	if (merr_errno(err) != ENOENT)
-		return ev(err);
-
-	/* If we get here and err is non-NULL, and resolve is true, we return
-	 * the err (which will be ENOENT, by deduction).
-	 */
-	if (ev(resolve && err))
-		return err;
-
-	/* If we get here and the once flag is set, that means this object
-	 * should have been in the refmap, but it was not there.  This
-	 * means that a caller used a handle that had not been gotten by "get".
-	 */
-	if (once && loaded)
-		*loaded = true;
-
-	/* If not found, lookup the mblock via mpcore */
-	err = mblock_find_get(unit->un_mpool->mp_desc, objid, &props, &mblock);
-	if (ev(err))
-		return err;
-
-	/* Refmap is keyed by objid */
-	ref = refmap_node_alloc(unit->un_mb_refmap, objid,
-				mblock, props.mpr_alloc_cap);
-	if (!ref)
-		return merr(ENOMEM);
-
-	/* Competing threads could concurrently acquire a descriptor
-	 * to the same mblock, but only one will win the race to install
-	 * it into the refmap.
-	 */
-	err = refmap_node_insert2(ref, gen);
-	if (ev(err)) {
-		refmap_node_destructor(ref);
-		goto again;           /* ...and try again */
-	}
-
-	*obj = ref->rn_obj;
-
-	return 0;
-}
-
-static merr_t
-mpc_mblock_find_get(struct mpc_unit *unit, u64 objid, struct refmap_obj *objp)
-{
-	return mpc_mblock_find_get_impl(unit, objid, objp, 0, 0, NULL);
-}
-
-
-/**
- * mpc_mblock_find_once()
- *
- * special temporary function, to be called by the functions that should
- * already have a ref on an mblock.  This one will get the ref if it's not
- * in the refmap, but will not increase the refcount if it IS in the refmap.
- *
- * Once the user space programs are behaving correctly (getting a ref before
- * caling write, commit, etc., this will go away.
- */
-merr_t
-mpc_mblock_find_once(
-	struct mpc_unit        *unit,
-	u64                     objid,
-	struct refmap_obj      *objp,
-	bool                   *loaded)
-{
-	return mpc_mblock_find_get_impl(unit, objid, objp, 1, 0, loaded);
-}
-
-merr_t
-mpc_mblock_resolve(struct mpc_unit *unit, u64 objid, struct refmap_obj *objp)
-{
-	return mpc_mblock_find_get_impl(unit, objid, objp, 0, 1, NULL);
 }
 
 static
@@ -3226,56 +3050,32 @@ mpioc_proplist_get(struct mpc_unit *unit, uint cmd, struct mpioc_list *ls)
 static merr_t
 mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
 {
-	struct refmap_node         *ref;
-	struct mpc_mpool           *mpool;
 	struct mblock_descriptor   *mblock;
+	struct mpool_descriptor    *mpool;
 	struct mblock_props         props;
 	merr_t                      err;
 
 	if (!unit || !mb || !unit->un_mpool)
 		return merr(EINVAL);
 
-	mpool = unit->un_mpool;
-	ref = NULL;
+	mpool = unit->un_mpool->mp_desc;
 
-	err = mblock_alloc(mpool->mp_desc, mb->mb_mclassp, mb->mb_spare,
+	err = mblock_alloc(mpool, mb->mb_mclassp, mb->mb_spare,
 			   &mblock, &props);
 	if (ev(err))
 		return err;
 
-	ref = refmap_node_alloc(unit->un_mb_refmap,
-				props.mpr_objid,    /* key */
-				mblock, props.mpr_alloc_cap);
-	if (!ref) {
-		err = merr(ENOMEM);
-		goto refmap_fail;
-	}
-
-	/* If insert returns a duplicate then it means mpool
-	 * reused an mblock ID which should never happen.
-	 */
-	err = refmap_node_insert(ref);
-	if (ev(err)) {
-		refmap_node_destructor(ref);
-		goto refmap_fail;
-	}
-
-	(void)mblock_get_props_ex(mpool->mp_desc, mblock, &mb->mb_props);
+	(void)mblock_get_props_ex(mpool, mblock, &mb->mb_props);
 
 	mb->mb_objid  = props.mpr_objid;
-	mb->mb_handle = mblock_objid_to_uhandle(props.mpr_objid);
+	mb->mb_handle = props.mpr_objid;
 	mb->mb_offset = -1;
 
 	return 0;
-
-refmap_fail:
-	mblock_abort(mpool->mp_desc, mblock);
-	return err;
 }
 
 /**
- * mpioc_mb_find_get() - Find an mblock object by its objid, and get a
- *                       refcounted handle.
+ * mpioc_mb_find() - Find an mblock object by its objid
  * @unit:   mpool or dataset unit ptr
  * @mb:     mblock parameter block
  *
@@ -3284,104 +3084,35 @@ refmap_fail:
  * Return:  Returns 0 if successful, errno via merr_t otherwise...
  */
 static merr_t
-mpioc_mb_find_get(struct mpc_unit *unit, struct mpioc_mblock *mb)
+mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
 {
-	struct refmap_obj   obj;
-	struct mpc_mpool   *mpool;
-	merr_t              err;
-	u64                 objid;
+	struct mblock_descriptor   *mblock;
+	struct mpool_descriptor    *mpool;
+
+	merr_t  err;
+	u64     objid;
+
+	if (!unit || !mb || !unit->un_mpool)
+		return merr(EINVAL);
+
+	if (!mblock_objid(mb->mb_objid))
+		return merr(EINVAL);
 
 	/* Only valid field in mpioc_mblock is mb_objid */
-
-	if (!unit || !mb || !unit->un_mpool)
-		return merr(EINVAL);
-
-	if (!mblock_objid(mb->mb_objid))
-		return merr(EINVAL);
-
 	objid = mb->mb_objid;
 
-	err = mpc_mblock_find_get(unit, mb->mb_objid, &obj);
+	mpool = unit->un_mpool->mp_desc;
+
+	err = mblock_find_get(mpool, objid, NULL, &mblock);
 	if (ev(err))
 		return err;
 
-	mpool = unit->un_mpool;
+	(void)mblock_get_props_ex(mpool, mblock, &mb->mb_props);
 
-	(void)mblock_get_props_ex(mpool->mp_desc, obj.ro_value, &mb->mb_props);
+	mblock_put(mpool, mblock);
 
-	mb->mb_handle = mblock_objid_to_uhandle(mb->mb_objid);
-	mb->mb_offset = -1;  /* ?? */
-
-	return 0;
-}
-
-/**
- * mpioc_mb_get() - Get a ref on an mblock by handle
- * @unit:   mpool or dataset unit ptr
- * @mb:     mblock parameter block
- *
- * The mblock must already be in the refmap, since that must be true if
- * the caller has a valud uhandle
- *
- * Return:  Returns 0 if successful, errno via merr_t otherwise...
- */
-static merr_t mpioc_mb_get(struct mpc_unit *unit, struct mpioc_mblock *mb)
-{
-	struct refmap_obj   obj;
-	struct mpc_mpool   *mpool;
-	merr_t              err;
-	u64                 objid;
-	u64                 gen;
-
-	/* Only valid field in mpioc_mblock is mb_handle */
-
-	if (!unit || !mb || !unit->un_mpool)
-		return merr(EINVAL);
-
-	if (!mblock_objid(mb->mb_objid))
-		return merr(EINVAL);
-
-	objid = mb->mb_objid;
-
-	/* Go straight to the refmap.  We want a new ref IF it's in the
-	 * refmap, but we don't want it unless it's in the refmap
-	 */
-	err = refmap_obj_find_get(unit->un_mb_refmap, objid,
-				  &gen, &obj);
-	if (ev(err))
-		return err;
-
-	mpool = unit->un_mpool;
-
-	(void)mblock_get_props_ex(mpool->mp_desc, obj.ro_value, &mb->mb_props);
-
-	mb->mb_handle = mblock_objid_to_uhandle(mb->mb_objid);
+	mb->mb_handle = objid;
 	mb->mb_offset = -1;
-
-	return 0;
-}
-
-static merr_t mpioc_mb_put(struct mpc_unit *unit, struct mpioc_mblock *mb)
-{
-	int       newref;
-	u64       objid;
-
-	/* Only valid field in mpioc_mblock is mb_handle */
-	if (!unit || !mb || !unit->un_mpool)
-		return merr(EINVAL);
-
-	/* mb_handle may be the only valid field;
-	 * Note that mblock_put is by handle, but refmaps for user space are
-	 * by objid - so we need to resolve the handle to the objid.  When we
-	 * present the same interfaces in kernel space, put wil be by handle
-	 * because it is a back-end mblock_put(), and the handle is the
-	 * address of the mblock_descriptor.
-	 */
-	objid = mblock_uhandle_to_objid(mb->mb_handle);
-
-	newref = mpc_mblock_put(unit, objid);
-	if (newref < 0)
-		return merr(ENOENT);
 
 	return 0;
 }
@@ -3402,98 +3133,49 @@ mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_id *mi)
 {
 	struct mblock_descriptor   *mblock;
 	struct mpool_descriptor    *mpool;
-	struct refmap_obj           obj;
-	merr_t                      err;
-	u64                         objid;
-	bool                        loaded = false;
+
+	bool    drop = true;
+	u64     objid;
+	merr_t  err;
 
 	if (!unit || !mi || !unit->un_mpool)
 		return merr(EINVAL);
 
 	/* Only valid input field is mi_handle */
-	objid = mblock_uhandle_to_objid(mi->mi_handle);
+	objid = mi->mi_handle;
+	if (!mblock_objid(objid))
+		return merr(EINVAL);
 
-	memset(&obj, 0, sizeof(obj));
-	err = mpc_mblock_resolve(unit, objid, &obj);
-	ev(err);
-	if (merr_errno(err) == ENOENT) {
-		/* TODO:
-		 * The caller used a handle that is not in the refmap, which
-		 * is a faux pas that we temporarily allow;
-		 * drop this call when we no longer allow it:
-		 */
-		err = mpc_mblock_find_once(unit, objid, &obj, &loaded);
-		ev(err);
-	}
+	mpool = unit->un_mpool->mp_desc;
 
+	err = mblock_find_get(mpool, objid, NULL, &mblock);
 	if (ev(err))
 		return err;
 
-	mpool = unit->un_mpool->mp_desc;
-	mblock = obj.ro_value;
-
 	switch (cmd) {
 	case MPIOC_MB_COMMIT:
-		if (loaded)
-			mp_pr_notice("(commit): caller skipped get %lx",
-				     (ulong)objid);
-
 		err = mblock_commit(mpool, mblock);
-		ev(err);
 		break;
 
 	case MPIOC_MB_ABORT:
-	case MPIOC_MB_DELETE: {
-		struct mblock_props mbprops;
-		int                 refcnt;
-		char               *op;
-
-		op = (cmd == MPIOC_MB_ABORT) ? "abort" : "delete";
-
-		if (loaded)
-			mp_pr_notice("(%s): caller skipped get %lx",
-				     op, (ulong)objid);
-
-		/* Get an mpcore obj ref for delete or abort */
-		err = mblock_get(mpool, mblock, &mbprops);
-		if (ev(err)) {
-			mp_pr_err("mblock %s failed mblock_get", err, op);
-			dump_stack();
-			goto out_err;
-		}
-
-		/* Clean this object out of the refmap */
-		/* TODO:
-		 * When we enforce refs, this will become refmap_obj_put(),
-		 * and it will be an error if refcnt != 0.
-		 */
-		refcnt = refmap_obj_zap(unit->un_mb_refmap, objid);
-		if (refcnt > 0) {
-			mp_pr_warn("mblock %s(%lx) caller leaked %d refmap refs",
-				op, (ulong)mi->mi_handle, refcnt);
-		}
-
+	case MPIOC_MB_DELETE:
 		/* This drops the layout ref */
 		if (cmd == MPIOC_MB_ABORT)
 			err = mblock_abort(mpool, mblock);
 		else
 			err = mblock_delete(mpool, mblock);
 
-		if (ev(err)) {
-			/* Revert back the get/put above */
-			(void)mpc_mblock_find_get(unit,
-				mblock_uhandle_to_objid(mi->mi_handle), &obj);
-			mblock_put(mpool, mblock);
-		}
+		drop = !!err;
 		break;
-	}
 
 	default:
 		err = merr(ENOTTY);
 		break;
 	}
 
-out_err:
+	if (drop)
+		mblock_put(mpool, mblock);
+
 	return err;
 }
 
@@ -3508,10 +3190,11 @@ static merr_t
 mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 	    void *stkbuf, size_t stkbufsz)
 {
-	struct refmap_obj   obj;
-	struct iovec       *kiov;
+	struct mblock_descriptor   *mblock;
+	struct mpool_descriptor    *mpool;
+	struct iovec               *kiov;
 
-	bool    loaded = false, xfree = false;
+	bool    xfree = false;
 	size_t  kiovsz;
 	u64     objid;
 	merr_t  err;
@@ -3519,31 +3202,9 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 	if (!unit || !mbrw || !unit->un_mpool)
 		return merr(EINVAL);
 
-	if (!mbrw->mb_handle)
+	objid = mbrw->mb_handle;
+	if (!objid)
 		return merr(EINVAL);
-
-	objid = mblock_uhandle_to_objid(mbrw->mb_handle);
-
-	err = mpc_mblock_resolve(unit, objid, &obj);
-
-	if (merr_errno(err) == ENOENT) {
-		/* TODO:
-		 * The caller used a handle that is not in the refmap, which
-		 * is a faux pas that we temporarily allow;
-		 * drop this call when we no longer allow it:
-		 */
-		err = mpc_mblock_find_once(unit, objid, &obj, &loaded);
-	}
-
-	if (err)
-		return err;
-
-	/* For read(2), reading at or past EOF returns success with zero
-	 * bytes transferred.  But (AFAIK) mpool returns failure if it
-	 * cannot completely fulfill the request.
-	 */
-	if (mbrw->mb_offset >= obj.ro_priv1)
-		return merr(EIO);
 
 	/* For small iovec counts we simply copyin the array of iovecs
 	 * to local storage (stkbuf).  Otherwise, we must kmalloc a
@@ -3566,16 +3227,25 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 		stkbufsz -= kiovsz;
 	}
 
+	mpool = unit->un_mpool->mp_desc;
+
+	err = mblock_find_get(mpool, objid, NULL, &mblock);
+	if (err)
+		goto errout;
+
 	if (copy_from_user(kiov, mbrw->mb_iov, kiovsz)) {
 		err = merr(EFAULT);
 	} else {
-		err = mpc_physio(unit->un_mpool->mp_desc, obj.ro_value,
+		err = mpc_physio(mpool, mblock,
 				 kiov, mbrw->mb_iov_cnt, mbrw->mb_offset,
 				 MP_OBJ_MBLOCK,
 				 (cmd == MPIOC_MB_READ) ? READ : WRITE,
 				 stkbuf, stkbufsz);
 	}
 
+	mblock_put(mpool, mblock);
+
+errout:
 	if (xfree)
 		kfree(kiov);
 
@@ -3590,40 +3260,29 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 static merr_t
 mpioc_mb_props(struct mpc_unit *unit, struct mpioc_mblock *mb)
 {
+	struct mblock_descriptor   *mblock;
 	struct mpool_descriptor    *mpool;
-	struct refmap_obj           obj;
-	merr_t                      err;
-	u64                         objid;
+
+	merr_t  err;
+	u64     objid;
 
 	if (!unit || !unit->un_mpool || !mb)
 		return merr(EINVAL);
 
 	/* Only valid input field is mb_handle */
-	objid = mblock_uhandle_to_objid(mb->mb_handle);
-
-	memset(&obj, 0, sizeof(obj));
-	err = mpc_mblock_resolve(unit, objid, &obj);
-	ev(err);
-	if (merr_errno(err) == ENOENT) {
-		/* TODO:
-		 * The caller used a handle that is not in the refmap, which
-		 * is a faux pas that we temporarily allow;
-		 * drop this call when we no longer allow it:
-		 */
-		err = mpc_mblock_find_once(unit, objid, &obj, NULL);
-		ev(err);
-	}
-
-	if (ev(err))
-		return err;
+	objid = mb->mb_handle;
+	if (!mblock_objid(objid))
+		return merr(EINVAL);
 
 	mpool = unit->un_mpool->mp_desc;
 
-	err = mblock_get_props_ex(mpool, obj.ro_value, &mb->mb_props);
-	if (ev(err))
-		return err;
+	err = mblock_find_get(mpool, objid, NULL, &mblock);
+	if (!err) {
+		err = mblock_get_props_ex(mpool, mblock, &mb->mb_props);
+		mblock_put(mpool, mblock);
+	}
 
-	return ev(err);
+	return err;
 }
 
 /*
@@ -4304,15 +3963,12 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		break;
 
 	case MPIOC_MB_FIND_GET:
-		err = mpioc_mb_find_get(unit, argp);
-		break;
-
 	case MPIOC_MB_GET:
-		err = mpioc_mb_get(unit, argp);
+		err = mpioc_mb_find(unit, argp);
 		break;
 
 	case MPIOC_MB_PUT:
-		err = mpioc_mb_put(unit, argp);
+		err = 0;
 		break;
 
 	case MPIOC_MB_COMMIT:
@@ -4802,7 +4458,7 @@ static __init int mpc_init(void)
 	mpc_vma_cachesz[0] = sizeof(struct mpc_vma) + sz;
 
 	mpc_vma_cache[0] = kmem_cache_create(
-		"mpc_vma_0", mpc_vma_cachesz[0], 0,
+		"mpool_vma_0", mpc_vma_cachesz[0], 0,
 		SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 	if (!mpc_vma_cache[0]) {
 		errmsg = "mpc vma meta cache 0 create failed";
@@ -4814,7 +4470,7 @@ static __init int mpc_init(void)
 	mpc_vma_cachesz[1] = sizeof(struct mpc_vma) + sz;
 
 	mpc_vma_cache[1] = kmem_cache_create(
-		"mpc_vma_1", mpc_vma_cachesz[1], 0,
+		"mpool_vma_1", mpc_vma_cachesz[1], 0,
 		SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 	if (!mpc_vma_cache[1]) {
 		errmsg = "mpc vma meta cache 1 create failed";

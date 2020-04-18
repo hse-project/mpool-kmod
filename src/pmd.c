@@ -1367,29 +1367,6 @@ void pmd_mpool_deactivate(struct mpool_descriptor *mp)
 	mutex_unlock(&pmd_s_lock);
 }
 
-static void pmd_obj_erase_and_free(struct work_struct *work)
-{
-	struct mpool_descriptor        *mp;
-	struct ecio_layout_descriptor  *layout;
-	struct ecio_err_report          erpt;
-	enum obj_type_omf               otype;
-	struct pmd_obj_erase_work      *oef;
-
-	oef = container_of(work, struct pmd_obj_erase_work, oef_wqstruct);
-	mp = oef->oef_mp;
-	layout = oef->oef_layout;
-
-	otype = pmd_objid_type(layout->eld_objid);
-	if (otype == OMF_OBJ_MLOG)
-		/* discard is advisory and no need to check the result */
-		ecio_mlog_erase(mp, layout, 0, &erpt);
-	else if (otype == OMF_OBJ_MBLOCK)
-		ecio_mblock_erase(mp, layout, &erpt);
-
-	pmd_layout_free(mp, layout);
-	kmem_cache_free(pmd_obj_erase_work_cache, oef);
-}
-
 merr_t
 pmd_obj_alloc(
 	struct mpool_descriptor        *mp,
@@ -1857,35 +1834,55 @@ pmd_obj_commit(
 	return err;
 }
 
-static merr_t
-pmd_obj_queue_erase(
+static void pmd_obj_erase_cb(struct work_struct *work)
+{
+	struct mpool_descriptor        *mp;
+	struct ecio_layout_descriptor  *layout;
+	struct ecio_err_report          erpt;
+	enum obj_type_omf               otype;
+	struct pmd_obj_erase_work      *oef;
+
+	oef = container_of(work, struct pmd_obj_erase_work, oef_wqstruct);
+	mp = oef->oef_mp;
+	layout = oef->oef_layout;
+
+	otype = pmd_objid_type(layout->eld_objid);
+	if (otype == OMF_OBJ_MLOG)
+		/* discard is advisory and no need to check the result */
+		ecio_mlog_erase(mp, layout, 0, &erpt);
+	else if (otype == OMF_OBJ_MBLOCK)
+		ecio_mblock_erase(mp, layout, &erpt);
+
+	if (oef->oef_cache)
+		kmem_cache_free(oef->oef_cache, oef);
+
+	pmd_layout_free(mp, layout);
+}
+
+static void
+pmd_obj_erase_start(
 	struct mpool_descriptor        *mp,
 	struct ecio_layout_descriptor  *layout)
 {
-	merr_t err;
-	struct pmd_obj_erase_work      *oef;
+	struct pmd_obj_erase_work   oefbuf, *oef;
+	bool                        async = true;
 
 	oef = kmem_cache_zalloc(pmd_obj_erase_work_cache, GFP_KERNEL);
 	if (!oef) {
-		err = merr(ENOMEM);
-		mp_pr_err("mpool %s, erase work request alloc failed",
-			  err, mp->pds_name);
-		return err;
+		oef = &oefbuf;
+		async = false;
 	}
 
-	/* oef will be freed in pmd_obj_erase_and_free() */
+	/* If async oef will be freed in pmd_obj_erase_and_free() */
 	oef->oef_mp = mp;
 	oef->oef_layout = layout;
-	INIT_WORK(&oef->oef_wqstruct, pmd_obj_erase_and_free);
+	oef->oef_cache = async ? pmd_obj_erase_work_cache : NULL;
+	INIT_WORK(&oef->oef_wqstruct, pmd_obj_erase_cb);
 
-	if (queue_work(mp->pds_erase_wq, &oef->oef_wqstruct))
-		return 0;
+	queue_work(mp->pds_erase_wq, &oef->oef_wqstruct);
 
-	err = merr(EBUG);
-	mp_pr_err("mpool %s, can't queue the erase work request",
-		  err, mp->pds_name);
-
-	return err;
+	if (!async)
+		flush_work(&oef->oef_wqstruct);
 }
 
 merr_t
@@ -1924,9 +1921,9 @@ pmd_obj_abort(
 
 	pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_ABORT);
 
-	err = pmd_obj_queue_erase(mp, layout);
+	pmd_obj_erase_start(mp, layout);
 
-	return ev(err);
+	return 0;
 }
 
 merr_t
@@ -1970,10 +1967,10 @@ pmd_obj_delete_impl(
 		pmd_obj_wrunlock(mp, layout);
 
 		err = merr(EINVAL);
-		mp_pr_debug("mpool %s, delete failed objid 0x%lx type (%s) state 0x%x",
-			    err, mp->pds_name, (ulong)objid,
-			    is_mblock ? "mblock" : "mlog",
-			    layout->eld_state);
+		mp_pr_rl("mpool %s, delete failed objid 0x%lx type (%s) state 0x%x",
+			 err, mp->pds_name, (ulong)objid,
+			 is_mblock ? "mblock" : "mlog",
+			 layout->eld_state);
 		return err;
 	}
 
@@ -1989,25 +1986,26 @@ pmd_obj_delete_impl(
 	pmd_mdc_lock(&cinfo->mmi_compactlock, cslot);
 
 	pmd_mdc_lock(&cinfo->mmi_reflock, cslot);
-	if (!layout->eld_isdel &&
-	    ((!bgdel && layout->eld_refcnt == 1) ||
-	     (bgdel && ((is_mblock && layout->eld_refcnt == 0) ||
-			(is_mlog && layout->eld_refcnt <= 1))))) {
-		layout->eld_isdel = true;
-		layout->eld_state |= ECIO_LYT_REMOVED;
-		layout->eld_refcnt = 0;
-	} else {
+	if (layout->eld_isdel || layout->eld_refcnt > 2) {
+		int rc = (layout->eld_refcnt > 2) ? EBUSY : EINVAL;
+
 		pmd_mdc_unlock(&cinfo->mmi_reflock);
 		pmd_mdc_unlock(&cinfo->mmi_compactlock);
 		pmd_obj_wrunlock(mp, layout);
 
-		mp_pr_warn("mpool %s, delete failed objid %lx, refcnt %d, isdel %d, type (%s)",
-			   mp->pds_name,
-			   (ulong)objid, layout->eld_refcnt, layout->eld_isdel,
-			   is_mblock ? "mblock" : "mlog");
+		err = merr(rc);
+		mp_pr_rl("mpool %s, delete failed objid %lx, state 0x%x, refcnt %ld, isdel %d, type (%s)",
+			 err, mp->pds_name, (ulong)objid,
+			 layout->eld_state,
+			 layout->eld_refcnt, layout->eld_isdel,
+			 is_mblock ? "mblock" : "mlog");
 
-		return merr(EINVAL);
+		return err;
 	}
+
+	layout->eld_refcnt = 0;
+	layout->eld_isdel = true;
+	layout->eld_state |= ECIO_LYT_REMOVED;
 	pmd_mdc_unlock(&cinfo->mmi_reflock);
 
 	err = pmd_log_delete(mp, objid);
@@ -2022,6 +2020,7 @@ pmd_obj_delete_impl(
 		 * but we failed to put an object delete message into the log
 		 */
 		pmd_mdc_lock(&cinfo->mmi_reflock, cslot);
+		layout->eld_refcnt = 2;
 		layout->eld_isdel = false;
 		layout->eld_state &= ~ECIO_LYT_REMOVED;
 		pmd_mdc_unlock(&cinfo->mmi_reflock);
@@ -2043,7 +2042,9 @@ pmd_obj_delete_impl(
 
 	atomic_inc(&cinfo->mmi_pco_cnt.pcc_del);
 
-	return pmd_obj_queue_erase(mp, layout);
+	pmd_obj_erase_start(mp, layout);
+
+	return 0;
 }
 
 merr_t
@@ -2217,30 +2218,20 @@ pmd_obj_get(
 	struct mpool_descriptor        *mp,
 	struct ecio_layout_descriptor  *layout)
 {
-	struct pmd_mdc_info            *cinfo = NULL;
-	merr_t                          err;
-	u8                              cslot;
+	struct pmd_mdc_info    *cinfo;
+	int                     rc;
+	u8                      cslot;
 
 	cslot = objid_slot(layout->eld_objid);
 	cinfo = &mp->pds_mda.mdi_slotv[cslot];
 
 	pmd_mdc_lock(&cinfo->mmi_reflock, cslot);
-	if (layout->eld_refcnt < 255 && !layout->eld_isdel)  {
+	rc = layout->eld_isdel ? ENOSPC : 0;
+	if (!rc)
 		layout->eld_refcnt++;
-		err = 0;
-	} else {
-		err = merr(ENOSPC);
-	}
 	pmd_mdc_unlock(&cinfo->mmi_reflock);
 
-	if (err)
-		mp_pr_err("mpool %s, objid %lx type (%s) refcnt %d, isdel %d",
-			  err, mp->pds_name,
-			  (ulong)layout->eld_objid,
-			  (mblock_objid(layout->eld_objid)) ? "mblock" : "mlog",
-			  layout->eld_refcnt, layout->eld_isdel);
-
-	return err;
+	return rc ? merr(rc) : 0;
 }
 
 struct ecio_layout_descriptor *
@@ -2248,8 +2239,8 @@ pmd_obj_find_get(
 	struct mpool_descriptor    *mp,
 	u64                         objid)
 {
-	struct ecio_layout_descriptor  *found = NULL;
-	struct pmd_mdc_info            *cinfo = NULL;
+	struct ecio_layout_descriptor  *found;
+	struct pmd_mdc_info            *cinfo;
 	u8                              cslot;
 	merr_t                          err;
 
@@ -2258,41 +2249,30 @@ pmd_obj_find_get(
 
 	cslot = objid_slot(objid);
 	cinfo = &mp->pds_mda.mdi_slotv[cslot];
+	err = 0;
 
 	pmd_mdc_rdlock(&cinfo->mmi_colock, cslot);
 	found = objid_to_layout_search_mdc(&cinfo->mmi_obj, objid);
-	if (found) {
+	if (found)
 		err = pmd_obj_get(mp, found);
-		pmd_mdc_rdunlock(&cinfo->mmi_colock);
-		if (ev(err))
-			return NULL;
-
-		return found;
-	}
 	pmd_mdc_rdunlock(&cinfo->mmi_colock);
 
-	/*
-	 * We only get here if we did not find the object in the committed list,
-	 * in which case we will look in the uncommitted list.  Allowing lookup
-	 * of uncommitted objects is allowed to avoid breaking some tests,
-	 * although it is not a valid real world use case.  Those tests
-	 * should be fixed...
+	/* If we did not find the object in the committed list we must
+	 * look in the uncommitted list.
+	 *
+	 * TODO: Allowing lookup of uncommitted objects is allowed to
+	 * avoid breaking some tests, although it is not a valid real
+	 * world use case.  Those tests should be fixed...
 	 */
-	pmd_mdc_lock(&cinfo->mmi_uncolock, cslot);
-	found = objid_to_layout_search_mdc(&cinfo->mmi_uncobj, objid);
-	if (found) {
-		merr_t err;
-
-		err = pmd_obj_get(mp, found);
+	if (!found) {
+		pmd_mdc_lock(&cinfo->mmi_uncolock, cslot);
+		found = objid_to_layout_search_mdc(&cinfo->mmi_uncobj, objid);
+		if (found)
+			err = pmd_obj_get(mp, found);
 		pmd_mdc_unlock(&cinfo->mmi_uncolock);
-		if (ev(err))
-			return NULL;
-
-		return found;
 	}
-	pmd_mdc_unlock(&cinfo->mmi_uncolock);
 
-	return NULL;
+	return err ? NULL : found;
 }
 
 void
@@ -2333,7 +2313,7 @@ pmd_obj_put(
 	pmd_obj_rdunlock(mp, layout);
 
 	if (!put)
-		mp_pr_warn("mpool %s, put failed: objid %lx refcnt %d isdel %d",
+		mp_pr_warn("mpool %s, put failed: objid %lx refcnt %ld isdel %d",
 			   mp->pds_name, (ulong)layout->eld_objid,
 			   layout->eld_refcnt, layout->eld_isdel);
 }
@@ -3135,7 +3115,7 @@ retry:
 		 */
 		pmd_layout_calculate(mp, ocap, mc, &zcnt, otype);
 
-		*layout = ecio_layout_alloc(mp, &uuid, objid, 0, 0, zcnt, true);
+		*layout = ecio_layout_alloc(mp, &uuid, objid, 0, 0, zcnt);
 		if (!*layout) {
 			up_read(&mp->pds_pdvlock);
 			*layout = NULL;

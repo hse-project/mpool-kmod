@@ -184,9 +184,8 @@ int mpool_mod_init(void)
 
 	/* Initialize the slab caches. */
 
-	/* ecio_layout_descriptor */
 	ecio_layout_desc_cache = kmem_cache_create(
-		"ecio_layout_desc_cache",
+		"mpool_ecio_layout_desc",
 		sizeof(struct ecio_layout_descriptor),
 		0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 
@@ -204,7 +203,7 @@ int mpool_mod_init(void)
 	 * after the mlog layout is allocated. And an mlog is long lived.
 	 */
 	ecio_layout_mlo_cache = kmem_cache_create(
-		"ecio_layout_mlo_cache",
+		"mpool_ecio_layout_mlo",
 		sizeof(struct ecio_layout_mlo),
 		0, SLAB_POISON, NULL);
 
@@ -216,9 +215,8 @@ int mpool_mod_init(void)
 		return -merr_errno(err);
 	}
 
-	/* uuid_to_idx_rb */
 	uuid_to_idx_rb_cache = kmem_cache_create(
-		"uuid_to_idx_rb_cache",
+		"mpool_uuid_to_idx_rb",
 		sizeof(struct uuid_to_idx_rb),
 		0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 
@@ -230,9 +228,8 @@ int mpool_mod_init(void)
 		return -merr_errno(err);
 	}
 
-	/* u64_to_u64_rb */
 	u64_to_u64_rb_cache = kmem_cache_create(
-		"u64_to_u64_rb_cache",
+		"mpool_u64_to_u64_rb",
 		sizeof(struct u64_to_u64_rb),
 		0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 
@@ -244,9 +241,8 @@ int mpool_mod_init(void)
 		return -merr_errno(err);
 	}
 
-	/* pmd_obj_erase_work_cache */
 	pmd_obj_erase_work_cache = kmem_cache_create(
-		"pmd_obj_erase_work_cache",
+		"mpool_pmd_obj_erase_work",
 		sizeof(struct pmd_obj_erase_work),
 		0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 

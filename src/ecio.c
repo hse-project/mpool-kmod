@@ -532,8 +532,7 @@ ecio_layout_alloc(
 	u64                         objid,
 	u64                         gen,
 	u64                         mblen,
-	u32                         zcnt,
-	bool                        need_ref)
+	u32                         zcnt)
 {
 	struct ecio_layout_descriptor  *layout;
 	struct rw_semaphore            *rwl;
@@ -564,13 +563,14 @@ ecio_layout_alloc(
 		mpool_uuid_copy(&layout->eld_uuid, uuid);
 	}
 
-	layout->eld_magic     = (uintptr_t)layout;
 	layout->eld_objid     = objid;
 	layout->eld_gen       = gen;
 	layout->eld_mblen     = mblen;
 	layout->eld_state     = ECIO_LYT_NONE;
 	layout->eld_rwlock    = rwl;
+	layout->eld_refcnt    = 1;
 	layout->eld_ld.ol_zcnt = zcnt;
+	layout->eld_magic     = objid;
 
 	/*
 	 * must set stype=UNDEF in all strips; pmd_layout_free()
@@ -579,11 +579,6 @@ ecio_layout_alloc(
 	 */
 	layout->eld_ld.ol_pdh = 0;
 	layout->eld_ld.ol_zaddr = 0;
-
-	if (need_ref)
-		layout->eld_refcnt = 1; /* for newly allocated object */
-	else
-		layout->eld_refcnt = 0; /* for instantiated layouts */
 
 	return layout;
 }
@@ -598,12 +593,12 @@ void ecio_layout_free(struct ecio_layout_descriptor *layout)
 	if (ev(!layout))
 		return;
 
-	WARN(layout->eld_magic != (uintptr_t)layout,
-	     "%s: %px, magic %lx, objid %lx, refcnt %u",
+	WARN(layout->eld_magic != layout->eld_objid,
+	     "%s: %px, magic %lx, objid %lx, refcnt %ld",
 	     __func__, layout, layout->eld_magic,
 	     (ulong)layout->eld_objid, layout->eld_refcnt);
 
-	assert(layout->eld_magic == (uintptr_t)layout);
+	assert(layout->eld_magic == layout->eld_objid);
 
 	layout->eld_magic = ~layout->eld_magic;
 
