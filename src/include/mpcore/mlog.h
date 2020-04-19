@@ -208,4 +208,6 @@ mlog_rw_raw(
 	u64                         boff,
 	u8                          rw);
 
+bool mlog_objid(u64 objid);
+
 #endif

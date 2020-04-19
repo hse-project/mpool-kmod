@@ -460,21 +460,6 @@ mblock_get_props_ex(
 	return 0;
 }
 
-u64 mblock_objid_to_uhandle(u64 objid)
-{
-	return pmd_objid_to_uhandle(objid);
-}
-
-u64 mblock_uhandle_to_objid(u64 uhandle)
-{
-	return pmd_uhandle_to_objid(uhandle);
-}
-
-bool mblock_uhandle(u64 uhandle)
-{
-	return (pmd_uhandle_type(uhandle) == OMF_OBJ_MBLOCK);
-}
-
 bool mblock_objid(u64 objid)
 {
 	return objid && (pmd_objid_type(objid) == OMF_OBJ_MBLOCK);

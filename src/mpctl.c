@@ -3190,13 +3190,6 @@ mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 	return 0;
 }
 
-#ifndef mlog_objid
-static inline bool mlog_objid(u64 objid)
-{
-	return objid && !mblock_objid(objid);
-}
-#endif
-
 merr_t mpioc_mlog_find(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 {
 	struct mpool_descriptor    *mpool;

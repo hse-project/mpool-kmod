@@ -79,6 +79,11 @@ bool mlog_aresame(struct mlog_descriptor *mlh1, struct mlog_descriptor *mlh2)
 	return mlh1 == mlh2;
 }
 
+bool mlog_objid(u64 objid)
+{
+	return objid && pmd_objid_type(objid) == OMF_OBJ_MLOG;
+}
+
 /**
  * mlog_getprops_cmn()
  *

@@ -247,20 +247,6 @@ mblock_get_props_ex(
 	struct mblock_descriptor   *mbh,
 	struct mblock_props_ex     *prop);
 
-/**
- * Conversion and checking between "uhandles" and objids
- *
- * A "uhandle" is a user mode handle for an object.  In kernel space, a
- * handle is the address of the object (which is really a layout).  In user
- * space, handles are related to objids, but we need them to be different so
- * we can detect misuse of handles and objids.
- */
-u64 mblock_objid_to_uhandle(u64 objid);
-
-u64 mblock_uhandle_to_objid(u64 uhandle);
-
-bool mblock_uhandle(u64 handle);
-
 bool mblock_objid(u64 objid);
 
 extern void

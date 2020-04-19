@@ -105,11 +105,6 @@ struct mlog_stat {
 #define IS_SECPGA(lstat)    ((lstat)->lst_mfp.mfp_secpga)
 #define FORCE_4KA(lstat)    (!(IS_SECPGA(lstat)) && mlog_force_4ka)
 
-static inline bool mlog_objid(u64 objid)
-{
-	return objid && pmd_objid_type(objid) == OMF_OBJ_MLOG;
-}
-
 s64
 mlog_append_dmax(
 	struct mpool_descriptor        *mp,
