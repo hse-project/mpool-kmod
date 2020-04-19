@@ -2930,7 +2930,6 @@ mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
 	(void)mblock_get_props_ex(mpool, mblock, &mb->mb_props);
 
 	mb->mb_objid  = props.mpr_objid;
-	mb->mb_handle = props.mpr_objid;
 	mb->mb_offset = -1;
 
 	return 0;
@@ -2941,8 +2940,6 @@ mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
  * @unit:   mpool or dataset unit ptr
  * @mb:     mblock parameter block
  *
- *  MPIOC_MP_LOOKUP ioctl handler - Lookup an mblock
- *
  * Return:  Returns 0 if successful, errno via merr_t otherwise...
  */
 static merr_t
@@ -2950,9 +2947,7 @@ mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
 {
 	struct mblock_descriptor   *mblock;
 	struct mpool_descriptor    *mpool;
-
-	merr_t  err;
-	u64     objid;
+	merr_t                      err;
 
 	if (!unit || !mb || !unit->un_mpool)
 		return merr(EINVAL);
@@ -2960,12 +2955,9 @@ mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
 	if (!mblock_objid(mb->mb_objid))
 		return merr(EINVAL);
 
-	/* Only valid field in mpioc_mblock is mb_objid */
-	objid = mb->mb_objid;
-
 	mpool = unit->un_mpool->mp_desc;
 
-	err = mblock_find_get(mpool, objid, NULL, &mblock);
+	err = mblock_find_get(mpool, mb->mb_objid, NULL, &mblock);
 	if (ev(err))
 		return err;
 
@@ -2973,7 +2965,6 @@ mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
 
 	mblock_put(mpool, mblock);
 
-	mb->mb_handle = objid;
 	mb->mb_offset = -1;
 
 	return 0;
@@ -2997,20 +2988,17 @@ mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_id *mi)
 	struct mpool_descriptor    *mpool;
 
 	bool    drop = true;
-	u64     objid;
 	merr_t  err;
 
 	if (!unit || !mi || !unit->un_mpool)
 		return merr(EINVAL);
 
-	/* Only valid input field is mi_handle */
-	objid = mi->mi_handle;
-	if (!mblock_objid(objid))
+	if (!mblock_objid(mi->mi_objid))
 		return merr(EINVAL);
 
 	mpool = unit->un_mpool->mp_desc;
 
-	err = mblock_find_get(mpool, objid, NULL, &mblock);
+	err = mblock_find_get(mpool, mi->mi_objid, NULL, &mblock);
 	if (ev(err))
 		return err;
 
@@ -3058,14 +3046,12 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 
 	bool    xfree = false;
 	size_t  kiovsz;
-	u64     objid;
 	merr_t  err;
 
 	if (!unit || !mbrw || !unit->un_mpool)
 		return merr(EINVAL);
 
-	objid = mbrw->mb_handle;
-	if (!objid)
+	if (!mblock_objid(mbrw->mb_objid))
 		return merr(EINVAL);
 
 	/* For small iovec counts we simply copyin the array of iovecs
@@ -3091,7 +3077,7 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 
 	mpool = unit->un_mpool->mp_desc;
 
-	err = mblock_find_get(mpool, objid, NULL, &mblock);
+	err = mblock_find_get(mpool, mbrw->mb_objid, NULL, &mblock);
 	if (err)
 		goto errout;
 
@@ -3124,21 +3110,17 @@ mpioc_mb_props(struct mpc_unit *unit, struct mpioc_mblock *mb)
 {
 	struct mblock_descriptor   *mblock;
 	struct mpool_descriptor    *mpool;
-
-	merr_t  err;
-	u64     objid;
+	merr_t                      err;
 
 	if (!unit || !unit->un_mpool || !mb)
 		return merr(EINVAL);
 
-	/* Only valid input field is mb_handle */
-	objid = mb->mb_handle;
-	if (!mblock_objid(objid))
+	if (!mblock_objid(mb->mb_objid))
 		return merr(EINVAL);
 
 	mpool = unit->un_mpool->mp_desc;
 
-	err = mblock_find_get(mpool, objid, NULL, &mblock);
+	err = mblock_find_get(mpool, mb->mb_objid, NULL, &mblock);
 	if (!err) {
 		err = mblock_get_props_ex(mpool, mblock, &mb->mb_props);
 		mblock_put(mpool, mblock);
