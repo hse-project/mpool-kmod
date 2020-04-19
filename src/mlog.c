@@ -281,9 +281,11 @@ mlog_find_get(
 
 	*mlh = layout2mlog(layout);
 
-	pmd_obj_rdlock(mp, layout);
-	mlog_getprops_cmn(mp, layout, prop);
-	pmd_obj_rdunlock(mp, layout);
+	if (prop) {
+		pmd_obj_rdlock(mp, layout);
+		mlog_getprops_cmn(mp, layout, prop);
+		pmd_obj_rdunlock(mp, layout);
+	}
 
 	return 0;
 }

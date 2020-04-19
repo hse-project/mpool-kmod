@@ -1902,13 +1902,36 @@ pmd_obj_abort(
 		pmd_obj_wrunlock(mp, layout);
 
 		err = merr(EINVAL);
-		mp_pr_err("mpool %s, object abort failed, wrong state 0x%x",
-			  err, mp->pds_name, layout->eld_state);
+		mp_pr_rl("mpool %s, abort failed objid %lx, state 0x%x",
+			 err, mp->pds_name, (ulong)layout->eld_objid,
+			 layout->eld_state);
+
 		return err;
 	}
 
 	cslot = objid_slot(layout->eld_objid);
 	cinfo = &mp->pds_mda.mdi_slotv[cslot];
+
+	pmd_mdc_lock(&cinfo->mmi_reflock, cslot);
+	if (layout->eld_isdel || layout->eld_refcnt > 2) {
+		int rc = layout->eld_isdel ? EINVAL : EBUSY;
+
+		pmd_mdc_unlock(&cinfo->mmi_reflock);
+		pmd_obj_wrunlock(mp, layout);
+
+		err = merr(rc);
+		mp_pr_rl("mpool %s, abort failed objid %lx, state 0x%x, refcnt %ld, isdel %d",
+			 err, mp->pds_name, (ulong)layout->eld_objid,
+			 layout->eld_state,
+			 layout->eld_refcnt, layout->eld_isdel);
+
+		return err;
+	}
+
+	layout->eld_refcnt = 0;
+	layout->eld_isdel = true;
+	layout->eld_state |= ECIO_LYT_REMOVED;
+	pmd_mdc_unlock(&cinfo->mmi_reflock);
 
 	pmd_mdc_lock(&cinfo->mmi_uncolock, cslot);
 	found = objid_to_layout_search_mdc(&cinfo->mmi_uncobj,
@@ -1987,7 +2010,7 @@ pmd_obj_delete_impl(
 
 	pmd_mdc_lock(&cinfo->mmi_reflock, cslot);
 	if (layout->eld_isdel || layout->eld_refcnt > 2) {
-		int rc = (layout->eld_refcnt > 2) ? EBUSY : EINVAL;
+		int rc = layout->eld_isdel ? EINVAL : EBUSY;
 
 		pmd_mdc_unlock(&cinfo->mmi_reflock);
 		pmd_mdc_unlock(&cinfo->mmi_compactlock);
@@ -2234,6 +2257,54 @@ pmd_obj_get(
 	return rc ? merr(rc) : 0;
 }
 
+void
+pmd_obj_put(
+	struct mpool_descriptor       *mp,
+	struct ecio_layout_descriptor *layout)
+{
+	struct pmd_mdc_info    *cinfo;
+	bool                    put;
+	u8                      cslot;
+	merr_t                  err;
+
+	assert(layout);
+	if (!layout)
+		return;
+
+	cslot = objid_slot(layout->eld_objid);
+	cinfo = &mp->pds_mda.mdi_slotv[cslot];
+
+	pmd_obj_rdlock(mp, layout);
+
+	if (!objtype_user(objid_type(layout->eld_objid)) ||
+	    (layout->eld_state & ECIO_LYT_REMOVED)) {
+		pmd_obj_rdunlock(mp, layout);
+
+		err = merr(EINVAL);
+		mp_pr_rl("mpool %s, invalid state, objid 0x%lx state 0x%x",
+			 err, mp->pds_name,
+			 (ulong)layout->eld_objid, layout->eld_state);
+
+		return;
+	}
+
+	pmd_mdc_lock(&cinfo->mmi_reflock, cslot);
+	put = layout->eld_refcnt > 1 && !layout->eld_isdel;
+	if (put)
+		layout->eld_refcnt--;
+	pmd_mdc_unlock(&cinfo->mmi_reflock);
+
+	pmd_obj_rdunlock(mp, layout);
+
+	if (put)
+		return;
+
+	err = merr(EINVAL);
+	mp_pr_rl("mpool %s, put failed: objid %lx refcnt %ld isdel %d",
+		 err, mp->pds_name, (ulong)layout->eld_objid,
+		 layout->eld_refcnt, layout->eld_isdel);
+}
+
 struct ecio_layout_descriptor *
 pmd_obj_find_get(
 	struct mpool_descriptor    *mp,
@@ -2259,10 +2330,6 @@ pmd_obj_find_get(
 
 	/* If we did not find the object in the committed list we must
 	 * look in the uncommitted list.
-	 *
-	 * TODO: Allowing lookup of uncommitted objects is allowed to
-	 * avoid breaking some tests, although it is not a valid real
-	 * world use case.  Those tests should be fixed...
 	 */
 	if (!found) {
 		pmd_mdc_lock(&cinfo->mmi_uncolock, cslot);
@@ -2273,49 +2340,6 @@ pmd_obj_find_get(
 	}
 
 	return err ? NULL : found;
-}
-
-void
-pmd_obj_put(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout)
-{
-	struct pmd_mdc_info    *cinfo;
-	bool                    put;
-	u8                      cslot;
-
-	assert(layout);
-	if (!layout)
-		return;
-
-	cslot = objid_slot(layout->eld_objid);
-	cinfo = &mp->pds_mda.mdi_slotv[cslot];
-
-	pmd_obj_rdlock(mp, layout);
-
-	if (!objtype_user(objid_type(layout->eld_objid)) ||
-	    (layout->eld_state & ECIO_LYT_REMOVED)) {
-		pmd_obj_rdunlock(mp, layout);
-
-		mp_pr_warn("mpool %s, invalid state, objid 0x%lx state 0x%x",
-			   mp->pds_name,
-			   (ulong)layout->eld_objid, layout->eld_state);
-
-		return;
-	}
-
-	pmd_mdc_lock(&cinfo->mmi_reflock, cslot);
-	put = layout->eld_refcnt > 0 && !layout->eld_isdel;
-	if (put)
-		layout->eld_refcnt--;
-	pmd_mdc_unlock(&cinfo->mmi_reflock);
-
-	pmd_obj_rdunlock(mp, layout);
-
-	if (!put)
-		mp_pr_warn("mpool %s, put failed: objid %lx refcnt %ld isdel %d",
-			   mp->pds_name, (ulong)layout->eld_objid,
-			   layout->eld_refcnt, layout->eld_isdel);
 }
 
 /* Please see pmd.h for the various nesting levels for a locking class */

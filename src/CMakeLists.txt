@@ -41,7 +41,6 @@ MPOOL_KMOD(
         mpctl.c
         mpctl_params.c
         mpctl_reap.c
-        refmap.c
         mdc.c
 
     INCLUDES

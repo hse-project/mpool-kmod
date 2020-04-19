@@ -44,7 +44,6 @@
 
 #include "mpctl_params.h"
 #include "mpctl_reap.h"
-#include "refmap.h"
 #include "init.h"
 
 #ifndef vm_fault_t
@@ -103,7 +102,6 @@ struct mpc_unit {
 	bool                        un_transient;
 	const struct mpc_uinfo     *un_uinfo;
 	struct mpc_mpool           *un_mpool;
-	struct refmap              *un_ml_refmap;   /* Mlog refmap */
 	struct mpc_metamap         *un_metamap;
 	struct address_space       *un_mapping;
 	struct mpc_reap            *un_ds_reap;
@@ -211,7 +209,6 @@ static const struct mpc_uinfo mpc_uinfo_mpool = {
 	.ui_subdirfmt = "mpool/%s",
 };
 
-static struct refmap_session  *mpc_refmap_session __read_mostly;
 static struct mpc_softstate   *mpc_softstate __read_mostly;
 
 static struct workqueue_struct *mpc_wq_trunc __read_mostly;
@@ -609,21 +606,6 @@ mpc_mpool_open(
 	return 0;
 }
 
-static void refmap_mlog_destructor(struct refmap_node *node, void *arg)
-{
-	struct mpool_descriptor    *mp = arg;
-	struct mlog_descriptor     *mlog;
-
-	if (ev(!node || !arg))
-		return;
-
-	mlog = node->rn_obj.ro_value;
-	if (mlog)
-		mlog_put(mp, mlog);
-
-	refmap_node_free(node, arg);
-}
-
 /**
  * mpc_unit_create() - Create and install a unit object
  * @ss:           driver softstate
@@ -680,18 +662,6 @@ mpc_unit_create(
 	unit->un_refcnt = 2;
 	unit->un_ss = ss;
 	unit->un_mpool = mpool;
-	unit->un_ml_refmap = NULL;
-
-	if (needs_refmap) {
-
-		/* Create an empty refmap for mlog */
-		err = refmap_create(mpc_refmap_session,
-				    refmap_mlog_destructor,
-				    unit->un_mpool->mp_desc,
-				    &unit->un_ml_refmap);
-		if (err)
-			goto errout;
-	}
 
 	mutex_lock(&ss->ss_lock);
 	for (i = 0; i < ss->ss_units_max; ++i) {
@@ -719,14 +689,7 @@ mpc_unit_create(
 	if (minor == UINT_MAX)
 		err = err ?: merr(ENFILE);
 
-errout:
 	if (err) {
-		if (unit->un_ml_refmap) {
-			refmap_drop(unit->un_ml_refmap, NULL, NULL);
-			refmap_put(unit->un_ml_refmap);
-			unit->un_ml_refmap = NULL;
-		}
-
 		kfree(unit);
 		unit = NULL;
 	}
@@ -748,21 +711,11 @@ errout:
  */
 static void mpc_unit_destroy(struct mpc_unit *unit)
 {
-	struct mpc_softstate   *ss;
-	int                     nodes = 0;
-	int                     refs  = 0;
-
-	ss = unit->un_ss;
+	struct mpc_softstate   *ss = unit->un_ss;
 
 	mutex_lock(&ss->ss_lock);
 	ss->ss_unitv[MINOR(unit->un_devno)] = NULL;
 	mutex_unlock(&ss->ss_lock);
-
-	if (unit->un_ml_refmap) {
-		refmap_drop(unit->un_ml_refmap, &nodes, &refs);
-
-		refmap_put(unit->un_ml_refmap);
-	}
 
 	if (unit->un_mpool)
 		mpc_mpool_put(unit->un_mpool);
@@ -1761,11 +1714,6 @@ static int mpc_open(struct inode *ip, struct file *fp)
 		}
 	}
 
-	if (mpc_unit_ismpooldev(unit) && !unit->un_ml_refmap) {
-		err = merr(EINVAL);
-		goto unlock;
-	}
-
 	firstopen = (unit->un_open_cnt == 0);
 
 	if (!(firstopen || !(unit->un_open_excl || (fp->f_flags & O_EXCL)))) {
@@ -1832,12 +1780,9 @@ errout:
 static int mpc_release(struct inode *ip, struct file *fp)
 {
 	struct mpc_unit    *unit;
-
-	int     lnodes, lrefs;
-	bool    lastclose;
+	bool                lastclose;
 
 	unit = fp->private_data;
-
 	if (!unit)
 		return -EBADFD;
 
@@ -1857,8 +1802,6 @@ static int mpc_release(struct inode *ip, struct file *fp)
 		fp->f_mapping->backing_dev_info = unit->un_saved_bdi;
 #endif
 	}
-
-	refmap_drop(unit->un_ml_refmap, &lnodes, &lrefs);
 
 	unit->un_open_excl = false;
 
@@ -1909,87 +1852,6 @@ static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 	fp->f_ra.ra_pages = unit->un_ra_pages_max;
 
 	mpc_reap_vma_add(unit->un_ds_reap, meta);
-
-	return 0;
-}
-
-static
-merr_t
-mpc_mlog_find_impl(
-	struct mpc_unit        *unit,
-	u64                     objid,
-	struct refmap_obj      *obj,
-	bool                    do_get)
-{
-	struct mlog_descriptor *mlog;
-	struct mlog_props       props;
-	struct refmap_node     *ref;
-
-	merr_t err;
-	u64    gen;
-
-again:
-	if (do_get) {
-		err = refmap_obj_find_get(unit->un_ml_refmap, objid,
-					  &gen, obj);
-		ev(err);
-	} else {
-		err = refmap_obj_resolve(unit->un_ml_refmap, objid, &gen, obj);
-		ev(err);
-	}
-
-	/*
-	 * This returns the entry if found. If it's not the get version, do
-	 * not lookup the mlog via mpcore.
-	 */
-	if (ev((merr_errno(err) != ENOENT) || (!do_get && err)))
-		return err;
-
-	/* If not found, lookup the mlog via mpcore */
-	err = mlog_find_get(unit->un_mpool->mp_desc, objid, &props, &mlog);
-	if (ev(err))
-		return err;
-
-	ref = refmap_node_alloc(unit->un_ml_refmap, objid, mlog,
-			props.lpr_alloc_cap);
-	if (ev(!ref))
-		return merr(ENOMEM);
-
-	/* Competing threads could concurrently acquire a descriptor
-	 * to the same mlog, but only one will win the race to install
-	 * it into the refmap.
-	 */
-	err = refmap_node_insert2(ref, gen);
-	if (ev(err)) {
-		refmap_node_destructor(ref);
-		goto again;
-	}
-
-	*obj = ref->rn_obj;
-
-	return 0;
-}
-
-merr_t
-mpc_mlog_find_get(struct mpc_unit *unit, u64 objid, struct refmap_obj *obj)
-{
-	return mpc_mlog_find_impl(unit, objid, obj, true);
-}
-
-merr_t
-mpc_mlog_resolve(struct mpc_unit *unit, u64 objid, struct refmap_obj *obj)
-{
-	return mpc_mlog_find_impl(unit, objid, obj, false);
-}
-
-merr_t
-mpc_mlog_find_put(struct mpc_unit *unit, u64 objid)
-{
-	int    newref;
-
-	newref = refmap_obj_put(unit->un_ml_refmap, objid);
-	if (newref < 0)
-		return merr(EBUG);
 
 	return 0;
 }
@@ -3291,31 +3153,25 @@ mpioc_mb_props(struct mpc_unit *unit, struct mpioc_mblock *mb)
 merr_t
 mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 {
-	struct refmap_node         *ref;
-	struct mpool_descriptor    *mp;
+	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
 	struct mlog_props           props;
+	merr_t                      err;
 
-	merr_t err;
-
-	if (!ml || !unit || !unit->un_mpool)
+	if (!unit || !unit->un_mpool || !ml)
 		return merr(EINVAL);
 
-	mp  = unit->un_mpool->mp_desc;
-	ref = NULL;
+	mpool = unit->un_mpool->mp_desc;
 
 	switch (cmd) {
-
 	case MPIOC_MLOG_ALLOC:
-		err = mlog_alloc(mp, &ml->ml_cap, ml->ml_mclassp,
+		err = mlog_alloc(mpool, &ml->ml_cap, ml->ml_mclassp,
 				 &props, &mlog);
-		ev(err);
 		break;
 
 	case MPIOC_MLOG_REALLOC:
-		err = mlog_realloc(mp, ml->ml_objid, &ml->ml_cap,
+		err = mlog_realloc(mpool, ml->ml_objid, &ml->ml_cap,
 				   ml->ml_mclassp, &props, &mlog);
-		ev(err);
 		break;
 
 	default:
@@ -3326,221 +3182,109 @@ mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 	if (ev(err))
 		return err;
 
-	ref = refmap_node_alloc(unit->un_ml_refmap, props.lpr_objid, mlog,
-				props.lpr_alloc_cap);
-	if (!ref) {
-		err = merr(ENOMEM);
-		goto refmap_fail;
-	}
-
-	/*
-	 * If insert returns a duplicate then it means mpool reused an mlog ID
-	 * which should never happen.
-	 */
-	err = refmap_node_insert(ref);
-	if (ev(err)) {
-		refmap_node_destructor(ref);
-		goto refmap_fail;
-	}
-
-	(void)mlog_get_props_ex(mp, mlog, &ml->ml_props);
+	mlog_get_props_ex(mpool, mlog, &ml->ml_props);
 
 	ml->ml_objid  = props.lpr_objid;
 	ml->ml_handle = props.lpr_objid;
 
 	return 0;
+}
 
-refmap_fail:
-	mlog_abort(mp, mlog);
+#ifndef mlog_objid
+static inline bool mlog_objid(u64 objid)
+{
+	return objid && !mblock_objid(objid);
+}
+#endif
+
+merr_t mpioc_mlog_find(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
+{
+	struct mpool_descriptor    *mpool;
+	struct mlog_descriptor     *mlog;
+	merr_t                      err;
+
+	if (!unit || !unit->un_mpool || !ml || !mlog_objid(ml->ml_objid))
+		return merr(EINVAL);
+
+	mpool = unit->un_mpool->mp_desc;
+
+	err = mlog_find_get(mpool, ml->ml_objid, NULL, &mlog);
+	if (!err) {
+		mlog_get_props_ex(mpool, mlog, &ml->ml_props);
+		ml->ml_handle = ml->ml_objid;
+		mlog_put(mpool, mlog);
+	}
 
 	return err;
 }
 
 merr_t
-mpioc_mlog_find_impl(struct mpc_unit *unit, struct mpioc_mlog *ml, bool do_get)
+mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mlog_id *mi)
 {
-	struct refmap_obj           obj;
+	struct mpool_descriptor    *mpool;
+	struct mlog_descriptor     *mlog;
+	struct mlog_props_ex        props;
+	bool                        drop;
+	merr_t                      err;
 
-	merr_t err;
-
-	if (!ml || !unit || !unit->un_mpool)
+	if (!unit || !unit->un_mpool || !mi || !mlog_objid(mi->mi_objid))
 		return merr(EINVAL);
 
-	if (do_get)
-		err = mpc_mlog_find_get(unit, ml->ml_objid, &obj);
-	else
-		err = mpc_mlog_resolve(unit, ml->ml_objid, &obj);
+	mpool = unit->un_mpool->mp_desc;
+	drop = true;
 
+	err = mlog_find_get(mpool, mi->mi_objid, NULL, &mlog);
 	if (err)
 		return err;
 
-	(void)mlog_get_props_ex(unit->un_mpool->mp_desc, obj.ro_value,
-				&ml->ml_props);
-
-	ml->ml_handle = ml->ml_objid;
-
-	return 0;
-}
-
-merr_t mpioc_mlog_find_get(struct mpc_unit *unit, struct mpioc_mlog *ml)
-{
-	return mpioc_mlog_find_impl(unit, ml, true);
-}
-
-merr_t mpioc_mlog_resolve(struct mpc_unit *unit, struct mpioc_mlog *ml)
-{
-	return mpioc_mlog_find_impl(unit, ml, false);
-}
-
-merr_t mpioc_mlog_put(struct mpc_unit *unit, struct mpioc_mlog_id *mi)
-{
-	if (!unit || !mi)
-		return merr(EINVAL);
-
-	return mpc_mlog_find_put(unit, mi->mi_objid);
-}
-
-merr_t mpioc_mlog_props(struct mpc_unit *unit, struct mpioc_mlog *ml)
-{
-	struct refmap_obj  obj;
-	merr_t             err;
-
-	if (!unit || !ml)
-		return merr(EINVAL);
-
-	err = mpc_mlog_resolve(unit, ml->ml_objid, &obj);
-	if (ev(err))
-		return err;
-
-	(void)mlog_get_props_ex(unit->un_mpool->mp_desc, obj.ro_value,
-				&ml->ml_props);
-
-	return ev(err);
-}
-
-merr_t
-mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mlog_id *mi)
-{
-	struct mlog_descriptor     *mlog;
-	struct mpool_descriptor    *mp;
-	struct refmap_obj           obj;
-
-	merr_t err;
-
-	if (!mi || !unit || !unit->un_mpool)
-		return merr(EINVAL);
-
-	err = mpc_mlog_resolve(unit, mi->mi_objid, &obj);
-	if (ev(err))
-		return err;
-
-	mp   = unit->un_mpool->mp_desc,
-	mlog = obj.ro_value;
-
 	switch (cmd) {
-	case MPIOC_MLOG_COMMIT: {
-		struct mlog_props_ex   props;
-
-		err = mlog_commit(mp, mlog);
-		if (ev(err))
-			return err;
-
-		(void)mlog_get_props_ex(mp, mlog, &props);
-		mi->mi_gen   = props.lpx_props.lpr_gen;
-		mi->mi_state = props.lpx_state;
+	case MPIOC_MLOG_COMMIT:
+		err = mlog_commit(mpool, mlog);
+		if (!err) {
+			mlog_get_props_ex(mpool, mlog, &props);
+			mi->mi_gen   = props.lpx_props.lpr_gen;
+			mi->mi_state = props.lpx_state;
+		}
 		break;
-	}
 
 	case MPIOC_MLOG_ABORT:
-	case MPIOC_MLOG_DELETE: {
-		struct mlog_props   props;
-		int                 refcnt;
-		char               *op;
-
-		op = (cmd == MPIOC_MLOG_ABORT) ? "abort" : "delete";
-
-		/* Get an mpcore obj ref for abort/delete */
-		err = mlog_get(mp, mlog, &props);
-		if (err) {
-			mp_pr_err("mlog_get %s failed, double %s", err, op, op);
-
-			dump_stack();
-			return err;
-		}
-
-		refcnt = refmap_obj_put(unit->un_ml_refmap, mi->mi_objid);
-		if (refcnt > 0) {
-			/* Revert back the get/put above */
-			(void)mpc_mlog_find_get(unit, mi->mi_objid, &obj);
-			mlog_put(mp, mlog);
-
-			mp_pr_err("mlog %s(%lx) caller leaked %d refmap refs",
-				  merr(EBUG), op, (ulong)mi->mi_objid, refcnt);
-
-			return merr(EBUG);
-		}
-
-		/* This drops the layout ref */
-		if (cmd == MPIOC_MLOG_ABORT)
-			err = mlog_abort(mp, mlog);
-		else
-			err = mlog_delete(mp, mlog);
-
-		if (ev(err)) {
-			/* Revert back the get/put above */
-			(void)mpc_mlog_find_get(unit, mi->mi_objid, &obj);
-			mlog_put(mp, mlog);
-
-			return err;
-		}
-
+		err = mlog_abort(mpool, mlog);
+		drop = !!err;
 		break;
-	}
+
+	case MPIOC_MLOG_DELETE:
+		err = mlog_delete(mpool, mlog);
+		drop = !!err;
+		break;
+
+	case MPIOC_MLOG_PUT:
+		break;
 
 	default:
 		err = merr(ENOTTY);
 		break;
 	}
 
+	if (drop)
+		mlog_put(mpool, mlog);
+
 	return err;
-}
-
-merr_t mpioc_mlog_open(struct mpc_unit *unit, struct mpioc_mlog *ml)
-{
-	struct refmap_obj  obj;
-
-	merr_t err;
-
-	if (!ml || !unit || !unit->un_mpool)
-		return merr(EINVAL);
-
-	err = mpc_mlog_resolve(unit, ml->ml_objid, &obj);
-	if (ev(err))
-		return err;
-
-	(void)mlog_get_props_ex(unit->un_mpool->mp_desc, obj.ro_value,
-				&ml->ml_props);
-
-	return 0;
 }
 
 __attribute__((__noinline__))
 merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi,
 		     void *stkbuf, size_t stkbufsz)
 {
-	struct refmap_obj   obj;
-	struct iovec       *kiov;
+	struct mpool_descriptor    *mpool;
+	struct mlog_descriptor     *mlog;
+	struct iovec               *kiov;
 
 	bool    xfree = false;
 	size_t  kiovsz;
 	merr_t  err;
 
-	if (!mi || !unit || !unit->un_mpool)
+	if (!unit || !unit->un_mpool || !mi || !mlog_objid(mi->mi_objid))
 		return merr(EINVAL);
-
-	err = mpc_mlog_resolve(unit, mi->mi_objid, &obj);
-	if (ev(err))
-		return err;
 
 	/* For small iovec counts we simply copyin the array of iovecs
 	 * to the the stack (kiov_buf). Otherwise, we must kmalloc a
@@ -3563,15 +3307,24 @@ merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi,
 		stkbufsz -= kiovsz;
 	}
 
+	mpool = unit->un_mpool->mp_desc;
+
+	err = mlog_find_get(mpool, mi->mi_objid, NULL, &mlog);
+	if (err)
+		goto errout;
+
 	if (copy_from_user(kiov, mi->mi_iov, kiovsz)) {
 		err = merr(EFAULT);
 	} else {
-		err = mpc_physio(unit->un_mpool->mp_desc, obj.ro_value, kiov,
+		err = mpc_physio(mpool, mlog, kiov,
 				 mi->mi_iovc, mi->mi_off, MP_OBJ_MLOG,
 				 (mi->mi_op == MPOOL_OP_READ) ? READ : WRITE,
 				 stkbuf, stkbufsz);
 	}
 
+	mlog_put(mpool, mlog);
+
+errout:
 	if (xfree)
 		kfree(kiov);
 
@@ -3580,30 +3333,28 @@ merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi,
 
 merr_t mpioc_mlog_erase(struct mpc_unit *unit, struct mpioc_mlog_id *mi)
 {
+	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
-	struct mpool_descriptor    *mp;
-	struct refmap_obj           obj;
 	struct mlog_props_ex        props;
+	merr_t                      err;
 
-	merr_t err;
-
-	if (!unit || !mi)
+	if (!unit || !unit->un_mpool || !mi || !mlog_objid(mi->mi_objid))
 		return merr(EINVAL);
 
-	err = mpc_mlog_resolve(unit, mi->mi_objid, &obj);
-	if (ev(err))
+	mpool = unit->un_mpool->mp_desc;
+
+	err = mlog_find_get(mpool, mi->mi_objid, NULL, &mlog);
+	if (err)
 		return err;
 
-	mp   = unit->un_mpool->mp_desc;
-	mlog = obj.ro_value;
+	err = mlog_erase(mpool, mlog, mi->mi_gen);
+	if (!err) {
+		mlog_get_props_ex(mpool, mlog, &props);
+		mi->mi_gen   = props.lpx_props.lpr_gen;
+		mi->mi_state = props.lpx_state;
+	}
 
-	err = mlog_erase(mp, mlog, mi->mi_gen);
-	if (ev(err))
-		return err;
-
-	(void)mlog_get_props_ex(mp, mlog, &props);
-	mi->mi_gen   = props.lpx_props.lpr_gen;
-	mi->mi_state = props.lpx_state;
+	mlog_put(mpool, mlog);
 
 	return err;
 }
@@ -3996,29 +3747,17 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		break;
 
 	case MPIOC_MLOG_FIND_GET:
-		err = mpioc_mlog_find_get(unit, argp);
-		break;
-
 	case MPIOC_MLOG_RESOLVE:
-		err = mpioc_mlog_resolve(unit, argp);
+	case MPIOC_MLOG_PROPS:
+	case MPIOC_MLOG_OPEN:
+		err = mpioc_mlog_find(unit, cmd, argp);
 		break;
 
 	case MPIOC_MLOG_PUT:
-		err = mpioc_mlog_put(unit, argp);
-		break;
-
-	case MPIOC_MLOG_PROPS:
-		err = mpioc_mlog_props(unit, argp);
-		break;
-
 	case MPIOC_MLOG_ABORT:
 	case MPIOC_MLOG_COMMIT:
 	case MPIOC_MLOG_DELETE:
 		err = mpioc_mlog_abcomdel(unit, cmd, argp);
-		break;
-
-	case MPIOC_MLOG_OPEN:
-		err = mpioc_mlog_open(unit, argp);
 		break;
 
 	case MPIOC_MLOG_READ:
@@ -4498,13 +4237,6 @@ static __init int mpc_init(void)
 		goto errout;
 	}
 
-	err = refmap_session_create("mpc_refmap", 0, &mpc_refmap_session);
-	if (err) {
-		errmsg = "refmap session create failed";
-		mpc_refmap_session = NULL;
-		goto errout;
-	}
-
 	ss = kzalloc(sizeof(*ss) + sizeof(*ss->ss_unitv) * mpc_units_max,
 		     GFP_KERNEL);
 	if (!ss) {
@@ -4602,9 +4334,6 @@ errout:
 		kfree(ss);
 	}
 
-	if (mpc_refmap_session)
-		refmap_session_put(mpc_refmap_session);
-
 	destroy_workqueue(mpc_wq_ra);
 	mpc_wq_ra = NULL;
 
@@ -4646,8 +4375,6 @@ static __exit void mpc_exit(void)
 		unregister_chrdev_region(ss->ss_devno, ss->ss_units_max);
 		mpool_mod_exit();
 		kfree(ss);
-
-		refmap_session_put(mpc_refmap_session);
 	}
 
 	destroy_workqueue(mpc_wq_ra);
