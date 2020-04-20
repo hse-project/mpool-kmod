@@ -1915,7 +1915,7 @@ mpool_drive_spares(
 	mc = &mp->pds_mc[mclassp];
 	up_read(&mp->pds_pdvlock);
 
-	if (!mc) {
+	if (mc->mc_pdmc < 0) {
 		err = merr(ENOENT);
 		goto skip_update;
 	}
