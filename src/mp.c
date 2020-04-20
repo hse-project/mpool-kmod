@@ -522,8 +522,6 @@ mpool_dev_init_all(
 			break;
 		}
 
-		pdv[idx].pdi_state = OMF_PD_ACTIVE;
-
 		pdname = strrchr(dpaths[idx], '/');
 		pdname = pdname ? pdname + 1 : dpaths[idx];
 		strlcpy(pdv[idx].pdi_name, pdname, sizeof(pdv[idx].pdi_name));
@@ -2043,9 +2041,8 @@ fill_in_devprops(
 	memcpy(dprop->pdp_devid.b, pd->pdi_devid.uuid, MPOOL_UUID_SIZE);
 
 	mc = &mp->pds_mc[pd->pdi_mclass];
-	dprop->pdp_mclassp   = mc->mc_parms.mcp_classp;
-	dprop->pdp_status    = mpool_pd_status_get(pd);
-	dprop->pdp_state     = pd->pdi_state;
+	dprop->pdp_mclassp = mc->mc_parms.mcp_classp;
+	dprop->pdp_status  = mpool_pd_status_get(pd);
 
 	err = smap_drive_usage(mp, pdh, dprop);
 	if (err) {
@@ -2209,8 +2206,6 @@ static void linit_rwsem(void *mem)
 struct mpool_descriptor *mpool_desc_alloc(void)
 {
 	struct mpool_descriptor    *mp;
-	struct mpool_dev_info      *pd;
-	struct uuid_to_idx_rb      *urb_elem;
 	int                         i;
 
 	mp = kzalloc(sizeof(*mp), GFP_KERNEL);
@@ -2219,24 +2214,7 @@ struct mpool_descriptor *mpool_desc_alloc(void)
 
 	init_rwsem(&mp->pds_pdvlock);
 
-	/* mp.pds_pdv[MPOOL_DRIVES_MAX] is a sentinel pointed at by all
-	 * object layout strips representing consumed recon reservations.
-	 */
-	pd = &mp->pds_pdv[MPOOL_DRIVES_MAX];
-	mpool_uuid_clear(&pd->pdi_devid);
-	mpool_pd_status_set(pd, PD_STAT_UNAVAIL);
-	pd->pdi_state = OMF_PD_DEFUNCT;
-
-	urb_elem = kmem_cache_alloc(uuid_to_idx_rb_cache, GFP_KERNEL);
-	if (!urb_elem) {
-		kfree(mp);
-		return NULL;
-	}
-
 	mp->pds_dev2pdh = RB_ROOT;
-	urb_elem->uti_idx = MPOOL_DRIVES_MAX;
-	mpool_uuid_clear(&urb_elem->uti_uuid);
-	uuid_to_idx_insert(&mp->pds_dev2pdh, urb_elem);
 
 	mutex_init(&mp->pds_omlock);
 	mp->pds_oml = RB_ROOT;
@@ -2248,7 +2226,6 @@ struct mpool_descriptor *mpool_desc_alloc(void)
 	mp->pds_ecio_layout_rwl = numa_elmset_create(ECIO_RWL_PER_NODE,
 		sizeof(struct rw_semaphore), linit_rwsem);
 	if (!mp->pds_ecio_layout_rwl) {
-		kmem_cache_free(uuid_to_idx_rb_cache, urb_elem);
 		kfree(mp);
 		return NULL;
 	}
@@ -2295,8 +2272,7 @@ void mpool_desc_free(struct mpool_descriptor *mp)
 			kmem_cache_free(uuid_to_idx_rb_cache, found_ue);
 		}
 
-		if (mp->pds_pdv[i].pdi_state != OMF_PD_DEFUNCT &&
-		    mpool_pd_status_get(&mp->pds_pdv[i]) != PD_STAT_UNAVAIL)
+		if (mpool_pd_status_get(&mp->pds_pdv[i]) != PD_STAT_UNAVAIL)
 			pd_bio_dev_close(&mp->pds_pdv[i].pdi_parm);
 	}
 
@@ -2319,7 +2295,7 @@ mpool_sb_erase(
 		   dcnt < 1 || dcnt > MPOOL_DRIVES_MAX))
 		return merr(EINVAL);
 
-	pdv = kcalloc(MPOOL_DRIVES_MAX + 1, sizeof(*pdv), GFP_KERNEL);
+	pdv = kcalloc(MPOOL_DRIVES_MAX, sizeof(*pdv), GFP_KERNEL);
 	if (!pdv)
 		return merr(ENOMEM);
 
@@ -2346,7 +2322,6 @@ exit:
 merr_t
 mpool_desc_unavail_add(
 	struct mpool_descriptor        *mp,
-	enum pd_state_omf               state,
 	struct omf_devparm_descriptor  *omf_devparm)
 {
 	char                    uuid_str[40];
@@ -2370,18 +2345,11 @@ mpool_desc_unavail_add(
 
 	mpool_uuid_copy(&pd->pdi_devid, &omf_devparm->odp_devid);
 
-	/*
-	 * Update the PD properties from the metadata record.
-	 */
-
+	/* Update the PD properties from the metadata record. */
 	mpool_pd_status_set(pd, PD_STAT_UNAVAIL);
-	pd->pdi_state = state;
-
 	pd_dev_set_unavail(&pd->pdi_parm, omf_devparm);
 
-	/*
-	 * Add the PD in its media class.
-	 */
+	/* Add the PD in its media class. */
 	err = mpool_desc_pdmc_add(mp, 0, mp->pds_pdvcnt, omf_devparm,
 				  false, NULL);
 	if (ev(err))

@@ -173,7 +173,6 @@ struct omf_mdccver {
  *
  * drive_state-
  * @omd_parm:
- * @omd_state: enum pd_state_omf value
  *
  * media_cls_spare-
  * @omd_mclassp: mp_media_classp
@@ -200,7 +199,6 @@ struct omf_mdcrec_data {
 
 		struct drive_state {
 			struct omf_devparm_descriptor  omd_parm;
-			u8                             omd_state;
 		} dev;
 
 		struct media_cls_spare {

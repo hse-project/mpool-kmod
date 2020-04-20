@@ -94,25 +94,6 @@ enum pd_status {
 
 _Static_assert((PD_STAT_UNAVAIL < 256), "enum pd_status must fit in uint8_t");
 
-/*
- * enum pd_state_omf - Pool drive state on media
- *
- * @OMF_PD_UNDEF:      undefined; should never occur
- * @OMF_PD_ACTIVE:     drive is an active member of the pool
- * @OMF_PD_DEFUNCT:    drive is no longer an active member of the pool
- *
- * A drive is an active mpool member until entering the DEFUNCT state.
- * A drive is not declared DEFUNCT while an object layout refers to it.
- * Drive state (unlike status) is stored in the mpool metadata, persists across
- * reboots, and is available even if drive is not.
- */
-enum pd_state_omf {
-	OMF_PD_UNDEF      = 0,
-	OMF_PD_ACTIVE     = 1,
-	OMF_PD_DEFUNCT    = 2,
-};
-_Static_assert((OMF_PD_DEFUNCT < 256), "enum pd_state_omf must fit in uint8_t");
-
 /**
  * enum pd_cmd_opt - drive command options
  * @PD_CMD_DISCARD:	     the device has TRIM/UNMAP command.

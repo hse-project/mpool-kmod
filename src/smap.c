@@ -182,14 +182,6 @@ smap_drive_usage(
 	struct smap_dev_znstats zones;
 	struct mpool_dev_info   *pd = &mp->pds_pdv[pdh];
 	u32                      zonepg = 0;
-	merr_t                   err;
-
-	if (pd->pdi_state == OMF_PD_DEFUNCT) {
-		err = merr(EINVAL);
-		mp_pr_err("smap(%s, %s) drive usage, defunct pd",
-			  err, mp->pds_name, pd->pdi_name);
-		return err;
-	}
 
 	zonepg = pd->pdi_parm.dpr_zonepg;
 

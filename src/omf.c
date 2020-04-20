@@ -1010,7 +1010,6 @@ omf_mdcrec_mcconfig_unpack_letoh(
 	mc_omf = (struct mdcrec_data_mcconfig_omf *)inbuf;
 
 	cdr->omd_rtype = omf_pdrs_rtype(mc_omf);
-	cdr->u.dev.omd_state = OMF_PD_ACTIVE;
 	err = omf_dparm_unpack_letoh(&(cdr->u.dev.omd_parm),
 		(char *)&(mc_omf->pdrs_parm), OMF_SB_DESC_UNDEF,
 		mdccver, UNPACKCONVERT);

@@ -64,7 +64,6 @@ struct rmbkt {
  * @pdi_devid:    UUID for this drive
  * @pdi_parm:     drive parms
  * @pdi_status:   enum pd_status value: drive status
- * @pdi_state:    drive state
  * @pdi_ds:       drive space allocation info
  * @pdi_rmap:     per allocation zone space maps rbtree array, node:
  *                struct u64_to_u64_rb
@@ -88,7 +87,6 @@ struct rmbkt {
 struct mpool_dev_info {
 	atomic_t                pdi_status; /* Barriers or acq/rel required */
 	struct pd_dev_parm      pdi_parm;
-	enum pd_state_omf       pdi_state;
 	struct smap_dev_alloc   pdi_ds;
 	struct rmbkt           *pdi_rmbktv;
 	struct mpool_uuid       pdi_devid;
@@ -193,7 +191,7 @@ struct mpool_descriptor {
 	struct rw_semaphore         pds_pdvlock;
 
 	____cacheline_aligned
-	struct mpool_dev_info       pds_pdv[MPOOL_DRIVES_MAX + 1];
+	struct mpool_dev_info       pds_pdv[MPOOL_DRIVES_MAX];
 
 	____cacheline_aligned
 	struct mutex                pds_omlock;
@@ -267,7 +265,6 @@ void mpool_desc_free(struct mpool_descriptor *mp);
 /**
  * mpool_desc_unavail_add() - Add unavailable drive to mpool descriptor.
  * @mp:
- * @state:
  * @omf_devparm:
  *
  * Add unavailable drive to mpool descriptor; caller must guarantee that
@@ -280,7 +277,6 @@ void mpool_desc_free(struct mpool_descriptor *mp);
 merr_t
 mpool_desc_unavail_add(
 	struct mpool_descriptor       *mp,
-	enum pd_state_omf              state,
 	struct omf_devparm_descriptor *devparm);
 
 /*

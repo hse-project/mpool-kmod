@@ -201,14 +201,14 @@ devid_to_dstate_mdcrec_insert(
  *	The drive is in list passed to mpool open or an UNAVAIL mdc0 drive.
  *
  * @mp:
- * @uuid_idx_rb_elem:
+ * @elem:
  * @pdrec:
  * @devrpt:
  */
 static merr_t
 pmd_cmp_drv_mdc0(
 	struct mpool_descriptor *mp,
-	struct uuid_to_idx_rb   *uuid_idx_rb_elem,
+	struct uuid_to_idx_rb   *elem,
 	struct omf_mdcrec_data  *pdrec,
 	struct mpool_devrpt	*devrpt)
 {
@@ -218,10 +218,8 @@ pmd_cmp_drv_mdc0(
 
 	u64    pdh;
 
-	pdh = uuid_idx_rb_elem->uti_idx;
+	pdh = elem->uti_idx;
 	pd = &mp->pds_pdv[pdh];
-
-	pd->pdi_state = pdrec->u.dev.omd_state;
 
 	mc_pd_prop2mc_parms(&(pd->pdi_parm.dpr_prop), &mcp_pd);
 	mc_omf_devparm2mc_parms(&(pdrec->u.dev.omd_parm), &mcp_mdc0list);
@@ -274,12 +272,13 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 	char                    uuid_str[40];
 	int                     i = 0;
 	struct rb_node         *node = NULL;
-	struct uuid_to_idx_rb  *uuid_idx_rb_elem = NULL;
+	struct uuid_to_idx_rb  *elem = NULL;
 	u64                     pdh = 0;
 	enum mp_media_classp    mclassp;
 	u8                      ftmax = 0;
-	struct media_class      *mc;
-	int                      spzone[MP_MED_NUMBER];
+	struct media_class     *mc;
+	int                     spzone[MP_MED_NUMBER];
+	bool                    zombie[MPOOL_DRIVES_MAX];
 
 	cinfo = &mp->pds_mda.mdi_slotv[0];
 	buflen = OMF_MDCREC_PACKLEN_MAX;
@@ -409,32 +408,26 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 	}
 
 	/* reconcile net drive list with those in mpool descriptor */
-	for (i = 0; i < mp->pds_pdvcnt; i++) {
-		/* using state as flag to identify zombie drives */
-		mp->pds_pdv[i].pdi_state = OMF_PD_DEFUNCT;
-	}
+	for (i = 0; i < mp->pds_pdvcnt; i++)
+		zombie[i] = true;
 
-	for (node = rb_first(&netdev); node;
-		     node = rb_next(node)) {
-		pdrec = rb_entry(node, struct omf_mdcrec_data,
-				 omd_node);
-		if (pdrec->u.dev.omd_state != OMF_PD_DEFUNCT) {
-			uuid_idx_rb_elem = uuid_to_idx_search(
-				&mp->pds_dev2pdh,
-				&pdrec->u.dev.omd_parm.odp_devid);
-			if (uuid_idx_rb_elem) {
-				err = pmd_cmp_drv_mdc0(mp, uuid_idx_rb_elem,
-					pdrec, devrpt);
-				if (ev(err))
-					break;
-			} else {
-				/* drive is UNAVAIL; add to descriptor */
-				err = mpool_desc_unavail_add(
-					mp, pdrec->u.dev.omd_state,
-					&pdrec->u.dev.omd_parm);
-				if (ev(err))
-					break;
-			}
+	for (node = rb_first(&netdev); node; node = rb_next(node)) {
+		struct omf_devparm_descriptor *omd;
+
+		pdrec = rb_entry(node, struct omf_mdcrec_data, omd_node);
+		omd = &pdrec->u.dev.omd_parm;
+
+		elem = uuid_to_idx_search(&mp->pds_dev2pdh, &omd->odp_devid);
+		if (elem) {
+			zombie[elem->uti_idx] = false;
+			err = pmd_cmp_drv_mdc0(mp, elem, pdrec, devrpt);
+			if (ev(err))
+				break;
+		} else {
+			err = mpool_desc_unavail_add(mp, omd);
+			if (ev(err))
+				break;
+			zombie[mp->pds_pdvcnt] = false;
 		}
 	}
 
@@ -446,31 +439,29 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 		}
 
 		for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
+			struct mpool_dev_info  *pd;
+
 			mc = &mp->pds_mc[mp->pds_pdv[pdh].pdi_mclass];
-			if (mp->pds_pdv[pdh].pdi_state == OMF_PD_DEFUNCT) {
+			pd = &mp->pds_pdv[pdh];
+			if (zombie[pdh]) {
 				char uuid_str[40];
 
-				mpool_unparse_uuid(&mp->pds_pdv[pdh].pdi_devid,
-					uuid_str);
+				mpool_unparse_uuid(&pd->pdi_devid, uuid_str);
 				err = merr(ENXIO);
 
-				if (mpool_pd_status_get(&mp->pds_pdv[pdh]) ==
-				    PD_STAT_UNAVAIL)
+				if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
 					mp_pr_err("mpool %s, drive %s %s %s",
 						  err, mp->pds_name, uuid_str,
-						  mp->pds_pdv[pdh].pdi_name,
-						  msg_unavail1);
+						  pd->pdi_name, msg_unavail1);
 				else {
 					mpool_devrpt(devrpt, MPOOL_RC_ZOMBIE,
 						     pdh, NULL);
 					mp_pr_err("mpool %s, drive %s %s %s",
 						  err, mp->pds_name, uuid_str,
-						  mp->pds_pdv[pdh].pdi_name,
-						  msg_unavail2);
+						  pd->pdi_name, msg_unavail2);
 				}
 				break;
-			} else if (mpool_pd_status_get(&mp->pds_pdv[pdh])
-				   == PD_STAT_UNAVAIL) {
+			} else if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL) {
 				mc->mc_uacnt += 1;
 			}
 		}
@@ -489,14 +480,6 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 			}
 		}
 	}
-
-	/*
-	 * reset DEFUNCT drive states to ACTIVE so devices gets closed on
-	 * failure exit path if not UNAVAIL
-	 */
-	for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++)
-		if (mp->pds_pdv[pdh].pdi_state == OMF_PD_DEFUNCT)
-			mp->pds_pdv[pdh].pdi_state = OMF_PD_ACTIVE;
 
 	/*
 	 * Now it is possible to update the percent spare because all
@@ -1519,11 +1502,9 @@ static merr_t pmd_log_mdc0_cobjs(struct mpool_descriptor *mp)
 	 */
 	for (i = 0; i < mp->pds_pdvcnt; i++) {
 		pd = &(mp->pds_pdv[i]);
-		if (pd->pdi_state != OMF_PD_DEFUNCT) {
-			err = pmd_prop_mcconfig(mp, pd, true);
-			if (ev(err))
-				return err;
-		}
+		err = pmd_prop_mcconfig(mp, pd, true);
+		if (ev(err))
+			return err;
 	}
 
 	/*
@@ -2708,7 +2689,6 @@ pmd_prop_mcconfig(
 	struct mc_parms		mc_parms;
 
 	cdr.omd_rtype = OMF_MDR_MCCONFIG;
-	cdr.u.dev.omd_state = pd->pdi_state;
 	mpool_uuid_copy(&cdr.u.dev.omd_parm.odp_devid, &pd->pdi_devid);
 	mc_pd_prop2mc_parms(&pd->pdi_parm.dpr_prop, &mc_parms);
 	mc_parms2omf_devparm(&mc_parms, &cdr.u.dev.omd_parm);
