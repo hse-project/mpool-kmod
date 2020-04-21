@@ -3197,8 +3197,7 @@ mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 	mlog_get_props_ex(mpool, mlog, &ml->ml_props);
 	mlog_put(mpool, mlog);
 
-	ml->ml_objid  = props.lpr_objid;
-	ml->ml_handle = props.lpr_objid;
+	ml->ml_objid = props.lpr_objid;
 
 	return 0;
 }
@@ -3217,7 +3216,6 @@ merr_t mpioc_mlog_find(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 	err = mlog_find_get(mpool, ml->ml_objid, NULL, &mlog);
 	if (!err) {
 		mlog_get_props_ex(mpool, mlog, &ml->ml_props);
-		ml->ml_handle = ml->ml_objid;
 		mlog_put(mpool, mlog);
 	}
 

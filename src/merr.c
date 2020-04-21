@@ -106,27 +106,27 @@ const char *merr_file(merr_t err)
 char *merr_strerror(merr_t err, char *buf, size_t bufsz)
 {
 	int errnum = merr_errno(err);
-	const char *fmt = NULL;
+	const char *fmt;
 
-	if (errnum == EBUG)
-		fmt = "mpool software bug";
+	fmt = (errnum == EBUG) ? "mpool software bug" : "errno %d";
 
-	snprintf(buf, bufsz, fmt ?: "errno %d", errnum);
+	snprintf(buf, bufsz, fmt, errnum);
 
 	return buf;
 }
 
 char *merr_strinfo(merr_t err, char *buf, size_t bufsz)
 {
-	int n;
+	int n = 0;
 
 	if (!err) {
 		strlcpy(buf, "Success", bufsz);
 		return buf;
 	}
 
-	n = snprintf(buf, bufsz, "%s:%d: ",
-		     merr_file(err) ?: "?", merr_lineno(err));
+	if (merr_file(err))
+		n = snprintf(buf, bufsz, "%s:%d: ",
+			     merr_file(err), merr_lineno(err));
 
 	if (n >= 0 && n < bufsz)
 		merr_strerror(err, buf + n, bufsz - n);
