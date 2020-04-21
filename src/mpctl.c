@@ -3215,7 +3215,7 @@ merr_t mpioc_mlog_find(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 
 	err = mlog_find_get(mpool, ml->ml_objid, NULL, &mlog);
 	if (!err) {
-		mlog_get_props_ex(mpool, mlog, &ml->ml_props);
+		err = mlog_get_props_ex(mpool, mlog, &ml->ml_props);
 		mlog_put(mpool, mlog);
 	}
 
@@ -3259,9 +3259,6 @@ mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mlog_id *mi)
 	case MPIOC_MLOG_DELETE:
 		err = mlog_delete(mpool, mlog);
 		drop = !!err;
-		break;
-
-	case MPIOC_MLOG_PUT:
 		break;
 
 	default:
@@ -3632,15 +3629,10 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		switch (cmd) {
 		case MPIOC_PROP_GET:
 		case MPIOC_DEVPROPS_GET:
-		case MPIOC_MB_FIND_GET:
-		case MPIOC_MB_GET:
-		case MPIOC_MB_PUT:
+		case MPIOC_MB_FIND:
 		case MPIOC_MB_READ:
 		case MPIOC_MP_MCLASS_GET:
-		case MPIOC_MLOG_OPEN:
-		case MPIOC_MLOG_FIND_GET:
-		case MPIOC_MLOG_RESOLVE:
-		case MPIOC_MLOG_PUT:
+		case MPIOC_MLOG_FIND:
 		case MPIOC_MLOG_READ:
 		case MPIOC_MLOG_PROPS:
 		case MPIOC_TEST:
@@ -3717,13 +3709,8 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		err = mpioc_mb_alloc(unit, argp);
 		break;
 
-	case MPIOC_MB_FIND_GET:
-	case MPIOC_MB_GET:
+	case MPIOC_MB_FIND:
 		err = mpioc_mb_find(unit, argp);
-		break;
-
-	case MPIOC_MB_PUT:
-		err = 0;
 		break;
 
 	case MPIOC_MB_COMMIT:
@@ -3750,14 +3737,11 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		err = mpioc_mlog_alloc(unit, cmd, argp);
 		break;
 
-	case MPIOC_MLOG_FIND_GET:
-	case MPIOC_MLOG_RESOLVE:
+	case MPIOC_MLOG_FIND:
 	case MPIOC_MLOG_PROPS:
-	case MPIOC_MLOG_OPEN:
 		err = mpioc_mlog_find(unit, cmd, argp);
 		break;
 
-	case MPIOC_MLOG_PUT:
 	case MPIOC_MLOG_ABORT:
 	case MPIOC_MLOG_COMMIT:
 	case MPIOC_MLOG_DELETE:
