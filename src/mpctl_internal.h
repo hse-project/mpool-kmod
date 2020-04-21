@@ -26,6 +26,7 @@ struct mpc_vma {
 	u32                         mcm_magic;
 	size_t                      mcm_bktsz;
 	uint                        mcm_mbinfoc;
+	u8                          mcm_closed;
 	struct mpool_descriptor    *mcm_mpdesc;
 	atomic64_t                 *mcm_hcpagesp;
 

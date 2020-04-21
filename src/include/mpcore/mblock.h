@@ -73,26 +73,12 @@ mblock_realloc(
 	bool                         spare,
 	struct mblock_descriptor   **mbh,
 	struct mblock_props         *prop);
-/**
- * mblock_get() -
- * @mp:
- * @mbh:
- * @prop:
- *
- * Get a ref on a known mblock.  Returns mblock_props if successful.
- *
- * Return: %0 if successful, merr_t otherwise...
- */
-merr_t
-mblock_get(
-	struct mpool_descriptor     *mp,
-	struct mblock_descriptor    *mbh,
-	struct mblock_props         *prop);
 
 /**
  * mblock_find_get() -
  * @mp:
  * @objid:
+ * @which:
  * @prop:
  * @mbh:
  *
@@ -104,10 +90,11 @@ mblock_get(
  */
 merr_t
 mblock_find_get(
-	struct mpool_descriptor     *mp,
-	u64                          objid,
-	struct mblock_props         *prop,
-	struct mblock_descriptor   **mbh);
+	struct mpool_descriptor    *mp,
+	u64                         objid,
+	int                         which,
+	struct mblock_props        *prop,
+	struct mblock_descriptor  **mbh);
 
 /**
  * mblock_put() - Put (release) a ref on an mblock

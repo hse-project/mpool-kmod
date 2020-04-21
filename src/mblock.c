@@ -52,20 +52,16 @@ struct mblock_write_async_cbobj {
 static struct ecio_layout_descriptor *
 mblock2layout(struct mblock_descriptor *mbh)
 {
-	struct ecio_layout_descriptor  *layout =
-		(struct ecio_layout_descriptor *)mbh;
+	struct ecio_layout_descriptor  *layout = (void *)mbh;
 
-	if (ev(!mbh))
+	if (ev(!layout))
 		return NULL;
 
-#ifndef MPOOL_BUILD_RELEASE
-	WARN(layout->eld_magic != layout->eld_objid,
-	     "%s: %px, magic %lx, objid %lx, refcnt %ld",
-	     __func__, layout, layout->eld_magic,
-	     (ulong)layout->eld_objid, layout->eld_refcnt);
-
-	assert(layout->eld_magic == layout->eld_objid);
-#endif
+	WARN_ONCE(layout->eld_objid == 0 ||
+		  atomic64_read(&layout->eld_refcnt) < 2,
+		  "%s: %px, objid %lx, state %x, refcnt %ld\n",
+		  __func__, layout, (ulong)layout->eld_objid,
+		  layout->eld_state, (long)atomic64_read(&layout->eld_refcnt));
 
 	return mblock_objid(layout->eld_objid) ? layout : NULL;
 }
@@ -176,42 +172,12 @@ mblock_realloc(
 }
 
 merr_t
-mblock_get(
-	struct mpool_descriptor    *mp,
-	struct mblock_descriptor   *mbh,
-	struct mblock_props        *prop)
-{
-	struct ecio_layout_descriptor  *layout;
-	merr_t                          err;
-
-	layout = mblock2layout(mbh);
-
-	if (ev(!layout))
-		return merr(EINVAL);
-
-	/* A read lock is sufficient here because pmd_obj_rdlock will take
-	 * the mmi_reflock mutex while it increments the refcount; we just
-	 * need to prevent the layout from being deleted while we grab the
-	 * ref
-	 */
-	pmd_obj_rdlock(mp, layout);
-
-	err = pmd_obj_get(mp, layout);
-
-	if (!ev(err) && prop)
-		mblock_getprops_cmn(mp, layout, prop);
-
-	pmd_obj_rdunlock(mp, layout);
-
-	return err;
-}
-
-merr_t
 mblock_find_get(
-	struct mpool_descriptor     *mp,
-	u64                          objid,
-	struct mblock_props         *prop,
-	struct mblock_descriptor   **mbh)
+	struct mpool_descriptor    *mp,
+	u64                         objid,
+	int                         which,
+	struct mblock_props        *prop,
+	struct mblock_descriptor  **mbh)
 {
 	struct ecio_layout_descriptor  *layout;
 
@@ -220,18 +186,17 @@ mblock_find_get(
 	if (ev(!mblock_objid(objid)))
 		return merr(EINVAL);
 
-	layout = pmd_obj_find_get(mp, objid);
+	layout = pmd_obj_find_get(mp, objid, which);
 	if (ev(!layout))
 		return merr(ENOENT);
 
-	pmd_obj_rdlock(mp, layout);
+	if (prop) {
+		pmd_obj_rdlock(mp, layout);
+		mblock_getprops_cmn(mp, layout, prop);
+		pmd_obj_rdunlock(mp, layout);
+	}
 
 	*mbh = layout2mblock(layout);
-
-	if (prop)
-		mblock_getprops_cmn(mp, layout, prop);
-
-	pmd_obj_rdunlock(mp, layout);
 
 	return 0;
 }

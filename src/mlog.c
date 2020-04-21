@@ -223,43 +223,6 @@ mlog_realloc(
 }
 
 /**
- * mlog_get()
- *
- * Get reference on the layout
- *
- * Returns: 0 if successful, merr_t otherwise
- */
-merr_t
-mlog_get(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	struct mlog_props          *prop)
-{
-	struct ecio_layout_descriptor *layout;
-	merr_t err;
-
-	layout = mlog2layout(mlh);
-	if (!layout)
-		return merr(EINVAL);
-
-	/*
-	 * A read lock is sufficient here because pmd_obj_rdlock will take
-	 * the mmi_reflock mutex while it increments the refcount; we just
-	 * need to prevent the layout from being deleted while we grab the
-	 * ref
-	 */
-	pmd_obj_rdlock(mp, layout);
-
-	err = pmd_obj_get(mp, layout);
-	if (!ev(err))
-		mlog_getprops_cmn(mp, layout, prop);
-
-	pmd_obj_rdunlock(mp, layout);
-
-	return err;
-}
-
-/**
  * mlog_find_get()
  *
  * Get handle and properties for existing mlog with specified objid.
@@ -280,7 +243,7 @@ mlog_find_get(
 	if (!mlog_objid(objid))
 		return merr(EINVAL);
 
-	layout = pmd_obj_find_get(mp, objid);
+	layout = pmd_obj_find_get(mp, objid, 0);
 	if (!layout)
 		return merr(ENOENT);
 

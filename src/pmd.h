@@ -219,7 +219,6 @@ struct pmd_mdc_stats {
  * @mmi_uqlock:         uniquifier lock
  * @mmi_colock:         committed objid index lock
  * @mmi_uncolock:       uncommitted objid index lock
- * @mmi_reflock :       ref count lock for all obj in mdc
  * @mmi_luniq:          uniquifier of last object assigned to container
  * @mmi_mdc:            MDC implementing container
  * @mmi_recbuf:         buffer for (un)packing log records
@@ -267,11 +266,11 @@ struct pmd_mdc_stats {
  *    bottleneck and it saves memory by not having a lock per object
  */
 struct pmd_mdc_info {
-	struct mutex            mmi_compactlock;
-	struct mutex            mmi_reflock;
-
 	struct rw_semaphore     mmi_colock;
 	struct rb_root          mmi_obj;
+
+	____cacheline_aligned
+	struct mutex            mmi_compactlock;
 
 	____cacheline_aligned
 	struct mutex            mmi_uncolock;
@@ -631,6 +630,7 @@ pmd_obj_get(
  * pmd_obj_find_get() - Get a reference for a layout for objid.
  * @mp:
  * @objid:
+ * @which:
  *
  * Get layout for object with specified objid; return NULL either if not found
  * or if there's a dataset id mismatch.
@@ -638,7 +638,7 @@ pmd_obj_get(
  * Return: pointer to layout if successful, NULL otherwise
  */
 struct ecio_layout_descriptor *
-pmd_obj_find_get(struct mpool_descriptor *mp, u64 objid);
+pmd_obj_find_get(struct mpool_descriptor *mp, u64 objid, int which);
 
 /**
  * pmd_obj_put() - Put a reference for a layout for objid.

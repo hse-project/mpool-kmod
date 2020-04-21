@@ -56,12 +56,6 @@ mlog_realloc(
 	struct mlog_descriptor  **mlh);
 
 merr_t
-mlog_get(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	struct mlog_props          *prop);
-
-merr_t
 mlog_find_get(
 	struct mpool_descriptor     *mp,
 	u64                          objid,

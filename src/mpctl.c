@@ -212,7 +212,7 @@ static const struct mpc_uinfo mpc_uinfo_mpool = {
 static struct mpc_softstate   *mpc_softstate __read_mostly;
 
 static struct workqueue_struct *mpc_wq_trunc __read_mostly;
-static struct workqueue_struct *mpc_wq_ra __read_mostly;
+static struct workqueue_struct *mpc_wq_rav[8] __read_mostly;
 static struct mpc_reap *mpc_reap __read_mostly;
 
 static size_t mpc_vma_cachesz[2] __read_mostly;
@@ -1007,6 +1007,11 @@ errout:
 	return err;
 }
 
+static struct workqueue_struct *mpc_rgn2wq(uint rgn)
+{
+	return mpc_wq_rav[rgn % ARRAY_SIZE(mpc_wq_rav)];
+}
+
 static merr_t mpc_metamap_create(struct mpc_metamap **mmp)
 {
 	struct mpc_metamap *mm;
@@ -1067,7 +1072,7 @@ static struct mpc_vma *mpc_vma_lookup(struct mpc_metamap *mm, uint key)
 
 void mpc_vma_free(struct mpc_vma *meta)
 {
-	struct mpc_metamap     *mm;
+	struct mpc_metamap *mm;
 
 	assert((u32)(uintptr_t)meta == meta->mcm_magic);
 	assert(atomic_read(&meta->mcm_reapref) > 0);
@@ -1084,7 +1089,6 @@ again:
 		atomic_cmpxchg(&meta->mcm_evicting, 1, 0);
 		atomic_inc(&meta->mcm_reapref);
 		usleep_range(10000, 30000);
-		ev(1);
 		goto again;
 	}
 
@@ -1104,9 +1108,9 @@ again:
 
 static void mpc_vma_free_cb(struct work_struct *work)
 {
-	struct mpc_vma *meta = container_of(work, typeof(*meta), mcm_work);
+	struct mpc_vma *vma = container_of(work, typeof(*vma), mcm_work);
 
-	mpc_vma_free(meta);
+	mpc_vma_free(vma);
 }
 
 static void mpc_vma_get(struct mpc_vma *vma)
@@ -1127,8 +1131,8 @@ static void mpc_vma_put(struct mpc_vma *vma)
 	struct mpc_metamap *mm = vma->mcm_metamap;
 	struct mpc_metabkt *bkt;
 
-	bool    removeme;
-	int     i;
+	bool closed;
+	int  i;
 
 	assert(vma);
 	assert((u32)(uintptr_t)vma == vma->mcm_magic);
@@ -1138,20 +1142,27 @@ static void mpc_vma_put(struct mpc_vma *vma)
 	spin_lock(&bkt->mmb_lock);
 	assert(vma->mcm_refcnt > 0);
 
-	removeme = (--vma->mcm_refcnt == 0);
-	if (removeme)
+	closed = (--vma->mcm_refcnt == 0);
+	if (closed) {
 		idr_replace(&mm->mm_rgnmap, NULL, vma->mcm_rgn);
+		vma->mcm_closed = true;
+	}
 	spin_unlock(&bkt->mmb_lock);
 
-	if (!removeme)
+	if (!closed)
 		return;
+
+	synchronize_rcu();
+
+	/* Wait for our pending readaheads to complete
+	 * before we drop our mblock references.
+	 */
+	if (atomic64_read(&vma->mcm_nrpages) > 0)
+		flush_workqueue(mpc_rgn2wq(vma->mcm_rgn));
 
 	for (i = 0; i < vma->mcm_mbinfoc; ++i)
 		mblock_put(vma->mcm_mpdesc, vma->mcm_mbinfov[i].mbdesc);
 
-	/* No need to use call_rcu() here, there can be no threads
-	 * inside an rcu read-side critsec for this idr/vma.
-	 */
 	INIT_WORK(&vma->mcm_work, mpc_vma_free_cb);
 	queue_work(mpc_wq_trunc, &vma->mcm_work);
 }
@@ -1421,34 +1432,46 @@ static void mpc_readpages_cb(struct work_struct *work)
 
 	meta = args->a_meta;
 
+	if (meta->mcm_closed) {
+		err = merr(ENXIO);
+		goto errout;
+	}
+
 	for (i = 0; i < pagec; ++i) {
 		iov[i].iov_base = page_address(args->a_pagev[i]);
 		iov[i].iov_len = PAGE_SIZE;
 	}
 
-	err = mblock_read(meta->mcm_mpdesc, args->a_mbdesc, iov, pagec,
-			  args->a_mboffset);
-	if (ev(err)) {
+	err = mblock_read(meta->mcm_mpdesc, args->a_mbdesc,
+			  iov, pagec, args->a_mboffset);
+	if (!err) {
+		if (meta->mcm_hcpagesp)
+			atomic64_add(pagec, meta->mcm_hcpagesp);
+		atomic64_add(pagec, &meta->mcm_nrpages);
+
 		for (i = 0; i < pagec; ++i) {
-			unlock_page(args->a_pagev[i]);
-			put_page(args->a_pagev[i]);
+			struct page *page = args->a_pagev[i];
+
+			SetPagePrivate(page);
+			set_page_private(page, (ulong)meta);
+			SetPageUptodate(page);
+
+			unlock_page(page);
+			put_page(page);
 		}
+
 		return;
 	}
 
-	if (meta->mcm_hcpagesp)
-		atomic64_add(pagec, meta->mcm_hcpagesp);
-	atomic64_add(pagec, &meta->mcm_nrpages);
+errout:
+	mp_pr_rl("mpool %s, vma %px, rgn %u, pagec %d%s",
+		 err, meta->mcm_unit->un_name,
+		 meta, meta->mcm_rgn, pagec,
+		 meta->mcm_closed ? ", closed" : "");
 
 	for (i = 0; i < pagec; ++i) {
-		struct page *page = args->a_pagev[i];
-
-		SetPagePrivate(page);
-		set_page_private(page, (ulong)meta);
-		SetPageUptodate(page);
-		unlock_page(page);
-
-		put_page(page);
+		unlock_page(args->a_pagev[i]);
+		put_page(args->a_pagev[i]);
 	}
 }
 
@@ -1459,6 +1482,7 @@ mpc_readpages(
 	struct list_head       *pages,
 	uint                    nr_pages)
 {
+	struct workqueue_struct *wq;
 	struct readpage_work   *w;
 	struct work_struct     *work;
 	struct mpc_mbinfo      *mbinfo;
@@ -1498,7 +1522,7 @@ mpc_readpages(
 	meta = idr_find(&unit->un_metamap->mm_rgnmap, key);
 	rcu_read_unlock();
 
-	if (ev(!meta))
+	if (!meta)
 		return -ENOENT;
 
 	offset %= (1ul << mpc_vma_size_max);
@@ -1513,6 +1537,7 @@ mpc_readpages(
 	iovmax = MPC_RA_IOV_MAX;
 
 	gfp = mapping_gfp_mask(mapping) & GFP_KERNEL;
+	wq = mpc_rgn2wq(meta->mcm_rgn);
 
 	if (mpc_reap_vma_duress(meta))
 		nr_pages = min_t(uint, nr_pages, 8);
@@ -1532,7 +1557,7 @@ mpc_readpages(
 		/* mblock reads must be logically contiguous.
 		 */
 		if (page->index != index && work) {
-			queue_work(mpc_wq_ra, work);
+			queue_work(wq, work);
 			work = NULL;
 		}
 
@@ -1544,7 +1569,7 @@ mpc_readpages(
 		rc = add_to_page_cache_lru(page, mapping, page->index, gfp);
 		if (rc) {
 			if (work) {
-				queue_work(mpc_wq_ra, work);
+				queue_work(wq, work);
 				work = NULL;
 			}
 			put_page(page);
@@ -1570,13 +1595,13 @@ mpc_readpages(
 		 * that will fit into a page (minus our header).
 		 */
 		if (w->w_args.a_pagec >= iovmax) {
-			queue_work(mpc_wq_ra, work);
+			queue_work(wq, work);
 			work = NULL;
 		}
 	}
 
 	if (work)
-		queue_work(mpc_wq_ra, work);
+		queue_work(wq, work);
 
 	return 0;
 }
@@ -2927,7 +2952,8 @@ mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
 	if (ev(err))
 		return err;
 
-	(void)mblock_get_props_ex(mpool, mblock, &mb->mb_props);
+	mblock_get_props_ex(mpool, mblock, &mb->mb_props);
+	mblock_put(mpool, mblock);
 
 	mb->mb_objid  = props.mpr_objid;
 	mb->mb_offset = -1;
@@ -2957,7 +2983,7 @@ mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
 
 	mpool = unit->un_mpool->mp_desc;
 
-	err = mblock_find_get(mpool, mb->mb_objid, NULL, &mblock);
+	err = mblock_find_get(mpool, mb->mb_objid, 0, NULL, &mblock);
 	if (ev(err))
 		return err;
 
@@ -2987,7 +3013,8 @@ mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_id *mi)
 	struct mblock_descriptor   *mblock;
 	struct mpool_descriptor    *mpool;
 
-	bool    drop = true;
+	int     which;
+	bool    drop;
 	merr_t  err;
 
 	if (!unit || !mi || !unit->un_mpool)
@@ -2996,9 +3023,11 @@ mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_id *mi)
 	if (!mblock_objid(mi->mi_objid))
 		return merr(EINVAL);
 
+	which = (cmd == MPIOC_MB_DELETE) ? 1 : -1;
 	mpool = unit->un_mpool->mp_desc;
+	drop = true;
 
-	err = mblock_find_get(mpool, mi->mi_objid, NULL, &mblock);
+	err = mblock_find_get(mpool, mi->mi_objid, which, NULL, &mblock);
 	if (ev(err))
 		return err;
 
@@ -3008,13 +3037,12 @@ mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_id *mi)
 		break;
 
 	case MPIOC_MB_ABORT:
-	case MPIOC_MB_DELETE:
-		/* This drops the layout ref */
-		if (cmd == MPIOC_MB_ABORT)
-			err = mblock_abort(mpool, mblock);
-		else
-			err = mblock_delete(mpool, mblock);
+		err = mblock_abort(mpool, mblock);
+		drop = !!err;
+		break;
 
+	case MPIOC_MB_DELETE:
+		err = mblock_delete(mpool, mblock);
 		drop = !!err;
 		break;
 
@@ -3045,6 +3073,7 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 	struct iovec               *kiov;
 
 	bool    xfree = false;
+	int     which;
 	size_t  kiovsz;
 	merr_t  err;
 
@@ -3075,9 +3104,10 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 		stkbufsz -= kiovsz;
 	}
 
+	which = (cmd == MPIOC_MB_READ) ? 1 : -1;
 	mpool = unit->un_mpool->mp_desc;
 
-	err = mblock_find_get(mpool, mbrw->mb_objid, NULL, &mblock);
+	err = mblock_find_get(mpool, mbrw->mb_objid, which, NULL, &mblock);
 	if (err)
 		goto errout;
 
@@ -3120,7 +3150,7 @@ mpioc_mb_props(struct mpc_unit *unit, struct mpioc_mblock *mb)
 
 	mpool = unit->un_mpool->mp_desc;
 
-	err = mblock_find_get(mpool, mb->mb_objid, NULL, &mblock);
+	err = mblock_find_get(mpool, mb->mb_objid, 0, NULL, &mblock);
 	if (!err) {
 		err = mblock_get_props_ex(mpool, mblock, &mb->mb_props);
 		mblock_put(mpool, mblock);
@@ -3165,6 +3195,7 @@ mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 		return err;
 
 	mlog_get_props_ex(mpool, mlog, &ml->ml_props);
+	mlog_put(mpool, mlog);
 
 	ml->ml_objid  = props.lpr_objid;
 	ml->ml_handle = props.lpr_objid;
@@ -3420,7 +3451,7 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 		struct mpc_mbinfo *mbinfo = mbinfov + i;
 		struct mblock_props props;
 
-		err = mblock_find_get(mpdesc, mbidv[i],
+		err = mblock_find_get(mpdesc, mbidv[i], 1,
 				      &props, &mbinfo->mbdesc);
 		if (err) {
 			mbidc = i;
@@ -4131,7 +4162,7 @@ static __init int mpc_init(void)
 	bool                    modinit;
 	size_t                  sz;
 	merr_t                  err;
-	int                     rc;
+	int                     rc, i;
 
 	modinit = false;
 	device = NULL;
@@ -4205,11 +4236,17 @@ static __init int mpc_init(void)
 		goto errout;
 	}
 
-	mpc_wq_ra = alloc_workqueue("mpc_wq_ra", 0, num_online_cpus() * 2);
-	if (!mpc_wq_ra) {
-		errmsg = "mpctl ra workqueue alloc failed";
-		err = merr(ENOMEM);
-		goto errout;
+	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
+		char name[16];
+
+		snprintf(name, sizeof(name), "mpc_wa_ra%d", i);
+
+		mpc_wq_rav[i] = alloc_workqueue(name, 0, 32);
+		if (!mpc_wq_rav[i]) {
+			errmsg = "mpctl ra workqueue alloc failed";
+			err = merr(ENOMEM);
+			goto errout;
+		}
 	}
 
 	ss = kzalloc(sizeof(*ss) + sizeof(*ss->ss_unitv) * mpc_units_max,
@@ -4309,8 +4346,10 @@ errout:
 		kfree(ss);
 	}
 
-	destroy_workqueue(mpc_wq_ra);
-	mpc_wq_ra = NULL;
+	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
+		destroy_workqueue(mpc_wq_rav[i]);
+		mpc_wq_rav[i] = NULL;
+	}
 
 	mpc_reap_destroy(mpc_reap);
 	mpc_reap = NULL;
@@ -4352,8 +4391,10 @@ static __exit void mpc_exit(void)
 		kfree(ss);
 	}
 
-	destroy_workqueue(mpc_wq_ra);
-	mpc_wq_ra = NULL;
+	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
+		destroy_workqueue(mpc_wq_rav[i]);
+		mpc_wq_rav[i] = NULL;
+	}
 
 	mpc_reap_destroy(mpc_reap);
 	mpc_reap = NULL;

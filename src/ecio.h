@@ -80,7 +80,6 @@ struct ecio_layout_mlo {
  * @eld_objid:   object id associated with layout
  * @eld_rwlock:  implements pmd_obj_*lock() for this layout
  * @eld_mblen:   Amount of data written in the mblock in bytes (0 for mlogs)
- * @eld_isdel:   true if object is logically deleted
  * @eld_state:   enum ecio_layout_state
  * @eld_flags:   enum mlog_open_flags for mlogs
  * @eld_mlo:     info. specific to an mlog, NULL for mblocks.
@@ -93,16 +92,14 @@ struct ecio_layout_descriptor {
 	u64                             eld_objid;
 	struct rw_semaphore            *eld_rwlock;
 	u32                             eld_mblen;
-	bool                            eld_isdel;
 	u8                              eld_state;
 	u8                              eld_flags;
 
 	struct ecio_layout_mlo         *eld_mlo;
 	u64                             eld_gen;
 
-	long                            eld_refcnt;
+	atomic64_t                      eld_refcnt;
 	struct omf_layout_descriptor    eld_ld;
-	uintptr_t                       eld_magic;
 };
 
 /* Shortcuts */
@@ -317,14 +314,13 @@ ecio_layout_alloc(
 
 /**
  * ecio_layout_free() - free ecio_layout_descriptor and internal elements
- *
- * @layout: struct ecio_layout_descriptor *)
+ * @layout:
  *
  * Deallocate all memory associated with object layout.
  *
  * Return: void
  */
-void ecio_layout_free(struct ecio_layout_descriptor *layout);
+void ecio_layout_put(struct ecio_layout_descriptor *layout);
 
 /*
  * ecio internal functions

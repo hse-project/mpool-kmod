@@ -33,7 +33,6 @@ void evc_count(struct evc *evc)
 {
 	if (unlikely(atomic64_inc_return(&evc->evc_odometer) == 1)) {
 		/* TODO: to be implemented/enhanced */
+		evc_get_timestamp(&evc->evc_odometer_timestamp);
 	}
-
-	evc_get_timestamp(&evc->evc_odometer_timestamp);
 }

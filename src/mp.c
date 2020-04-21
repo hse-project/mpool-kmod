@@ -55,8 +55,8 @@ mpool_mdc0_sb2obj(
 				sb->osb_mdc01gen, 0,
 				sb->osb_mdc01desc.ol_zcnt);
 	if (!*l1) {
-		*l1 = NULL;
-		*l2 = NULL;
+		*l1 = *l2 = NULL;
+
 		err = merr(ENOMEM);
 		mp_pr_err("mpool %s, MDC0 mlog1 allocation failed",
 			  err, mp->pds_name);
@@ -77,14 +77,14 @@ mpool_mdc0_sb2obj(
 	if (i >= mp->pds_pdvcnt) {
 		char uuid_str[40];
 
-		ecio_layout_free(*l1);
 		/* should never happen */
+		ecio_layout_put(*l1);
+		*l1 = *l2 = NULL;
+
 		mpool_unparse_uuid(&sb->osb_mdc01devid, uuid_str);
 		err = merr(ENOENT);
 		mp_pr_err("mpool %s, allocating MDC0 mlog1, can't find handle for pd uuid %s,",
 			  err, mp->pds_name, uuid_str);
-		*l1 = NULL;
-		*l2 = NULL;
 
 		return err;
 	}
@@ -94,9 +94,9 @@ mpool_mdc0_sb2obj(
 				sb->osb_mdc02gen, 0,
 				sb->osb_mdc02desc.ol_zcnt);
 	if (!*l2) {
-		ecio_layout_free(*l1);
-		*l1 = NULL;
-		*l2 = NULL;
+		ecio_layout_put(*l1);
+		*l1 = *l2 = NULL;
+
 		err = merr(ENOMEM);
 		mp_pr_err("mpool %s, MDC0 mlog2 allocation failed",
 			  err, mp->pds_name);
@@ -117,15 +117,15 @@ mpool_mdc0_sb2obj(
 	if (i >= mp->pds_pdvcnt) {
 		char uuid_str[40];
 
-		ecio_layout_free(*l1);
-		ecio_layout_free(*l2);
 		/* should never happen */
+		ecio_layout_put(*l1);
+		ecio_layout_put(*l2);
+		*l1 = *l2 = NULL;
+
 		mpool_unparse_uuid(&sb->osb_mdc02devid, uuid_str);
 		err = merr(ENOENT);
 		mp_pr_err("mpool %s, allocating MDC0 mlog2, can't find handle for pd uuid %s",
 			  err, mp->pds_name, uuid_str);
-		*l1 = NULL;
-		*l2 = NULL;
 
 		return err;
 	}
@@ -649,6 +649,7 @@ mpool_create(
 	 */
 	mutex_lock(&mpool_s_lock);
 
+	/* TODO: Make this per-driver */
 	/* Allocate the per-mpool workqueue. */
 	mp->pds_erase_wq = alloc_workqueue("mperasewq", WQ_HIGHPRI, 0);
 	if (!mp->pds_erase_wq) {

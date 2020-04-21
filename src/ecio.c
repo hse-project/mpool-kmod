@@ -568,9 +568,8 @@ ecio_layout_alloc(
 	layout->eld_mblen     = mblen;
 	layout->eld_state     = ECIO_LYT_NONE;
 	layout->eld_rwlock    = rwl;
-	layout->eld_refcnt    = 1;
 	layout->eld_ld.ol_zcnt = zcnt;
-	layout->eld_magic     = objid;
+	atomic64_set(&layout->eld_refcnt, 1);
 
 	/*
 	 * must set stype=UNDEF in all strips; pmd_layout_free()
@@ -586,21 +585,18 @@ ecio_layout_alloc(
 /*
  * Deallocate all memory associated with object layout.
  */
-void ecio_layout_free(struct ecio_layout_descriptor *layout)
+void ecio_layout_put(struct ecio_layout_descriptor *layout)
 {
 	struct ecio_layout_mlo *mlo;
 
-	if (ev(!layout))
+	if (!layout || atomic64_dec_return(&layout->eld_refcnt) > 0)
 		return;
 
-	WARN(layout->eld_magic != layout->eld_objid,
-	     "%s: %px, magic %lx, objid %lx, refcnt %ld",
-	     __func__, layout, layout->eld_magic,
-	     (ulong)layout->eld_objid, layout->eld_refcnt);
-
-	assert(layout->eld_magic == layout->eld_objid);
-
-	layout->eld_magic = ~layout->eld_magic;
+	WARN_ONCE(layout->eld_objid == 0 ||
+		  atomic64_read(&layout->eld_refcnt),
+		  "%s: %px, objid %lx, state %x, refcnt %ld",
+		  __func__, layout, (ulong)layout->eld_objid,
+		  layout->eld_state, (long)atomic64_read(&layout->eld_refcnt));
 
 	mlo = layout->eld_mlo;
 	if (mlo && mlo->mlo_lstat)
@@ -614,6 +610,8 @@ void ecio_layout_free(struct ecio_layout_descriptor *layout)
 		assert(mlo != NULL);
 		kmem_cache_free(ecio_layout_mlo_cache, mlo);
 	}
+
+	layout->eld_objid = 0;
 
 	kmem_cache_free(ecio_layout_desc_cache, layout);
 }
