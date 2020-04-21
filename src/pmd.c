@@ -143,57 +143,6 @@ pmd_mdc0_init(
 	return err;
 }
 
-static struct omf_mdcrec_data *
-devid_to_dstate_mdcrec_search(struct rb_root *root, struct mpool_uuid *key_uuid)
-{
-	struct rb_node *node = root->rb_node;
-
-	while (node) {
-		struct  omf_mdcrec_data *data =
-			rb_entry(node, struct omf_mdcrec_data, omd_node);
-		int result = mpool_uuid_compare(
-			key_uuid, &data->u.dev.omd_parm.odp_devid);
-
-		if (result < 0)
-			node = node->rb_left;
-		else if (result > 0)
-			node = node->rb_right;
-		else
-			return data;
-	}
-	return NULL;
-}
-
-static bool
-devid_to_dstate_mdcrec_insert(
-	struct rb_root         *root,
-	struct omf_mdcrec_data *data)
-{
-	struct rb_node    **new = &(root->rb_node), *parent = NULL;
-
-	/* Figure out where to put new node */
-	while (*new) {
-		struct omf_mdcrec_data *this =
-			rb_entry(*new, struct omf_mdcrec_data, omd_node);
-		int result = mpool_uuid_compare(
-			&data->u.dev.omd_parm.odp_devid,
-			&this->u.dev.omd_parm.odp_devid);
-		parent = *new;
-		if (result < 0)
-			new = &((*new)->rb_left);
-		else if (result > 0)
-			new = &((*new)->rb_right);
-		else
-			return false;
-	}
-
-	/* Add new node and rebalance tree. */
-	rb_link_node(&data->omd_node, parent, new);
-	rb_insert_color(&data->omd_node, root);
-
-	return true;
-}
-
 /**
  * pmd_cmp_drv_mdc0() - compare the drive info read from the MDC0 drive list
  *	to what is obtained from the drive itself or from the configuration.
@@ -202,15 +151,15 @@ devid_to_dstate_mdcrec_insert(
  *
  * @mp:
  * @elem:
- * @pdrec:
+ * @omd:
  * @devrpt:
  */
 static merr_t
 pmd_cmp_drv_mdc0(
-	struct mpool_descriptor *mp,
-	struct uuid_to_idx_rb   *elem,
-	struct omf_mdcrec_data  *pdrec,
-	struct mpool_devrpt	*devrpt)
+	struct mpool_descriptor        *mp,
+	struct uuid_to_idx_rb          *elem,
+	struct omf_devparm_descriptor  *omd,
+	struct mpool_devrpt	       *devrpt)
 {
 	struct mpool_dev_info *pd;
 	struct mc_parms        mcp_pd;
@@ -222,7 +171,7 @@ pmd_cmp_drv_mdc0(
 	pd = &mp->pds_pdv[pdh];
 
 	mc_pd_prop2mc_parms(&(pd->pdi_parm.dpr_prop), &mcp_pd);
-	mc_omf_devparm2mc_parms(&(pdrec->u.dev.omd_parm), &mcp_mdc0list);
+	mc_omf_devparm2mc_parms(omd, &mcp_mdc0list);
 
 	if (!memcmp(&mcp_pd, &mcp_mdc0list, sizeof(mcp_pd)))
 		return 0;
@@ -261,24 +210,20 @@ static const char *msg_unavail2 __maybe_unused =
 static merr_t
 pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 {
-	merr_t                  err;
-	struct omf_mdcrec_data  cdr;
-	struct pmd_mdc_info    *cinfo = NULL;
-	u64                     buflen = 0;
-	struct rb_root          netdev = RB_ROOT;
-	size_t                  rlen = 0;
-	struct omf_mdcrec_data *found_mr = NULL;
-	struct omf_mdcrec_data *pdrec = NULL;
-	char                    uuid_str[40];
-	int                     i = 0;
-	struct rb_node         *node = NULL;
-	struct uuid_to_idx_rb  *elem = NULL;
-	u64                     pdh = 0;
-	enum mp_media_classp    mclassp;
-	u8                      ftmax = 0;
-	struct media_class     *mc;
-	int                     spzone[MP_MED_NUMBER];
-	bool                    zombie[MPOOL_DRIVES_MAX];
+	merr_t                          err;
+	struct omf_mdcrec_data          cdr;
+	struct pmd_mdc_info            *cinfo = NULL;
+	u64                             buflen = 0;
+	size_t                          rlen = 0;
+	struct omf_devparm_descriptor   netdev[MP_MED_NUMBER] = { };
+	int                             i = 0;
+	struct uuid_to_idx_rb          *elem = NULL;
+	u64                             pdh = 0;
+	enum mp_media_classp            mclassp;
+	u8                              ftmax = 0;
+	struct media_class             *mc;
+	int                             spzone[MP_MED_NUMBER];
+	bool                            zombie[MPOOL_DRIVES_MAX];
 
 	cinfo = &mp->pds_mda.mdi_slotv[0];
 	buflen = OMF_MDCREC_PACKLEN_MAX;
@@ -331,26 +276,12 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 		}
 
 		if (cdr.omd_rtype == OMF_MDR_MCCONFIG) {
-			found_mr = devid_to_dstate_mdcrec_search(
-				&netdev, &cdr.u.dev.omd_parm.odp_devid);
-			if (found_mr) {
-				rb_erase(&found_mr->omd_node, &netdev);
-				kfree(found_mr);
-			}
-			mpool_unparse_uuid(&cdr.u.dev.omd_parm.odp_devid,
-					 uuid_str);
+			struct omf_devparm_descriptor    *src;
 
-			pdrec = kmalloc(sizeof(struct omf_mdcrec_data),
-					GFP_KERNEL);
-			if (pdrec == NULL) {
-				err = merr(ENOMEM);
-				mp_pr_err("mpool %s, MDC0 getting property mcconfig, allocation omf_mdcrec_data failed",
-					  err, mp->pds_name);
-				break;
-			}
+			src = &cdr.u.dev.omd_parm;
+			assert(src->odp_mclassp < MP_MED_NUMBER);
 
-			memcpy(pdrec, &cdr, sizeof(struct omf_mdcrec_data));
-			devid_to_dstate_mdcrec_insert(&netdev, pdrec);
+			memcpy(&netdev[src->odp_mclassp], src, sizeof(*src));
 		} else if (cdr.omd_rtype == OMF_MDR_MCSPARE) {
 			mp_pr_debug("Found spare record for mclassp %u",
 				    0, cdr.u.mcs.omd_mclassp);
@@ -394,33 +325,25 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 		}
 	}
 
-	if (ev(err)) {
-		/* remove all pdrec from netdev and dealloc */
-		node = rb_first(&netdev);
-		while (node) {
-			found_mr = rb_entry(node, struct omf_mdcrec_data,
-					    omd_node);
-			node = rb_next(node);
-			rb_erase(&found_mr->omd_node, &netdev);
-			kfree(found_mr);
-		}
+	if (ev(err))
 		return err;
-	}
 
 	/* reconcile net drive list with those in mpool descriptor */
 	for (i = 0; i < mp->pds_pdvcnt; i++)
 		zombie[i] = true;
 
-	for (node = rb_first(&netdev); node; node = rb_next(node)) {
+	for (i = 0; i < MP_MED_NUMBER; i++) {
 		struct omf_devparm_descriptor *omd;
 
-		pdrec = rb_entry(node, struct omf_mdcrec_data, omd_node);
-		omd = &pdrec->u.dev.omd_parm;
+		omd = &netdev[i];
+
+		if (mpool_uuid_is_null(&omd->odp_devid))
+			continue;
 
 		elem = uuid_to_idx_search(&mp->pds_dev2pdh, &omd->odp_devid);
 		if (elem) {
 			zombie[elem->uti_idx] = false;
-			err = pmd_cmp_drv_mdc0(mp, elem, pdrec, devrpt);
+			err = pmd_cmp_drv_mdc0(mp, elem, omd, devrpt);
 			if (ev(err))
 				break;
 		} else {
@@ -502,16 +425,6 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 		if (err)
 			mp_pr_err("mpool %s, can't set percent spare %u because the class %u has no PD",
 				  err, mp->pds_name, spzone[mclassp], mclassp);
-	}
-
-	/* remove pdrec from netdev and dealloc */
-	node = rb_first(&netdev);
-	while (node) {
-		found_mr = rb_entry(node, struct omf_mdcrec_data,
-				    omd_node);
-		node = rb_next(node);
-		rb_erase(&found_mr->omd_node, &netdev);
-		kfree(found_mr);
 	}
 
 	return err;

@@ -181,7 +181,6 @@ struct omf_mdccver {
  * @omd_cfg:
  *
  * @omd_rtype: enum mdcrec_type_omf value
- * @omd_node:  to enable being an rb_tree elem
  */
 struct omf_mdcrec_data {
 	union ustruct {
@@ -210,7 +209,6 @@ struct omf_mdcrec_data {
 	} u;
 
 	u8             omd_rtype;
-	struct rb_node omd_node;
 };
 
 /**
