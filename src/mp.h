@@ -150,8 +150,6 @@ struct pre_compact_ctrl {
  *                node type: objid_to_layout_rb
  * @pds_poolid:   UUID of pool
  * @pds_mdparm:   mclass id of mclass used for mdc layouts
- * @pds_dev2pdh:  rbtree maps device UUID to pdv index (pdh).
- *		  node type: uuid_to_idx_rb
  * @pds_cfg:      mpool config
  * @pds_pdvcnt:   cnt of valid pdv entries
  * @pds_mc        table of media classes
@@ -168,7 +166,6 @@ struct pre_compact_ctrl {
  *    poolid, ospagesz, mdparm: constant; no locking required
  *    mda: protected by internal locks as documented in pmd module
  *    oml: protected by omlock
- *    dev2pdh protected by mpool_s_lock (see note)
  *    pdv: see note
  *    pds_mc: protected by pds_pdvlock
  *	Update of pds_mc[].mc_sparams.mc_spzone must also be enclosed
@@ -184,8 +181,8 @@ struct pre_compact_ctrl {
  *    pds_pdvcnt only ever increases so that pds_pdv[x], x < pdvcnt, can be
  *    accessed without locking, other than as required by the struct
  *    mpool_dev_info.
- *    pds_dev2pdh and mc_spzone are written and read only by mpool functions
- *    that are serialized via mpool_s_lock.
+ *    mc_spzone is written and read only by mpool functions that are serialized
+ *    via mpool_s_lock.
  */
 struct mpool_descriptor {
 	struct rw_semaphore         pds_pdvlock;
@@ -217,7 +214,6 @@ struct mpool_descriptor {
 	 */
 	struct mpool_config         pds_cfg;
 	struct rb_node              pds_node;
-	struct rb_root              pds_dev2pdh;
 	struct mpool_uuid           pds_poolid;
 	char                        pds_name[MPOOL_NAME_LEN_MAX];
 

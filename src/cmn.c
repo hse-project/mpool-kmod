@@ -34,53 +34,6 @@ void mpool_pd_status_set(struct mpool_dev_info *pd, enum pd_status status)
 	atomic_set(&pd->pdi_status, status);
 }
 
-struct uuid_to_idx_rb *
-uuid_to_idx_search(struct rb_root *root, struct mpool_uuid *key_uuid)
-{
-	struct rb_node *node = root->rb_node;
-
-	while (node) {
-		struct uuid_to_idx_rb *data =
-			rb_entry(node, struct uuid_to_idx_rb, uti_node);
-		int result;
-
-		result = mpool_uuid_compare(key_uuid, &data->uti_uuid);
-		if (result < 0)
-			node = node->rb_left;
-		else if (result > 0)
-			node = node->rb_right;
-		else
-			return data;
-	}
-	return NULL;
-}
-
-int uuid_to_idx_insert(struct rb_root *root, struct uuid_to_idx_rb *data)
-{
-	struct rb_node **new = &(root->rb_node), *parent = NULL;
-
-	/* Figure out where to put new node */
-	while (*new) {
-		struct uuid_to_idx_rb *this =
-			rb_entry(*new, struct uuid_to_idx_rb, uti_node);
-		int result = mpool_uuid_compare(&data->uti_uuid, &this->uti_uuid);
-
-		parent = *new;
-		if (result < 0)
-			new = &((*new)->rb_left);
-		else if (result > 0)
-			new = &((*new)->rb_right);
-		else
-			return false;
-	}
-
-	/* Add new node and rebalance tree. */
-	rb_link_node(&data->uti_node, parent, new);
-	rb_insert_color(&data->uti_node, root);
-
-	return true;
-}
-
 struct u64_to_u64_rb *u64_to_u64_search(struct rb_root *root, u64 key_u64)
 {
 	struct rb_node *node = root->rb_node;

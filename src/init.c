@@ -31,7 +31,6 @@ struct omf_sb_descriptor SBCLEAR;
  */
 struct kmem_cache  *ecio_layout_desc_cache;
 struct kmem_cache  *ecio_layout_mlo_cache;
-struct kmem_cache  *uuid_to_idx_rb_cache;
 struct kmem_cache  *u64_to_u64_rb_cache;
 struct kmem_cache  *pmd_obj_erase_work_cache;
 
@@ -215,19 +214,6 @@ int mpool_mod_init(void)
 		return -merr_errno(err);
 	}
 
-	uuid_to_idx_rb_cache = kmem_cache_create(
-		"mpool_uuid_to_idx_rb",
-		sizeof(struct uuid_to_idx_rb),
-		0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
-
-	if (!uuid_to_idx_rb_cache) {
-		err = merr(ENOMEM);
-		mp_pr_err("kmem_cache_create(uuid_to_idx_rb, %zu) failed",
-			  err, sizeof(struct uuid_to_idx_rb));
-		mpool_mod_exit();
-		return -merr_errno(err);
-	}
-
 	u64_to_u64_rb_cache = kmem_cache_create(
 		"mpool_u64_to_u64_rb",
 		sizeof(struct u64_to_u64_rb),
@@ -290,8 +276,6 @@ void mpool_mod_exit(void)
 	ecio_layout_desc_cache = NULL;
 	kmem_cache_destroy(ecio_layout_mlo_cache);
 	ecio_layout_mlo_cache = NULL;
-	kmem_cache_destroy(uuid_to_idx_rb_cache);
-	uuid_to_idx_rb_cache = NULL;
 	kmem_cache_destroy(u64_to_u64_rb_cache);
 	u64_to_u64_rb_cache = NULL;
 	kmem_cache_destroy(pmd_obj_erase_work_cache);

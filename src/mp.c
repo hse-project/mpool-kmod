@@ -47,8 +47,8 @@ mpool_mdc0_sb2obj(
 	struct ecio_layout_descriptor **l1,
 	struct ecio_layout_descriptor **l2)
 {
-	struct uuid_to_idx_rb  *urb_elem = NULL;
-	merr_t                  err;
+	merr_t err;
+	int    i;
 
 	/* mdc0 mlog1 layout */
 	*l1 = ecio_layout_alloc(mp, &sb->osb_mdc01uuid, MDC0_OBJID_LOG1,
@@ -65,11 +65,16 @@ mpool_mdc0_sb2obj(
 
 	(*l1)->eld_state = ECIO_LYT_COMMITTED;
 
-	urb_elem = uuid_to_idx_search(&mp->pds_dev2pdh, &sb->osb_mdc01devid);
-	if (urb_elem) {
-		(*l1)->eld_ld.ol_pdh = urb_elem->uti_idx;
-		(*l1)->eld_ld.ol_zaddr = sb->osb_mdc01desc.ol_zaddr;
-	} else {
+	for (i = 0; i < mp->pds_pdvcnt; i++) {
+		if (mpool_uuid_compare(&mp->pds_pdv[i].pdi_devid,
+				       &sb->osb_mdc01devid) == 0) {
+			(*l1)->eld_ld.ol_pdh = i;
+			(*l1)->eld_ld.ol_zaddr = sb->osb_mdc01desc.ol_zaddr;
+			break;
+		}
+	}
+
+	if (i >= mp->pds_pdvcnt) {
 		char uuid_str[40];
 
 		ecio_layout_free(*l1);
@@ -100,11 +105,16 @@ mpool_mdc0_sb2obj(
 
 	(*l2)->eld_state = ECIO_LYT_COMMITTED;
 
-	urb_elem = uuid_to_idx_search(&mp->pds_dev2pdh, &sb->osb_mdc02devid);
-	if (urb_elem) {
-		(*l2)->eld_ld.ol_pdh = urb_elem->uti_idx;
-		(*l2)->eld_ld.ol_zaddr = sb->osb_mdc02desc.ol_zaddr;
-	} else {
+	for (i = 0; i < mp->pds_pdvcnt; i++) {
+		if (mpool_uuid_compare(&mp->pds_pdv[i].pdi_devid,
+				       &sb->osb_mdc02devid) == 0) {
+			(*l2)->eld_ld.ol_pdh = i;
+			(*l2)->eld_ld.ol_zaddr = sb->osb_mdc02desc.ol_zaddr;
+			break;
+		}
+	}
+
+	if (i >= mp->pds_pdvcnt) {
 		char uuid_str[40];
 
 		ecio_layout_free(*l1);
@@ -598,7 +608,6 @@ mpool_create(
 	struct ecio_layout_descriptor  *mdc01, *mdc02;
 	struct omf_sb_descriptor       *sbmdc0;
 	struct mpool_descriptor        *mp;
-	struct uuid_to_idx_rb          *elem;
 
 	bool    active, sbvalid;
 	u16     sidx;
@@ -688,19 +697,6 @@ mpool_create(
 		mp_pr_err("mpool %s, couldn't write superblocks", err, mpname);
 		goto errout;
 	}
-
-	/* add devid-to-pd mapping */
-	elem = kmem_cache_alloc(uuid_to_idx_rb_cache, GFP_KERNEL);
-	if (!elem) {
-		err = merr(ENOMEM);
-		mp_pr_err("mpool %s, alloc of association drive uuid <-> drive handle failed",
-			  err, mpname);
-		goto errout;
-	}
-
-	mpool_uuid_copy(&elem->uti_uuid, &mp->pds_pdv[0].pdi_devid);
-	elem->uti_idx = 0;
-	uuid_to_idx_insert(&mp->pds_dev2pdh, elem);
 
 	/* alloc mdc0 mlog layouts and activate mpool with empty mdc0 */
 	err = mpool_mdc0_sb2obj(mp, sbmdc0, &mdc01, &mdc02);
@@ -863,7 +859,6 @@ mpool_desc_init_sb(
 	struct omf_sb_descriptor   *sb = NULL;
 	struct mpool_mdparm         mdtemp;
 	struct mpool_dev_info      *pd = NULL;
-	struct uuid_to_idx_rb      *urb_elem = NULL;
 
 	merr_t err;
 	u16    omf_ver = OMF_SB_DESC_UNDEF;
@@ -881,7 +876,9 @@ mpool_desc_init_sb(
 
 	for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
 		struct omf_devparm_descriptor  *dparm;
-		bool                            resize = false;
+
+		bool   resize = false;
+		int    i;
 
 		pd = &mp->pds_pdv[pdh];
 
@@ -994,27 +991,19 @@ mpool_desc_init_sb(
 		 * Set drive info confirming devid is unique and zone parms
 		 * match
 		 */
-		if (uuid_to_idx_search(&mp->pds_dev2pdh,
-				       &sb->osb_parm.odp_devid)) {
-			char uuid_str[40];
+		for (i = 0; i < pdh; i++) {
+			if (mpool_uuid_compare(&mp->pds_pdv[i].pdi_devid,
+					       &sb->osb_parm.odp_devid) == 0) {
+				char uuid_str[40];
 
-			mpool_unparse_uuid(&sb->osb_parm.odp_devid, uuid_str);
-
-			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-				     "duplicate devices (same uuid %s), pd %s",
-				     uuid_str, pd->pdi_name);
-
-			kfree(sb);
-			return merr(EINVAL);
-		}
-
-		urb_elem = kmem_cache_alloc(uuid_to_idx_rb_cache, GFP_KERNEL);
-		if (!urb_elem) {
-			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-				     "uuid_to_idx alloc failed");
-
-			kfree(sb);
-			return merr(ENOMEM);
+				mpool_unparse_uuid(&sb->osb_parm.odp_devid,
+						   uuid_str);
+				mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
+					     "duplicate devices (same uuid %s), pd %s",
+					     uuid_str, pd->pdi_name);
+				kfree(sb);
+				return merr(EINVAL);
+			}
 		}
 
 		if (omf_ver > OMF_SB_DESC_VER_LAST) {
@@ -1075,10 +1064,6 @@ mpool_desc_init_sb(
 					  omf_ver, mp->pds_name, sb->osb_vers,
 					  pd->pdi_name);
 		}
-
-		urb_elem->uti_idx = pdh;
-		mpool_uuid_copy(&urb_elem->uti_uuid, &sb->osb_parm.odp_devid);
-		uuid_to_idx_insert(&mp->pds_dev2pdh, urb_elem);
 
 		mpool_uuid_copy(&pd->pdi_devid, &sb->osb_parm.odp_devid);
 
@@ -2214,8 +2199,6 @@ struct mpool_descriptor *mpool_desc_alloc(void)
 
 	init_rwsem(&mp->pds_pdvlock);
 
-	mp->pds_dev2pdh = RB_ROOT;
-
 	mutex_init(&mp->pds_omlock);
 	mp->pds_oml = RB_ROOT;
 
@@ -2244,7 +2227,6 @@ struct mpool_descriptor *mpool_desc_alloc(void)
 void mpool_desc_free(struct mpool_descriptor *mp)
 {
 	struct mpool_descriptor    *found_mp = NULL;
-	struct uuid_to_idx_rb      *found_ue = NULL;
 	struct mpool_uuid           uuid_zero;
 	int                         i;
 
@@ -2258,20 +2240,7 @@ void mpool_desc_free(struct mpool_descriptor *mp)
 	if (found_mp)
 		rb_erase(&found_mp->pds_node, &mpool_pools);
 
-	found_ue = uuid_to_idx_search(&mp->pds_dev2pdh, &uuid_zero);
-	if (found_ue) {
-		rb_erase(&found_ue->uti_node, &mp->pds_dev2pdh);
-		kmem_cache_free(uuid_to_idx_rb_cache, found_ue);
-	}
-
 	for (i = 0; i < mp->pds_pdvcnt; i++) {
-		found_ue = uuid_to_idx_search(&mp->pds_dev2pdh,
-					      &mp->pds_pdv[i].pdi_devid);
-		if (found_ue) {
-			rb_erase(&found_ue->uti_node, &mp->pds_dev2pdh);
-			kmem_cache_free(uuid_to_idx_rb_cache, found_ue);
-		}
-
 		if (mpool_pd_status_get(&mp->pds_pdv[i]) != PD_STAT_UNAVAIL)
 			pd_bio_dev_close(&mp->pds_pdv[i].pdi_parm);
 	}
@@ -2327,7 +2296,6 @@ mpool_desc_unavail_add(
 	char                    uuid_str[40];
 	merr_t                  err;
 	struct mpool_dev_info  *pd = NULL;
-	struct uuid_to_idx_rb  *urb_elem = NULL;
 
 	mpool_unparse_uuid(&omf_devparm->odp_devid, uuid_str);
 
@@ -2354,18 +2322,6 @@ mpool_desc_unavail_add(
 				  false, NULL);
 	if (ev(err))
 		return err;
-
-	urb_elem = kmem_cache_alloc(uuid_to_idx_rb_cache, GFP_KERNEL);
-	if (!urb_elem) {
-		err = merr(ENOMEM);
-		mp_pr_err("Activating mpool %s, can't allocate urb elem for unavailable drive",
-			  err, mp->pds_name);
-		return err;
-	}
-
-	urb_elem->uti_idx = mp->pds_pdvcnt;
-	mpool_uuid_copy(&urb_elem->uti_uuid, &pd->pdi_devid);
-	uuid_to_idx_insert(&mp->pds_dev2pdh, urb_elem);
 
 	mp->pds_pdvcnt = mp->pds_pdvcnt + 1;
 

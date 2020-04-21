@@ -37,37 +37,6 @@ void mpool_pd_status_set(struct mpool_dev_info *pd, enum pd_status status);
 /* Common RB Tree access functions and structs */
 
 /**
- * struct uuid_to_idx_rb -
- * @uti_node:
- * @uti_uuid:
- * @uti_idx:
- */
-struct uuid_to_idx_rb {
-	struct rb_node     uti_node;
-	struct mpool_uuid  uti_uuid;
-	u64                uti_idx;
-};
-
-/**
- * uuid_to_idx_search() -
- * @root:
- * @key_uuid:
- *
- * Return: pointer to struct uuid_to_idx_rb if found else NULL.
- */
-struct uuid_to_idx_rb *
-uuid_to_idx_search(struct rb_root *root, struct mpool_uuid *key_uuid);
-
-/**
- * uuid_to_idx_insert() -
- * @root:
- * @data:
- *
- * Return: true on success else false.
- */
-int uuid_to_idx_insert(struct rb_root *root, struct uuid_to_idx_rb *data);
-
-/**
  * struct u64_to_u64_rb -
  * @utu_node:
  * @utu_key:

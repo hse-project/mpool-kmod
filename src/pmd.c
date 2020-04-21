@@ -150,14 +150,14 @@ pmd_mdc0_init(
  *	The drive is in list passed to mpool open or an UNAVAIL mdc0 drive.
  *
  * @mp:
- * @elem:
+ * @pdh:
  * @omd:
  * @devrpt:
  */
 static merr_t
 pmd_cmp_drv_mdc0(
 	struct mpool_descriptor        *mp,
-	struct uuid_to_idx_rb          *elem,
+	u8                              pdh,
 	struct omf_devparm_descriptor  *omd,
 	struct mpool_devrpt	       *devrpt)
 {
@@ -165,9 +165,6 @@ pmd_cmp_drv_mdc0(
 	struct mc_parms        mcp_pd;
 	struct mc_parms        mcp_mdc0list;
 
-	u64    pdh;
-
-	pdh = elem->uti_idx;
 	pd = &mp->pds_pdv[pdh];
 
 	mc_pd_prop2mc_parms(&(pd->pdi_parm.dpr_prop), &mcp_pd);
@@ -217,7 +214,6 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 	size_t                          rlen = 0;
 	struct omf_devparm_descriptor   netdev[MP_MED_NUMBER] = { };
 	int                             i = 0;
-	struct uuid_to_idx_rb          *elem = NULL;
 	u64                             pdh = 0;
 	enum mp_media_classp            mclassp;
 	u8                              ftmax = 0;
@@ -334,16 +330,23 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 
 	for (i = 0; i < MP_MED_NUMBER; i++) {
 		struct omf_devparm_descriptor *omd;
+		int    j;
 
 		omd = &netdev[i];
 
 		if (mpool_uuid_is_null(&omd->odp_devid))
 			continue;
 
-		elem = uuid_to_idx_search(&mp->pds_dev2pdh, &omd->odp_devid);
-		if (elem) {
-			zombie[elem->uti_idx] = false;
-			err = pmd_cmp_drv_mdc0(mp, elem, omd, devrpt);
+		j = mp->pds_pdvcnt;
+		while (j--) {
+			if (mpool_uuid_compare(&mp->pds_pdv[j].pdi_devid,
+					       &omd->odp_devid) == 0)
+				break;
+		}
+
+		if (j >= 0) {
+			zombie[j] = false;
+			err = pmd_cmp_drv_mdc0(mp, j, omd, devrpt);
 			if (ev(err))
 				break;
 		} else {
