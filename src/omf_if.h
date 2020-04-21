@@ -221,30 +221,7 @@ struct omf_mdcrec_data {
 static inline int objid_type(u64 objid)
 {
 	return ((objid & 0xF00) >> 8);
-};
-
-/**
- * omf_objid_to_uhandle()
- *
- * Set the OMF_OBJ_UHANDLE bit to convert an objid to a handle.
- */
-static inline u64 omf_objid_to_uhandle(u64 objid)
-{
-	return objid | (OMF_OBJ_UHANDLE << 8);
-};
-
-/**
- * omf_uhandle_to_objid()
- *
- * Clear the OMF_OBJ_UHANDLE bit in a handle.
- */
-static inline u64 omf_uhandle_to_objid(u64 uhandle)
-{
-	u64 mask = (u64)-1;
-
-	mask ^= (OMF_OBJ_UHANDLE << 8);
-	return uhandle & mask;
-};
+}
 
 static inline bool objtype_valid(enum obj_type_omf otype)
 {

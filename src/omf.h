@@ -553,18 +553,12 @@ OMF_SETGET_CHBUF(struct mdcrec_data_mpconfig_omf, pdmc_label)
  * data records on media.
  *
  * The obj_type field is 4 bits. There are two valid obj types.
- * In memory, but not on media, we use the high order bit to differrentiate
- * an objid from a user handle for the object.  If the high order bit
- * (OMF_OBJ_UHANDLE) is set, it's a user handle and not an objid
- * (but we can convert it back to a handle by clearing that bit).
  */
 enum obj_type_omf {
 	OMF_OBJ_UNDEF       = 0,
 	OMF_OBJ_MBLOCK      = 1,
 	OMF_OBJ_MLOG        = 2,
-	OMF_OBJ_UHANDLE     = 8,
 };
-
 
 /**
  * sb_descriptor_ver_omf - Mpool super block version

@@ -649,7 +649,6 @@ ecio_obj_get_cap_from_layout(
 		return (ecio_zonepg(mp, layout) * layout->eld_ld.ol_zcnt) <<
 			PAGE_SHIFT;
 
-	case OMF_OBJ_UHANDLE:
 	case OMF_OBJ_UNDEF:
 		break;
 	}

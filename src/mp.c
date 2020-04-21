@@ -2105,47 +2105,50 @@ static merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 
 	mlog_lookup_rootids(&root_mlog_id[0], &root_mlog_id[1]);
 
-	for (i = 0; i < 2 ; i++) {
-
-		err = mlog_find_get(mp, root_mlog_id[i], &mlprops, &ml_desc);
-
-		if (!ev(err))
+	for (i = 0; i < 2; ++i) {
+		err = mlog_find_get(mp, root_mlog_id[i], NULL, &ml_desc);
+		if (!ev(err)) {
+			mlog_put(mp, ml_desc);
 			continue;
+		}
 
-		if (merr_errno(err) == ENOENT) { /* mlog doesn't exist */
-
-			err = mlog_realloc(mp, root_mlog_id[i], &mlcap,
-					   mclass, &mlprops, &ml_desc);
-			if (err) {
-				mp_pr_err("mpool %s, re-allocation of root mlog 0x%lx failed",
-					  err, mp->pds_name,
-					  (ulong)root_mlog_id[i]);
-				return err;
-			}
-
-			if (mlprops.lpr_objid != root_mlog_id[i]) {
-				err = ENOENT;
-				mp_pr_err("mpool %s, allocation of root mlog mlog 0x%lx failed, inconsistent mlog id 0x%lx",
-					  err, mp->pds_name,
-					  (ulong)root_mlog_id[i],
-					  (ulong)mlprops.lpr_objid);
-				return err;
-			}
-
-			err = mlog_commit(mp, ml_desc);
-			if (err) {
-				(void)mlog_abort(mp, ml_desc);
-
-				mp_pr_err("mpool %s, allocation of root mlog 0x%lx failed, commit failed",
-					  err, mp->pds_name,
-					  (ulong)root_mlog_id[i]);
-				return err;
-			}
-		} else {
-			mp_pr_err("mpool %s, alloc root mlog 0x%lx failed",
+		if (merr_errno(err) != ENOENT) {
+			mp_pr_err("mpool %s, root mlog find 0x%lx failed",
 				  err, mp->pds_name, (ulong)root_mlog_id[i]);
 			return err;
 		}
+
+		err = mlog_realloc(mp, root_mlog_id[i], &mlcap,
+				   mclass, &mlprops, &ml_desc);
+		if (err) {
+			mp_pr_err("mpool %s, root mlog re-alloc 0x%lx failed",
+				  err, mp->pds_name,
+				  (ulong)root_mlog_id[i]);
+			return err;
+		}
+
+		if (mlprops.lpr_objid != root_mlog_id[i]) {
+			mlog_put(mp, ml_desc);
+			err = ENOENT;
+			mp_pr_err("mpool %s, root mlog alloc 0x%lx failed, inconsistent mlog id 0x%lx",
+				  err, mp->pds_name,
+				  (ulong)root_mlog_id[i],
+				  (ulong)mlprops.lpr_objid);
+			return err;
+		}
+
+		err = mlog_commit(mp, ml_desc);
+		if (err) {
+			if (mlog_abort(mp, ml_desc))
+				mlog_put(mp, ml_desc);
+
+			mp_pr_err("mpool %s, root mlog commit 0x%lx failed",
+				  err, mp->pds_name,
+				  (ulong)root_mlog_id[i]);
+			return err;
+		}
+
+		mlog_put(mp, ml_desc);
 	}
 
 	return err;

@@ -1051,10 +1051,6 @@ void pmd_mda_free(struct mpool_descriptor *mp)
 		rbtree_postorder_for_each_entry_safe(
 			layout, tmp, &cinfo->mmi_obj, eld_nodemdc) {
 
-			/* TODO: Ensure all layouts have two refs...
-			 */
-			if (atomic64_read(&layout->eld_refcnt) > 1)
-				ecio_layout_put(layout);
 			ecio_layout_put(layout);
 		}
 
@@ -1063,8 +1059,6 @@ void pmd_mda_free(struct mpool_descriptor *mp)
 		rbtree_postorder_for_each_entry_safe(
 			layout, tmp, &cinfo->mmi_uncobj, eld_nodemdc) {
 
-			if (atomic64_read(&layout->eld_refcnt) > 1)
-				ecio_layout_put(layout);
 			ecio_layout_put(layout);
 		}
 	}
@@ -1270,7 +1264,7 @@ pmd_obj_alloc(
 	enum mp_media_classp            mclassp,
 	struct ecio_layout_descriptor **olayout)
 {
-	return pmd_obj_alloc_cmn(mp, 0, otype, ocap, mclassp, 0, olayout);
+	return pmd_obj_alloc_cmn(mp, 0, otype, ocap, mclassp, 0, 1, olayout);
 }
 
 merr_t
@@ -1281,28 +1275,13 @@ pmd_obj_realloc(
 	enum mp_media_classp            mclassp,
 	struct ecio_layout_descriptor **olayout)
 {
-	merr_t err;
-
 	if (!pmd_objid_isuser(objid)) {
 		*olayout = NULL;
-		err = merr(EINVAL);
-		mp_pr_err("mpool %s, re-allocation of an object is only authorized for an application object",
-			  err, mp->pds_name);
-		return err;
+		return merr(EINVAL);
 	}
 
 	return pmd_obj_alloc_cmn(mp, objid, objid_type(objid),
-				 ocap, mclassp, 1, olayout);
-}
-
-u64 pmd_objid_to_uhandle(u64 objid)
-{
-	return omf_objid_to_uhandle(objid);
-}
-
-u64 pmd_uhandle_to_objid(u64 uhandle)
-{
-	return omf_uhandle_to_objid(uhandle);
+				 ocap, mclassp, 1, 1, olayout);
 }
 
 void pmd_mdc_lock(struct mutex *lock, u8 slot)
@@ -2270,15 +2249,15 @@ pmd_mdc_alloc(
 	 * time.
 	 */
 	err = pmd_obj_alloc_cmn(mp, reverse ? logid2 : logid1, OMF_OBJ_MLOG,
-				&ocap, mclassp, 0, &layout1);
+				&ocap, mclassp, 0, 0, &layout1);
 	if (ev(err)) {
 		if (merr_errno(err) != ENOENT)
 			msg = "allocation of first mlog failed";
 		goto exit;
 	}
 
-	err = pmd_obj_alloc_cmn(mp, reverse ? logid1 : logid2,
-				OMF_OBJ_MLOG, &ocap, mclassp, 0, &layout2);
+	err = pmd_obj_alloc_cmn(mp, reverse ? logid1 : logid2, OMF_OBJ_MLOG,
+				&ocap, mclassp, 0, 0, &layout2);
 	if (ev(err)) {
 		pmd_obj_abort(mp, layout1);
 		if (merr_errno(err) != ENOENT)
@@ -2821,6 +2800,7 @@ pmd_obj_alloc_cmn(
 	struct pmd_obj_capacity        *ocap,
 	enum mp_media_classp            mclassp,
 	int                             realloc,
+	uint                            arefs,
 	struct ecio_layout_descriptor **layout)
 {
 	u64                     zcnt = 0;
@@ -2978,7 +2958,7 @@ retry:
 		if (dup)
 			err = merr(EEXIST);
 		else
-			atomic64_inc(&(*layout)->eld_refcnt);
+			atomic64_add(arefs, &(*layout)->eld_refcnt);
 	}
 	pmd_mdc_unlock(&cinfo->mmi_uncolock);
 

@@ -420,29 +420,9 @@ static inline bool objid_ckpt(u64 objid)
 
 static inline enum obj_type_omf pmd_objid_type(u64 objid)
 {
-	enum obj_type_omf otype;
+	enum obj_type_omf otype = objid_type(objid);
 
-	otype = objid_type(objid);
-	if (!objtype_valid(otype))
-		return OMF_OBJ_UNDEF;
-	else
-		return otype;
-}
-
-/**
- * pmd_uhandle_type() - return object type of a uhandle
- *
- * If @uhandle is a valid handle, return its type
- * If @uhandle is not a valid handle, return @OMF_OBJ_UNDEF
- */
-static inline enum obj_type_omf pmd_uhandle_type(u64 uhandle)
-{
-	int otype = objid_type(uhandle);
-
-	if (otype & OMF_OBJ_UHANDLE)
-		return otype ^ OMF_OBJ_UHANDLE;
-
-	return OMF_OBJ_UNDEF;
+	return objtype_valid(otype) ? otype : OMF_OBJ_UNDEF;
 }
 
 /* True if objid is an mpool user object (versus mpool metadata object). */
@@ -834,6 +814,7 @@ pmd_layout_free(
  * @ocap:
  * @mclassp: media class
  * @realloc:
+ * @arefs:  number of additional references needed
  * @layout: output, guaranteed to be not NULL if no error returned.
  *
  * Allocate object of type otype with parameters and capacity as specified
@@ -851,6 +832,7 @@ pmd_obj_alloc_cmn(
 	struct pmd_obj_capacity        *ocap,
 	enum mp_media_classp            mclassp,
 	int                             realloc,
+	uint                            arefs,
 	struct ecio_layout_descriptor **layout);
 
 /*
