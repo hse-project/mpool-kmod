@@ -4,77 +4,148 @@
  */
 
 #include <linux/kernel.h>
-#include <linux/sysctl.h>
 
-unsigned int mpc_reap_ttl    = 10 * 1000 * 1000;
-unsigned int mpc_reap_mempct = 100;
-unsigned int mpc_reap_debug;
+#include <mpcore/merr.h>
+#include <mpcore/evc.h>
+#include <mpcore/uuid.h>
 
-static struct ctl_table_header *mpc_sysctl_table;
+#include "mpctl_params.h"
 
-#define OID_INT(_name, _var, _mode)					\
-{									\
-	.procname = (_name), .data = &(_var), .maxlen = sizeof(_var),	\
-	.mode = (_mode), .proc_handler = proc_dointvec,			\
-}
 
-static struct ctl_table
-mpc_sysctl_oid[] = {
-	OID_INT("reap_mempct",  mpc_reap_mempct,    0644),
-	OID_INT("reap_debug",   mpc_reap_debug,     0644),
-	OID_INT("reap_ttl",     mpc_reap_ttl,       0644),
-	{ }
-};
-
-static struct ctl_table
-mpc_sysctl_dir[] = {
-	{ .procname = "mpool", .mode = 0555, .child = mpc_sysctl_oid, },
-	{ }
-};
-
-static struct ctl_table
-mpc_sysctl_root[] = {
-	{ .procname = "dev", .mode = 0555, .child = mpc_sysctl_dir, },
-	{ }
-};
-
-unsigned int
-mpc_reap_mempct_get(void)
+int
+mpc_mode_proc_handler(
+	struct ctl_table   *tab,
+	int                 write,
+	void        __user *buffer,
+	size_t             *lenp,
+	loff_t             *ppos)
 {
-	return clamp_t(unsigned int, mpc_reap_mempct, 5, 100);
-}
+	char    mode[6] = { };
+	void   *data;
+	int     maxlen;
+	int     rc;
 
-void
-mpc_reap_mempct_set(unsigned int pct)
-{
-	mpc_reap_mempct = clamp_t(unsigned int, pct, 1, 100);
-}
+	if (ev(write))
+		return 0;
 
-unsigned int
-mpc_reap_ttl_get(void)
-{
-	return max_t(unsigned int, mpc_reap_ttl, 100);
-}
+	data   = tab->data;
+	maxlen = tab->maxlen;
 
-unsigned int
-mpc_reap_debug_get(void)
-{
-	return mpc_reap_debug;
+	snprintf(mode, sizeof(mode), "0%o", *((int *)data));
+	tab->data   = mode;
+	tab->maxlen = sizeof(mode);
+
+	rc = proc_dostring(tab, write, buffer, lenp, ppos);
+
+	tab->data   = data;
+	tab->maxlen = maxlen;
+
+	return rc;
 }
 
 int
-mpc_sysctl_register(void)
+mpc_uuid_proc_handler(
+	struct ctl_table   *tab,
+	int                 write,
+	void        __user *buffer,
+	size_t             *lenp,
+	loff_t             *ppos)
 {
-	mpc_sysctl_table = register_sysctl_table(mpc_sysctl_root);
+	struct mpool_uuid  uuid;
 
-	return mpc_sysctl_table ? 0 : -ENOMEM;
+	char    uuid_str[MPOOL_UUID_STRING_LEN + 1] = { };
+	void   *data;
+	int     maxlen;
+	int     rc;
+
+	if (ev(write))
+		return 0;
+
+	data   = tab->data;
+	maxlen = tab->maxlen;
+
+	memcpy(uuid.uuid, (char *)data, MPOOL_UUID_SIZE);
+	mpool_unparse_uuid(&uuid, uuid_str);
+	tab->data   = uuid_str;
+	tab->maxlen = sizeof(uuid_str);
+
+	rc = proc_dostring(tab, write, buffer, lenp, ppos);
+
+	tab->data   = data;
+	tab->maxlen = maxlen;
+
+	return rc;
+}
+
+struct ctl_table_header *mpc_sysctl_register(struct ctl_table *root)
+{
+	return register_sysctl_table(root);
+}
+
+void mpc_sysctl_unregister(struct ctl_table_header *hdr)
+{
+	if (ev(!hdr))
+		return;
+	unregister_sysctl_table(hdr);
+}
+
+merr_t
+mpc_sysctl_path(
+	struct ctl_table   *root,
+	struct ctl_table   *comp1,
+	struct ctl_table   *comp2,
+	struct ctl_table   *oid,
+	const char         *c2name,
+	umode_t             mode)
+{
+	if (ev(!root || !comp1 || !oid))
+		return merr(EINVAL);
+
+	root->procname = "dev";
+	root->mode = mode;
+	root->child = comp1;
+
+	comp1->procname = "mpool";
+	comp1->mode = mode;
+	comp1->child = comp2 ? comp2 : oid;
+
+	if (comp2) {
+		comp2->procname = c2name;
+		comp2->mode = mode;
+		comp2->child = oid;
+	}
+
+	return 0;
 }
 
 void
-mpc_sysctl_unregister(void)
+mpc_sysctl_oid(
+	struct ctl_table   *oid,
+	const char         *name,
+	umode_t             mode,
+	void               *data,
+	size_t              sz,
+	proc_handler        handler)
 {
-	if (mpc_sysctl_table)
-		unregister_sysctl_table(mpc_sysctl_table);
+	oid->procname = name;
+	oid->data     = data;
+	oid->mode     = mode;
+	oid->maxlen   = sz;
+	oid->proc_handler = handler;
+}
 
-	mpc_sysctl_table = NULL;
+void
+mpc_sysctl_oid_minmax(
+	struct ctl_table   *oid,
+	const char         *name,
+	umode_t             mode,
+	void               *data,
+	size_t              sz,
+	proc_handler        handler,
+	void               *min,
+	void               *max)
+{
+	mpc_sysctl_oid(oid, name, mode, data, sz, handler);
+	oid->extra1 = min;
+	oid->extra2 = max;
 }

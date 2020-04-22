@@ -105,6 +105,8 @@ struct mpc_unit {
 	struct mpc_metamap         *un_metamap;
 	struct address_space       *un_mapping;
 	struct mpc_reap            *un_ds_reap;
+	struct ctl_table           *un_tab;
+	struct ctl_table_header    *un_hdr;
 	uint                        un_rawio;       /* log2(max_mblock_size) */
 	u64                         un_ds_oidv[2];
 	u32                         un_ra_pages_max;
@@ -2220,6 +2222,73 @@ mpioc_mp_mclass_get(struct mpc_unit *unit, uint cmd, struct mpioc_mclass *mcl)
 	return rc ? merr(EFAULT) : 0;
 }
 
+#define MPC_PARAMS_CNT     8
+
+static merr_t mpc_params_register(struct mpc_unit *unit)
+{
+	struct ctl_table   *tab, *oid;
+	merr_t              err;
+	int                 compc, tabc, oidc;
+
+	if (ev(!unit))
+		return merr(EINVAL);
+
+	compc = MPC_SYSCTL_RCNT + 2 * MPC_SYSCTL_DCNT;
+	oidc  = MPC_PARAMS_CNT;
+	tabc  = compc + oidc;
+
+	tab = kcalloc(tabc, sizeof(*tab), GFP_KERNEL);
+	if (ev(!tab))
+		return merr(ENOMEM);
+
+	oid = tab + compc;
+
+	err = mpc_sysctl_path(tab, tab + MPC_SYSCTL_RCNT,
+			      tab + MPC_SYSCTL_RCNT + MPC_SYSCTL_DCNT, oid,
+			      unit->un_mpool->mp_name, MPC_SYSCTL_DMODE);
+	if (ev(err))
+		goto errout;
+
+	mpc_sysctl_oid(oid++, "uid", 0444, &unit->un_uid,
+		       sizeof(unit->un_uid), proc_dointvec);
+
+	mpc_sysctl_oid(oid++, "gid", 0444, &unit->un_gid,
+		       sizeof(unit->un_gid), proc_dointvec);
+
+	mpc_sysctl_oid(oid++, "mode", 0444, &unit->un_mode,
+		       sizeof(unit->un_mode), mpc_mode_proc_handler);
+
+	mpc_sysctl_oid(oid++, "ra", 0444, &unit->un_ra_pages_max,
+		       sizeof(unit->un_ra_pages_max), proc_douintvec);
+
+	mpc_sysctl_oid(oid++, "label", 0444, &unit->un_label,
+		       sizeof(unit->un_label), proc_dostring);
+
+	mpc_sysctl_oid(oid++, "vma", 0444, &mpc_vma_size_max,
+		       sizeof(mpc_vma_size_max), proc_douintvec);
+
+	mpc_sysctl_oid(oid++, "type", 0444, unit->un_utype.b,
+		       sizeof(unit->un_utype.b), mpc_uuid_proc_handler);
+
+	unit->un_hdr = mpc_sysctl_register(tab);
+	if (ev(!unit->un_hdr))
+		goto errout;
+
+	unit->un_tab = tab;
+
+	return 0;
+
+errout:
+	kfree(tab);
+	return err;
+}
+
+static void mpc_params_unregister(struct mpc_unit *unit)
+{
+	mpc_sysctl_unregister(unit->un_hdr);
+	kfree(unit->un_tab);
+}
+
 /**
  * mpioc_mp_create() - create an mpool.
  * @mp:      mpool parameter block
@@ -2366,6 +2435,10 @@ mpioc_mp_create(
 	mp->mp_params.mp_oidv[0] = cfg.mc_oid1;
 	mp->mp_params.mp_oidv[1] = cfg.mc_oid2;
 
+	err = mpc_params_register(mpool_unit);
+	if (ev(err))
+		goto errout;
+
 	mpool = NULL;
 
 errout:
@@ -2465,6 +2538,10 @@ mpioc_mp_activate(
 	       sizeof(mp->mp_params.mp_utype));
 	strlcpy(mp->mp_params.mp_label, cfg.mc_label,
 		sizeof(mp->mp_params.mp_label));
+
+	err = mpc_params_register(mpool_unit);
+	if (ev(err))
+		goto errout;
 
 	mpool = NULL;
 
@@ -2579,6 +2656,8 @@ mp_deactivate_impl(
 	dev_dbg(mpunit->un_device,
 		"mpool %s deactivated, %d units",
 		mp->mp_params.mp_name, unitc);
+
+	mpc_params_unregister(mpunit);
 
 	mpc_unit_put(mpunit);
 
@@ -4163,15 +4242,6 @@ static __init int mpc_init(void)
 	mpc_rwsz_max = clamp_t(ulong, mpc_rwsz_max, 1, 128);
 	mpc_rwconc_max = clamp_t(ulong, mpc_rwconc_max, 1, 32);
 
-	mpc_reap_init();
-
-	rc = mpc_sysctl_register();
-	if (rc) {
-		errmsg = "mpc sysctl register failed";
-		err = merr(rc);
-		goto errout;
-	}
-
 	/* Must be same as mpc_physio() pagesvsz calculation.
 	 */
 	sz = (mpc_rwsz_max << 20) / PAGE_SIZE;
@@ -4349,8 +4419,6 @@ errout:
 
 	mpc_vcache_fini(&mpc_physio_vcache);
 
-	mpc_sysctl_unregister();
-
 	return -merr_errno(err);
 }
 
@@ -4391,8 +4459,6 @@ static __exit void mpc_exit(void)
 
 	kmem_cache_destroy(mpc_vma_cache[0]);
 	mpc_vma_cache[0] = NULL;
-
-	mpc_sysctl_unregister();
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
 	mpc_bdi_free();

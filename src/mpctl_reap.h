@@ -78,10 +78,4 @@ bool
 mpc_reap_vma_duress(
 	struct mpc_vma *meta);
 
-/**
- * mpc_reap_init() - Initialize reaper global state
- */
-void
-mpc_reap_init(void);
-
 #endif /* MPCTL_REAP_H */

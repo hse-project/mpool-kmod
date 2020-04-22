@@ -27,6 +27,7 @@
 #include <linux/delay.h>
 #include <linux/version.h>
 #include <linux/sched.h>
+#include <linux/slab.h>
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
 #include <linux/sched/clock.h>
@@ -40,6 +41,7 @@
 #include "mpctl_params.h"
 #include "mpctl_internal.h"
 #include "mpctl_reap_internal.h"
+
 
 /**
  * mpc_readp_meminfo() - Get current system-wide memory usage
@@ -80,7 +82,7 @@ static void mpc_reap_evict_vma(struct mpc_vma *meta)
 	bktsz = meta->mcm_bktsz >> PAGE_SHIFT;
 	off = mpc_vma_pgoff(meta);
 
-	ttl = atomic_read(&reap->reap_ttl) * 1000ul;
+	ttl = atomic_read(&reap->reap_ttl_cur) * 1000ul;
 	now = local_clock();
 
 	for (i = 0; i < meta->mcm_mbinfoc; ++i, off += bktsz) {
@@ -102,7 +104,7 @@ static void mpc_reap_evict_vma(struct mpc_vma *meta)
 		if (need_resched())
 			cond_resched();
 
-		ttl = atomic_read(&reap->reap_ttl) * 1000ul;
+		ttl = atomic_read(&reap->reap_ttl_cur) * 1000ul;
 		now = local_clock();
 	}
 }
@@ -218,14 +220,14 @@ static void mpc_reap_tune(struct mpc_reap *reap)
 	freepct = ((hpages + wpages + cpages) * 10000) / total_pages;
 	freepct = 10000 - freepct;
 
-	lwm = (100 - mpc_reap_mempct_get()) * 100;
+	lwm = (100 - reap->reap_mempct) * 100;
 	hwm = (lwm * 10300) / 10000;
 	hwm = min_t(u32, hwm, 9700);
-	ttl = mpc_reap_ttl_get();
+	ttl = reap->reap_ttl;
 
 	if (freepct >= hwm) {
-		if (atomic_read(&reap->reap_ttl) != ttl)
-			atomic_set(&reap->reap_ttl, ttl);
+		if (atomic_read(&reap->reap_ttl_cur) != ttl)
+			atomic_set(&reap->reap_ttl_cur, ttl);
 		if (atomic_read(&reap->reap_lwm))
 			atomic_set(&reap->reap_lwm, 0);
 	} else if (freepct < lwm || atomic_read(&reap->reap_lwm) > 0) {
@@ -238,11 +240,11 @@ static void mpc_reap_tune(struct mpc_reap *reap)
 			if (x > ttl)
 				x = ttl;
 
-			atomic_set(&reap->reap_ttl, x);
+			atomic_set(&reap->reap_ttl_cur, x);
 		}
 	}
 
-	debug = mpc_reap_debug_get();
+	debug = reap->reap_debug;
 	if (!debug || (debug == 1 && freepct > hwm))
 		return;
 
@@ -259,7 +261,7 @@ static void mpc_reap_tune(struct mpc_reap *reap)
 		cpages >> (20 - PAGE_SHIFT),
 		freepct, lwm, hwm,
 		atomic_read(&reap->reap_lwm),
-		atomic_read(&reap->reap_ttl) / 1000);
+		atomic_read(&reap->reap_ttl_cur) / 1000);
 }
 
 static void mpc_reap_prune(struct work_struct *work)
@@ -320,10 +322,90 @@ static void mpc_reap_prune(struct work_struct *work)
 		atomic_sub(npruned, &elem->reap_nfreed);
 	}
 
-	delay = mpc_reap_mempct_get() < 100 ? 1000 / REAP_ELEM_MAX : 1000;
+	delay = reap->reap_mempct < 100 ? 1000 / REAP_ELEM_MAX : 1000;
 	delay = msecs_to_jiffies(delay);
 
 	queue_delayed_work(reap->reap_wq, &reap->reap_dwork, delay);
+}
+
+#define MPC_REAP_PARAMS_CNT    4
+
+static int reap_mempct_min = 5;
+static int reap_mempct_max = 100;
+static int reap_ttl_min    = 100;
+static int reap_ttl_max    = INT_MAX;
+static int reap_debug_min  = 0;
+static int reap_debug_max  = 3;
+
+static merr_t mpc_reap_params_register(struct mpc_reap *reap)
+{
+	struct ctl_table   *tab, *oid;
+	merr_t              err;
+	int                 compc, tabc, oidc;
+
+	compc = MPC_SYSCTL_RCNT + MPC_SYSCTL_DCNT;
+	oidc  = MPC_REAP_PARAMS_CNT;
+	tabc  = compc + oidc;
+
+	tab = kcalloc(tabc, sizeof(*tab), GFP_KERNEL);
+	if (ev(!tab))
+		return merr(ENOMEM);
+
+	oid = tab + compc;
+
+	err = mpc_sysctl_path(tab, tab + MPC_SYSCTL_RCNT, NULL, oid,
+			      NULL, MPC_SYSCTL_DMODE);
+	if (ev(err))
+		goto errout;
+
+	mpc_sysctl_oid_minmax(oid++, "reap_mempct", 0644, &reap->reap_mempct,
+			      sizeof(reap->reap_mempct), proc_dointvec_minmax,
+			      &reap_mempct_min, &reap_mempct_max);
+
+	mpc_sysctl_oid_minmax(oid++, "reap_debug", 0644, &reap->reap_debug,
+			      sizeof(reap->reap_debug), proc_dointvec_minmax,
+			      &reap_debug_min, &reap_debug_max);
+
+	mpc_sysctl_oid_minmax(oid++, "reap_ttl", 0644, &reap->reap_ttl,
+			      sizeof(reap->reap_ttl), proc_dointvec_minmax,
+			      &reap_ttl_min, &reap_ttl_max);
+
+	reap->reap_hdr = mpc_sysctl_register(tab);
+	if (ev(!reap->reap_hdr))
+		goto errout;
+
+	reap->reap_tab = tab;
+
+	return 0;
+
+errout:
+	kfree(tab);
+	return err;
+}
+
+static void mpc_reap_params_unregister(struct mpc_reap *reap)
+{
+	mpc_sysctl_unregister(reap->reap_hdr);
+	kfree(reap->reap_tab);
+}
+
+static void mpc_reap_mempct_init(struct mpc_reap *reap)
+{
+	ulong   mavail;
+	uint    pct = 60;
+
+	mpc_reap_meminfo(NULL, &mavail, 30);
+
+	if (mavail > 256)
+		pct = 10;
+	else if (mavail > 128)
+		pct = 13;
+	else if (mavail > 64)
+		pct = 25;
+	else if (mavail > 32)
+		pct = 40;
+
+	reap->reap_mempct = clamp_t(unsigned int, 100 - pct, 1, 100);
 }
 
 /**
@@ -337,7 +419,8 @@ merr_t mpc_reap_create(struct mpc_reap **reapp)
 	struct mpc_reap_elem   *elem;
 	struct mpc_reap        *reap;
 
-	uint  flags, i;
+	uint   flags, i;
+	merr_t err;
 
 	flags = WQ_UNBOUND | WQ_HIGHPRI | WQ_CPU_INTENSIVE;
 	*reapp = NULL;
@@ -355,7 +438,7 @@ merr_t mpc_reap_create(struct mpc_reap **reapp)
 	}
 
 	atomic_set(&reap->reap_lwm, 0);
-	atomic_set(&reap->reap_ttl, 0);
+	atomic_set(&reap->reap_ttl_cur, 0);
 	atomic_set(&reap->reap_eidx, 0);
 	atomic_set(&reap->reap_emit, 0);
 
@@ -373,6 +456,17 @@ merr_t mpc_reap_create(struct mpc_reap **reapp)
 		atomic64_set(&elem->reap_wpages, 0);
 		atomic64_set(&elem->reap_cpages, 0);
 		atomic_set(&elem->reap_nfreed, 0);
+	}
+
+	reap->reap_ttl   = 10 * 1000 * 1000;
+	reap->reap_debug = 0;
+	mpc_reap_mempct_init(reap);
+
+	err = mpc_reap_params_register(reap);
+	if (ev(err)) {
+		destroy_workqueue(reap->reap_wq);
+		free_aligned(reap);
+		return err;
 	}
 
 	INIT_DELAYED_WORK(&reap->reap_dwork, mpc_reap_prune);
@@ -412,6 +506,7 @@ void mpc_reap_destroy(struct mpc_reap *reap)
 	}
 
 	destroy_workqueue(reap->reap_wq);
+	mpc_reap_params_unregister(reap);
 	free_aligned(reap);
 }
 
@@ -539,23 +634,4 @@ bool mpc_reap_vma_duress(struct mpc_vma *meta)
 		return true;
 
 	return (meta->mcm_advice == MPC_VMA_COLD);
-}
-
-void mpc_reap_init(void)
-{
-	ulong   mavail;
-	uint    pct = 60;
-
-	mpc_reap_meminfo(NULL, &mavail, 30);
-
-	if (mavail > 256)
-		pct = 10;
-	else if (mavail > 128)
-		pct = 13;
-	else if (mavail > 64)
-		pct = 25;
-	else if (mavail > 32)
-		pct = 40;
-
-	mpc_reap_mempct_set(100 - pct);
 }

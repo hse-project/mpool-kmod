@@ -38,17 +38,32 @@ struct mpc_reap_elem {
 
 /**
  * struct mpc_reap -
- * @reap_lwm:    Low water mark
- * @reap_ttl:    Time-to-live
+ * @reap_lwm:     Low water mark
+ * @reap_ttl_cur: Current time-to-live
  * @reap_wq:
- * @reap_eidx:   Pruner element index
- * @reap_emit:   Pruner debug message control
+ *
+ * @reap_hdr:     sysctl table header
+ * @reap_tab:     sysctl table components
+ * @reap_mempct:
+ * @reap_ttl:
+ * @reap_debug:
+ *
+ * @reap_eidx:    Pruner element index
+ * @reap_emit:    Pruner debug message control
+ * @reap_dwork:
  * @reap_elem:    Array of reaper lists (reaper pool)
  */
 struct mpc_reap {
 	atomic_t                    reap_lwm;
-	atomic_t                    reap_ttl;
+	atomic_t                    reap_ttl_cur;
 	struct workqueue_struct    *reap_wq;
+
+	____cacheline_aligned
+	struct ctl_table_header    *reap_hdr;
+	struct ctl_table           *reap_tab;
+	int                         reap_mempct;
+	int                         reap_ttl;
+	int                         reap_debug;
 
 	____cacheline_aligned
 	atomic_t                    reap_eidx;
