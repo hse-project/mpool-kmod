@@ -87,72 +87,6 @@ struct mdc_props {
  */
 
 /**
- * mp_mdc_alloc() - Alloc an MDC
- * @ds:         dataset handle
- * @logid1:     Mlog ID 1
- * @logid2:     Mlog ID 2
- * @mclassp:    media class
- * @ecparm:     erase coding parameters
- * @capreq:     capacity requirements
- */
-uint64_t
-mp_mdc_alloc(
-	struct mpool_descriptor    *mp,
-	u64                        *logid1,
-	u64                        *logid2,
-	enum mp_media_classp        mclassp,
-	const struct mdc_capacity  *capreq,
-	struct mdc_props           *props);
-
-/**
- * mp_mdc_commit() - Commit an MDC
- * @ds:       dataset handle
- * @logid1:   Mlog ID 1
- * @logid2:   Mlog ID 2
- */
-uint64_t
-mp_mdc_commit(
-	struct mpool_descriptor    *mp,
-	u64                         logid1,
-	u64                         logid2);
-
-/**
- * mp_mdc_destroy() - Destroy a MDC
- * @ds:       dataset handle
- * @logid1:   Mlog ID 1
- * @logid2:   Mlog ID 2
- */
-uint64_t
-mp_mdc_destroy(
-	struct mpool_descriptor    *mp,
-	u64                         logid1,
-	u64                         logid2);
-
-/**
- * mp_mdc_get_root() - Retrieve dataset root MDC OIDs
- * @ds:       dataset handle
- * @logid1:   Mlog ID 1
- * @logid2:   Mlog ID 2
- */
-uint64_t
-mp_mdc_get_root(
-	struct mpool_descriptor    *mp,
-	u64                        *logid1,
-	u64                        *logid2);
-
-/**
- * mp_mdc_open_root() - Open dataset root MDC
- * @ds:       dataset handle
- * @flags:    MDC open flags (enum mdc_open_flags)
- * @mdc_out:  MDC handle
- */
-uint64_t
-mp_mdc_open_root(
-	struct mpool_descriptor     *mp,
-	u8                           flags,
-	struct mp_mdc              **mdc_out);
-
-/**
  * mp_mdc_open() - Open MDC by OIDs
  * @ds:       dataset handle
  * @logid1:   Mlog ID 1
@@ -174,14 +108,6 @@ mp_mdc_open(
  */
 uint64_t
 mp_mdc_close(
-	struct mp_mdc  *mdc);
-
-/**
- * mp_mdc_sync() - Flush MDC content to media
- * @mdc:      MDC handle
- */
-uint64_t
-mp_mdc_sync(
 	struct mp_mdc  *mdc);
 
 /**
@@ -245,15 +171,5 @@ mp_mdc_cstart(
 uint64_t
 mp_mdc_cend(
 	struct mp_mdc  *mdc);
-
-/**
- * mp_mdc_usage() - Return estimate of active mlog usage
- * @mdc:      MDC handle
- * @usage:    Number of bytes used (includes overhead)
- */
-uint64_t
-mp_mdc_usage(
-	struct mp_mdc  *mdc,
-	size_t         *usage);
 
 #endif /* MPOOL_MPCORE_MDC_H */

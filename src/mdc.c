@@ -100,15 +100,10 @@ mdc_find_get(
 	struct mlog_descriptor     **mlh,
 	merr_t                      *ferr)
 {
-	merr_t err;
-	int    i;
+	int i;
 
-	for (i = 0; i < 2; i++) {
-		ferr[i] = 0;
-		err = mlog_find_get(mp, logid[i], 0, &props[i], &mlh[i]);
-		if (ev(err))
-			ferr[i] = err;
-	}
+	for (i = 0; i < 2; ++i)
+		ferr[i] = mlog_find_get(mp, logid[i], 0, &props[i], &mlh[i]);
 
 	if (do_put && ((ferr[0] && !ferr[1]) || (ferr[1] && !ferr[0]))) {
 		if (ferr[0])
@@ -119,34 +114,9 @@ mdc_find_get(
 }
 
 /**
- * mdc_resolve() - Wrapper around resolve for mlog pair.
- */
-static void
-mdc_resolve(
-	struct mpool_descriptor     *mp,
-	u64                         *logid,
-	struct mlog_props           *props,
-	struct mlog_descriptor     **mlh,
-	merr_t                      *ferr)
-{
-	merr_t err;
-	int    i;
-
-	for (i = 0; i < 2; i++) {
-		ferr[i] = 0;
-		err = mlog_find_get(mp, logid[i], 0, &props[i], &mlh[i]);
-		if (ev(err))
-			ferr[i] = err;
-		else
-			mlog_put(mp, mlh[i]);
-	}
-}
-
-
-/**
  * mdc_put() - Wrapper around put for mlog pair.
  */
-static merr_t
+static void
 mdc_put(
 	struct mpool_descriptor    *mp,
 	struct mlog_descriptor     *mlh1,
@@ -154,193 +124,6 @@ mdc_put(
 {
 	mlog_put(mp, mlh1);
 	mlog_put(mp, mlh2);
-
-	return 0;
-}
-
-uint64_t
-mp_mdc_alloc(
-	struct mpool_descriptor    *mp,
-	u64                        *logid1,
-	u64                        *logid2,
-	enum mp_media_classp        mclassp,
-	const struct mdc_capacity  *capreq,
-	struct mdc_props           *props)
-{
-	struct mlog_capacity        mlcap;
-	struct mlog_props           mlprops;
-	struct mlog_descriptor     *mlh[2];
-
-	merr_t err;
-	merr_t err2;
-	bool   beffort;
-
-	if (!mp || !logid1 || !logid2 || !capreq)
-		return merr(EINVAL);
-
-	if (ev(!mpool_mc_isvalid(mclassp)))
-		return merr(EINVAL);
-
-	memset(&mlcap, 0, sizeof(mlcap));
-	mlcap.lcp_captgt = capreq->mdt_captgt;
-	mlcap.lcp_spare  = capreq->mdt_spare;
-
-	beffort = mpool_mc_isbe(mclassp);
-	mclassp = mpool_mc_first_get(mclassp);
-	assert(mclassp < MP_MED_NUMBER);
-
-	err2 = 0;
-	do {
-		if (ev(err2 && ++mclassp >= MP_MED_NUMBER))
-			return err2;
-
-		err = mlog_alloc(mp, &mlcap, mclassp, &mlprops, &mlh[0]);
-		if (err && (!beffort || (merr_errno(err) != ENOENT &&
-					 merr_errno(err) != ENOSPC)))
-			return ev(err);
-
-		err2 = err;
-		if (!err)
-			*logid1 = mlprops.lpr_objid;
-		else
-			continue;
-
-		err = mlog_alloc(mp, &mlcap, mclassp, &mlprops, &mlh[1]);
-		if (err)
-			mlog_abort(mp, mlh[0]);
-
-		if (err && (!beffort || (merr_errno(err) != ENOENT &&
-					 merr_errno(err) != ENOSPC)))
-			return ev(err);
-
-		err2 = err;
-		if (!err) {
-			*logid2 = mlprops.lpr_objid;
-			break;
-		}
-	} while (beffort);
-
-	if (props) {
-		props->mdc_objid1    = *logid1;
-		props->mdc_objid2    = *logid2;
-		props->mdc_alloc_cap = mlprops.lpr_alloc_cap;
-		props->mdc_mclassp   = mclassp;
-	}
-
-	return 0;
-}
-
-uint64_t mp_mdc_commit(struct mpool_descriptor *mp, u64 logid1, u64 logid2)
-{
-	struct mlog_descriptor     *mlh[2];
-	struct mlog_props           props[2];
-
-	merr_t err;
-	char   mpname[MPOOL_NAME_LEN_MAX];
-	u64    id[2];
-	merr_t ferr[2] = {0};
-
-	if (!mp)
-		return merr(EINVAL);
-
-	mdc_get_mpname(mp, mpname, sizeof(mpname));
-
-	/* We already have the reference from alloc */
-	id[0] = logid1;
-	id[1] = logid2;
-	mdc_resolve(mp, id, props, mlh, ferr);
-	if (ev(ferr[0] || ferr[1]))
-		return ferr[0] ? : ferr[1];
-
-	err = mlog_commit(mp, mlh[0]);
-	if (err) {
-		mlog_abort(mp, mlh[0]);
-		mlog_abort(mp, mlh[1]);
-
-		return err;
-	}
-
-	err = mlog_commit(mp, mlh[1]);
-	if (err) {
-		mlog_delete(mp, mlh[0]);
-		mlog_abort(mp, mlh[1]);
-
-		return err;
-	}
-
-	/*
-	 * Now drop the alloc reference. The calls that follow will need
-	 * a get until an mdc handle is established by mp_mdc_open(). This
-	 * comes from the API limitation that MDC commit and destroy operate
-	 * on object IDs and not on handles. This will be cleaned in near
-	 * future.
-	 */
-	err = mdc_put(mp, mlh[0], mlh[1]);
-	if (ev(err))
-		return err;
-
-	return 0;
-}
-
-uint64_t mp_mdc_destroy(struct mpool_descriptor *mp, u64 logid1, u64 logid2)
-{
-	struct mlog_descriptor     *mlh[2];
-	struct mlog_props           props[2];
-
-	char   mpname[MPOOL_NAME_LEN_MAX];
-	int    i;
-	u64    id[2];
-	merr_t ferr[2] = {0};
-	merr_t rval = 0;
-
-	if (!mp)
-		return merr(EINVAL);
-
-	mdc_get_mpname(mp, mpname, sizeof(mpname));
-
-	/*
-	 * This mdc_find_get can go away once mp_mdc_destroy is modified to
-	 * operate on handles.
-	 */
-	id[0] = logid1;
-	id[1] = logid2;
-	mdc_find_get(mp, id, false, props, mlh, ferr);
-
-	/*
-	 * If mdc_find_get encountered an error for both mlogs, then return
-	 * the non-ENOENT merr first.
-	 */
-	if (ev(ferr[0] && ferr[1]))
-		return (merr_errno(ferr[0]) != ENOENT) ? ferr[0] : ferr[1];
-
-	/*
-	 * Delete uses the ref from get irrespective of whether it's called
-	 * from alloc thread's context or post crash. This works today as we
-	 * drop the alloc reference explicitly, post commit.
-	 */
-	for (i = 0; i < 2; i++) {
-		merr_t err;
-
-		if (ferr[i])
-			continue;
-
-		if (props[i].lpr_iscommitted)
-			err = mlog_delete(mp, mlh[i]);
-		else
-			err = mlog_abort(mp, mlh[i]);
-
-		if (err)
-			rval = err;
-	}
-
-	/*
-	 * If mdc_find_get encountered an error for either mlogs, then return
-	 * that error.
-	 */
-	if (ev(ferr[0] || ferr[1]))
-		return ferr[0] ?: ferr[1];
-
-	return rval;
 }
 
 uint64_t
@@ -678,11 +461,7 @@ uint64_t mp_mdc_close(struct mp_mdc *mdc)
 	 * This mdc_put can go away once mp_mdc_open is modified to
 	 * operate on handles.
 	 */
-	err = mdc_put(mp, mdc->mdc_logh1, mdc->mdc_logh2);
-	if (ev(err)) {
-		mdc_release(mdc, rw);
-		return err;
-	}
+	mdc_put(mp, mdc->mdc_logh1, mdc->mdc_logh2);
 
 	mdc_invalidate(mdc);
 	mdc_release(mdc, false);
@@ -690,28 +469,6 @@ uint64_t mp_mdc_close(struct mp_mdc *mdc)
 	kfree(mdc);
 
 	return rval;
-}
-
-uint64_t mp_mdc_sync(struct mp_mdc *mdc)
-{
-	merr_t err;
-	bool   rw = false;
-
-	if (!mdc)
-		return merr(EINVAL);
-
-	err = mdc_acquire(mdc, rw);
-	if (ev(err))
-		return err;
-
-	err = mlog_flush(mdc->mdc_mp, mdc->mdc_alogh);
-	if (err)
-		mp_pr_err("mpool %s, mdc %p sync failed, mlog %p",
-			  err, mdc->mdc_mpname, mdc, mdc->mdc_alogh);
-
-	mdc_release(mdc, rw);
-
-	return err;
 }
 
 uint64_t mp_mdc_rewind(struct mp_mdc *mdc)
@@ -777,28 +534,6 @@ uint64_t mp_mdc_append(struct mp_mdc *mdc, void *data, ssize_t len, bool sync)
 		mp_pr_rl("mpool %s, mdc %p append failed, mlog %p, len %lu sync %d",
 			  err, mdc->mdc_mpname, mdc,
 			  mdc->mdc_alogh, len, sync);
-
-	mdc_release(mdc, rw);
-
-	return err;
-}
-
-uint64_t mp_mdc_usage(struct mp_mdc *mdc, size_t *usage)
-{
-	merr_t err;
-	bool   rw = false;
-
-	if (!mdc || !usage)
-		return merr(EINVAL);
-
-	err = mdc_acquire(mdc, rw);
-	if (ev(err))
-		return err;
-
-	err = mlog_len(mdc->mdc_mp, mdc->mdc_alogh, (u64 *)usage);
-	if (err)
-		mp_pr_err("mpool %s, mdc %p usage failed, mlog %p",
-			  err, mdc->mdc_mpname, mdc, mdc->mdc_alogh);
 
 	mdc_release(mdc, rw);
 
