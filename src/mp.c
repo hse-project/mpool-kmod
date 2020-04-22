@@ -2090,23 +2090,20 @@ mpool_get_usage(
 
 static merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 {
-	merr_t  err;
-	u64     root_mlog_id[2];
-	int     i;
-
-	enum mp_media_classp    mclass;
 	struct mlog_descriptor *ml_desc;
 	struct mlog_props       mlprops;
 	struct mlog_capacity    mlcap = {
 		.lcp_captgt = mlog_cap,
 	};
 
-	mclass = MP_MED_CAPACITY;
+	u64     root_mlog_id[2];
+	merr_t  err;
+	int     i;
 
 	mlog_lookup_rootids(&root_mlog_id[0], &root_mlog_id[1]);
 
 	for (i = 0; i < 2; ++i) {
-		err = mlog_find_get(mp, root_mlog_id[i], NULL, &ml_desc);
+		err = mlog_find_get(mp, root_mlog_id[i], 1, NULL, &ml_desc);
 		if (!ev(err)) {
 			mlog_put(mp, ml_desc);
 			continue;
@@ -2119,9 +2116,9 @@ static merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 		}
 
 		err = mlog_realloc(mp, root_mlog_id[i], &mlcap,
-				   mclass, &mlprops, &ml_desc);
+				   MP_MED_CAPACITY, &mlprops, &ml_desc);
 		if (err) {
-			mp_pr_err("mpool %s, root mlog re-alloc 0x%lx failed",
+			mp_pr_err("mpool %s, root mlog realloc 0x%lx failed",
 				  err, mp->pds_name,
 				  (ulong)root_mlog_id[i]);
 			return err;
@@ -2130,7 +2127,7 @@ static merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 		if (mlprops.lpr_objid != root_mlog_id[i]) {
 			mlog_put(mp, ml_desc);
 			err = ENOENT;
-			mp_pr_err("mpool %s, root mlog alloc 0x%lx failed, inconsistent mlog id 0x%lx",
+			mp_pr_err("mpool %s, root mlog mismatch 0x%lx 0x%lx",
 				  err, mp->pds_name,
 				  (ulong)root_mlog_id[i],
 				  (ulong)mlprops.lpr_objid);

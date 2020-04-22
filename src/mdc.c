@@ -105,7 +105,7 @@ mdc_find_get(
 
 	for (i = 0; i < 2; i++) {
 		ferr[i] = 0;
-		err = mlog_find_get(mp, logid[i], &props[i], &mlh[i]);
+		err = mlog_find_get(mp, logid[i], 0, &props[i], &mlh[i]);
 		if (ev(err))
 			ferr[i] = err;
 	}
@@ -134,7 +134,7 @@ mdc_resolve(
 
 	for (i = 0; i < 2; i++) {
 		ferr[i] = 0;
-		err = mlog_find_get(mp, logid[i], &props[i], &mlh[i]);
+		err = mlog_find_get(mp, logid[i], 0, &props[i], &mlh[i]);
 		if (ev(err))
 			ferr[i] = err;
 		else

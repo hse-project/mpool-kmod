@@ -3213,7 +3213,7 @@ merr_t mpioc_mlog_find(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 
 	mpool = unit->un_mpool->mp_desc;
 
-	err = mlog_find_get(mpool, ml->ml_objid, NULL, &mlog);
+	err = mlog_find_get(mpool, ml->ml_objid, 0, NULL, &mlog);
 	if (!err) {
 		err = mlog_get_props_ex(mpool, mlog, &ml->ml_props);
 		mlog_put(mpool, mlog);
@@ -3228,16 +3228,18 @@ mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mlog_id *mi)
 	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
 	struct mlog_props_ex        props;
+	int                         which;
 	bool                        drop;
 	merr_t                      err;
 
 	if (!unit || !unit->un_mpool || !mi || !mlog_objid(mi->mi_objid))
 		return merr(EINVAL);
 
+	which = (cmd == MPIOC_MLOG_DELETE) ? 1 : -1;
 	mpool = unit->un_mpool->mp_desc;
 	drop = true;
 
-	err = mlog_find_get(mpool, mi->mi_objid, NULL, &mlog);
+	err = mlog_find_get(mpool, mi->mi_objid, which, NULL, &mlog);
 	if (err)
 		return err;
 
@@ -3310,7 +3312,7 @@ merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi,
 
 	mpool = unit->un_mpool->mp_desc;
 
-	err = mlog_find_get(mpool, mi->mi_objid, NULL, &mlog);
+	err = mlog_find_get(mpool, mi->mi_objid, 1, NULL, &mlog);
 	if (err)
 		goto errout;
 
@@ -3344,7 +3346,7 @@ merr_t mpioc_mlog_erase(struct mpc_unit *unit, struct mpioc_mlog_id *mi)
 
 	mpool = unit->un_mpool->mp_desc;
 
-	err = mlog_find_get(mpool, mi->mi_objid, NULL, &mlog);
+	err = mlog_find_get(mpool, mi->mi_objid, 0, NULL, &mlog);
 	if (err)
 		return err;
 

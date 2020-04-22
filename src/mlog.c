@@ -231,10 +231,11 @@ mlog_realloc(
  */
 merr_t
 mlog_find_get(
-	struct mpool_descriptor     *mp,
-	u64                          objid,
-	struct mlog_props           *prop,
-	struct mlog_descriptor     **mlh)
+	struct mpool_descriptor    *mp,
+	u64                         objid,
+	int                         which,
+	struct mlog_props          *prop,
+	struct mlog_descriptor    **mlh)
 {
 	struct ecio_layout_descriptor *layout;
 
@@ -243,17 +244,17 @@ mlog_find_get(
 	if (!mlog_objid(objid))
 		return merr(EINVAL);
 
-	layout = pmd_obj_find_get(mp, objid, 0);
+	layout = pmd_obj_find_get(mp, objid, which);
 	if (!layout)
 		return merr(ENOENT);
-
-	*mlh = layout2mlog(layout);
 
 	if (prop) {
 		pmd_obj_rdlock(mp, layout);
 		mlog_getprops_cmn(mp, layout, prop);
 		pmd_obj_rdunlock(mp, layout);
 	}
+
+	*mlh = layout2mlog(layout);
 
 	return 0;
 }
