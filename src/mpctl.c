@@ -1154,12 +1154,10 @@ static void mpc_vma_put(struct mpc_vma *vma)
 	if (!closed)
 		return;
 
-	synchronize_rcu();
-
 	/* Wait for our pending readaheads to complete
 	 * before we drop our mblock references.
 	 */
-	if (atomic64_read(&vma->mcm_nrpages) > 0)
+	if (atomic_read(&vma->mcm_inflight) > 0)
 		flush_workqueue(mpc_rgn2wq(vma->mcm_rgn));
 
 	for (i = 0; i < vma->mcm_mbinfoc; ++i)
@@ -1434,6 +1432,12 @@ static void mpc_readpages_cb(struct work_struct *work)
 
 	meta = args->a_meta;
 
+	/* The inflight count and closed flag are used
+	 * to synchronize with mpc_vma_put() to prevent
+	 * dropping our mblock references while there
+	 * are mblock reads in progress.
+	 */
+	atomic_inc(&meta->mcm_inflight);
 	if (meta->mcm_closed) {
 		err = merr(ENXIO);
 		goto errout;
@@ -1447,6 +1451,8 @@ static void mpc_readpages_cb(struct work_struct *work)
 	err = mblock_read(meta->mcm_mpdesc, args->a_mbdesc,
 			  iov, pagec, args->a_mboffset);
 	if (!err) {
+		atomic_dec(&meta->mcm_inflight);
+
 		if (meta->mcm_hcpagesp)
 			atomic64_add(pagec, meta->mcm_hcpagesp);
 		atomic64_add(pagec, &meta->mcm_nrpages);
@@ -1470,6 +1476,8 @@ errout:
 		 err, meta->mcm_unit->un_name,
 		 meta, meta->mcm_rgn, pagec,
 		 meta->mcm_closed ? ", closed" : "");
+
+	atomic_dec(&meta->mcm_inflight);
 
 	for (i = 0; i < pagec; ++i) {
 		unlock_page(args->a_pagev[i]);
@@ -3517,6 +3525,9 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 	atomic64_set(&meta->mcm_nrpages, 0);
 	meta->mcm_mapping = unit->un_mapping;
 	meta->mcm_cache = cache;
+
+	atomic_set(&meta->mcm_inflight, 0);
+	meta->mcm_closed = false;
 
 	largest = 0;
 	err = 0;
