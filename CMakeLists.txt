@@ -286,6 +286,14 @@ file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
  endif()
 
  set( MPOOL_KMOD_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP}.\${MPOOL_SHA}\${MPOOL_DIRTYTAG}-\${MPOOL_KMOD_VERSION} )
+ #
+ # MPOOL_SHA varibale may not be populated when user is downloading
+ # source code from tarball on the github website instead of cloning the repo
+ #
+ if( NOT MPOOL_SHA )
+   set( MPOOL_KMOD_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP}\${MPOOL_DIRTYTAG}-\${MPOOL_KMOD_VERSION} )
+   set( MPOOL_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP}\${MPOOL_DIRTYTAG} )
+ endif()
  if (REL_CANDIDATE)
   set( MPOOL_KMOD_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP}-\${MPOOL_KMOD_VERSION} )
  endif()
