@@ -374,13 +374,16 @@ help:
 	@true
 	$(info $(HELP_TEXT))
 
-install-pre: config
+module-cleanup:
+	@if test -L /lib/modules/`uname -r`/mpool ; then \
+		rm -f /lib/modules/`uname -r`/mpool ;\
+	fi
+	@rm -rf /usr/lib/mpool
+
+install-pre: module-cleanup config
 	@$(MAKE) -C "$(BUILD_DIR)" install
 
 install: install-pre
-	rm -f "/lib/modules/`uname -r`/mpool"
-	ln -s "$(DESTDIR)/usr/lib/mpool/modules/" \
-			"/lib/modules/`uname -r`/mpool" || exit 1
 	udevadm control --reload-rules
 	depmod -a || exit 1
 	-modprobe -r mpool

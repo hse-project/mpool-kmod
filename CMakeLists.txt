@@ -251,6 +251,8 @@ file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
   OUTPUT_STRIP_TRAILING_WHITESPACE
  )
 
+ set( MPOOL_KERNEL_VER \${MPOOL_KMOD_VERSION})
+
  #
  # cmake DIST doesn't work in 3.6.2.
  #
@@ -435,6 +437,8 @@ set( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
   /usr/lib/sysctl.d
   /usr/lib/udev
   /usr/lib/udev/rules.d
+  /usr/lib/modules
+  /usr/lib/modules/${MPOOL_KERNEL_VER}
   ${MPOOL_PYTHON_BASE_DIR}
   ${MPOOL_PYTHON_PKG_DIR}
   ${MPOOL_PYTHON_SOS_DIR}
@@ -472,8 +476,7 @@ set( CPACK_RPM_RUNTIME_POST_INSTALL_SCRIPT_FILE "${MPOOL_TREE_SCRIPTS_DIR}/packa
 set( CPACK_RPM_RUNTIME_PRE_UNINSTALL_SCRIPT_FILE "${MPOOL_TREE_SCRIPTS_DIR}/package/rpm-pre-uninstall.sh" )
 set( CPACK_RPM_RUNTIME_POST_UNINSTALL_SCRIPT_FILE "${MPOOL_TREE_SCRIPTS_DIR}/package/rpm-post-uninstall.sh" )
 set( CPACK_RPM_RUNTIME_USER_FILELIST
-  "%dir /usr/lib/mpool"
-  "%dir /usr/lib/mpool/modules"
+  "%dir /usr/lib/modules/${MPOOL_KERNEL_VER}/mpool"
 )
 set( CPACK_RPM_RUNTIME_PACKAGE_REQUIRES "sos >= 3.2" )
 
