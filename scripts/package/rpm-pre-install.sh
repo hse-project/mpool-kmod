@@ -148,6 +148,13 @@ do
     fi
 done
 
+[ -L /lib/modules/`uname -r`/mpool ] && rm -f /lib/modules/`uname -r`/mpool
+if [[ $1 -eq 2 ]]; then
+    rm -rf /usr/lib/mpool/modules/* || :
+else
+    rm -rf /usr/lib/mpool || :
+fi
+
 if [[ ${deactivate_done} -eq 1 ]]; then
     echo
     echo "You will need to manually reactivate mpools after the package " \

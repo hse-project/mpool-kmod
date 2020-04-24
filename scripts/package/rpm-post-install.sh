@@ -9,10 +9,6 @@
 # rpm will execute the contents of this file with /bin/sh
 # https://fedoraproject.org/wiki/Packaging:Scriptlets
 
-# create a symlink under the kernel's module directory
-rm -f /lib/modules/`uname -r`/mpool
-ln -s /usr/lib/mpool/modules/ /lib/modules/`uname -r`/mpool
-
 depmod -a
 
 # load kernel modules

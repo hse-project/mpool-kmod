@@ -11,8 +11,6 @@
 
 if [[ $1 -eq 0 ]]; then
     # this is a real uninstall, NOT an upgrade
-    # remove symlink
-    rm -f /lib/modules/`uname -r`/mpool
     depmod -a
 
     # reload udev rules
