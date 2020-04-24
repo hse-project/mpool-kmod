@@ -1145,19 +1145,17 @@ static void mpc_vma_put(struct mpc_vma *vma)
 	assert(vma->mcm_refcnt > 0);
 
 	closed = (--vma->mcm_refcnt == 0);
-	if (closed) {
+	if (closed)
 		idr_replace(&mm->mm_rgnmap, NULL, vma->mcm_rgn);
-		vma->mcm_closed = true;
-	}
 	spin_unlock(&bkt->mmb_lock);
 
 	if (!closed)
 		return;
 
-	/* Wait for our pending readaheads to complete
+	/* Wait for all in-progress readaheads to complete
 	 * before we drop our mblock references.
 	 */
-	if (atomic_read(&vma->mcm_inflight) > 0)
+	if (atomic_add_return(WQ_MAX_ACTIVE, &vma->mcm_rabusy) > 0)
 		flush_workqueue(mpc_rgn2wq(vma->mcm_rgn));
 
 	for (i = 0; i < vma->mcm_mbinfoc; ++i)
@@ -1432,13 +1430,10 @@ static void mpc_readpages_cb(struct work_struct *work)
 
 	meta = args->a_meta;
 
-	/* The inflight count and closed flag are used
-	 * to synchronize with mpc_vma_put() to prevent
-	 * dropping our mblock references while there
-	 * are mblock reads in progress.
+	/* Synchronize with mpc_vma_put() to prevent dropping our
+	 * mblock references while there are reads in progress.
 	 */
-	atomic_inc(&meta->mcm_inflight);
-	if (meta->mcm_closed) {
+	if (atomic_inc_return(&meta->mcm_rabusy) > WQ_MAX_ACTIVE) {
 		err = merr(ENXIO);
 		goto errout;
 	}
@@ -1451,7 +1446,7 @@ static void mpc_readpages_cb(struct work_struct *work)
 	err = mblock_read(meta->mcm_mpdesc, args->a_mbdesc,
 			  iov, pagec, args->a_mboffset);
 	if (!err) {
-		atomic_dec(&meta->mcm_inflight);
+		atomic_dec(&meta->mcm_rabusy);
 
 		if (meta->mcm_hcpagesp)
 			atomic64_add(pagec, meta->mcm_hcpagesp);
@@ -1472,12 +1467,12 @@ static void mpc_readpages_cb(struct work_struct *work)
 	}
 
 errout:
-	mp_pr_rl("mpool %s, vma %px, rgn %u, pagec %d%s",
+	mp_pr_rl("mpool %s, vma %px, rgn %u, pagec %d, rabusy %d",
 		 err, meta->mcm_unit->un_name,
 		 meta, meta->mcm_rgn, pagec,
-		 meta->mcm_closed ? ", closed" : "");
+		 atomic_read(&meta->mcm_rabusy));
 
-	atomic_dec(&meta->mcm_inflight);
+	atomic_dec(&meta->mcm_rabusy);
 
 	for (i = 0; i < pagec; ++i) {
 		unlock_page(args->a_pagev[i]);
@@ -1525,7 +1520,7 @@ mpc_readpages(
 	/* The idr value here (meta) is pinned for the lifetime
 	 * of the address map.  Therefore, we can exit the rcu
 	 * read-side critsec without worry that meta will be
-	 * destroyed before put_page has been called on each
+	 * destroyed before put_page() has been called on each
 	 * and every page in the given list of pages.
 	 */
 	rcu_read_lock();
@@ -1533,7 +1528,7 @@ mpc_readpages(
 	rcu_read_unlock();
 
 	if (!meta)
-		return -ENOENT;
+		return 0;
 
 	offset %= (1ul << mpc_vma_size_max);
 
@@ -3521,13 +3516,11 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 
 	atomic_set(&meta->mcm_evicting, 0);
 	atomic_set(&meta->mcm_reapref, 1);
+	atomic_set(&meta->mcm_rabusy, 0);
 	INIT_LIST_HEAD(&meta->mcm_list);
 	atomic64_set(&meta->mcm_nrpages, 0);
 	meta->mcm_mapping = unit->un_mapping;
 	meta->mcm_cache = cache;
-
-	atomic_set(&meta->mcm_inflight, 0);
-	meta->mcm_closed = false;
 
 	largest = 0;
 	err = 0;

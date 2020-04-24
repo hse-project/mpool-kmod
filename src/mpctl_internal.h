@@ -44,11 +44,8 @@ struct mpc_vma {
 	atomic_t                   *mcm_freedp;
 
 	____cacheline_aligned
-	atomic_t                    mcm_inflight;
-	bool                        mcm_closed;
-
-	____cacheline_aligned
 	atomic64_t                  mcm_nrpages;
+	atomic_t                    mcm_rabusy;
 	struct work_struct          mcm_work;
 
 	____cacheline_aligned
