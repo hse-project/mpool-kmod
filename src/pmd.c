@@ -1622,19 +1622,12 @@ pmd_obj_commit(
 	u8                             cslot;
 	struct ecio_layout_descriptor *found;
 
+	if (!objtype_user(objid_type(layout->eld_objid)))
+		return merr(EINVAL);
+
 	pmd_obj_wrlock(mp, layout);
-	if (!objtype_user(objid_type(layout->eld_objid))) {
+	if (layout->eld_state & ECIO_LYT_COMMITTED) {
 		pmd_obj_wrunlock(mp, layout);
-
-		err = merr(EINVAL);
-		mp_pr_err("mpool %s, wrong object type, commit failed, objid 0x%lx",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
-	} else if (layout->eld_state & ECIO_LYT_COMMITTED) {
-		pmd_obj_wrunlock(mp, layout);
-
-		mp_pr_warn("mpool %s, object already committed, state 0x%x",
-			   mp->pds_name, layout->eld_state);
 		return 0;
 	}
 
@@ -1651,9 +1644,6 @@ pmd_obj_commit(
 
 	err = pmd_log_create(mp, layout);
 	if (!ev(err)) {
-
-		layout->eld_state |= ECIO_LYT_COMMITTED;
-
 		pmd_mdc_lock(&cinfo->mmi_uncolock, cslot);
 		found =	objid_to_layout_search_mdc(&cinfo->mmi_uncobj,
 						   layout->eld_objid);
@@ -1663,6 +1653,8 @@ pmd_obj_commit(
 
 		pmd_mdc_wrlock(&cinfo->mmi_colock, cslot);
 		found = objid_to_layout_insert_mdc(&cinfo->mmi_obj, layout);
+		if (!found)
+			layout->eld_state |= ECIO_LYT_COMMITTED;
 		pmd_mdc_wrunlock(&cinfo->mmi_colock);
 
 		if (found) {
@@ -1689,7 +1681,6 @@ pmd_obj_commit(
 			/* Put the object back in the uncommited objects tree */
 			pmd_mdc_lock(&cinfo->mmi_uncolock, cslot);
 			objid_to_layout_insert_mdc(&cinfo->mmi_uncobj, layout);
-
 			pmd_mdc_unlock(&cinfo->mmi_uncolock);
 		} else {
 			atomic_inc(&cinfo->mmi_pco_cnt.pcc_cr);
@@ -1767,8 +1758,8 @@ pmd_obj_abort(
 	long                            refcnt;
 	u8                              cslot;
 
-	assert(layout);
-	assert(objtype_user(objid_type(layout->eld_objid)));
+	if (!objtype_user(objid_type(layout->eld_objid)))
+		return merr(EINVAL);
 
 	cslot = objid_slot(layout->eld_objid);
 	cinfo = &mp->pds_mda.mdi_slotv[cslot];
@@ -1825,8 +1816,8 @@ pmd_obj_delete(
 	u8      cslot;
 	merr_t  err;
 
-	assert(layout);
-	assert(objtype_user(objid_type(layout->eld_objid)));
+	if (!objtype_user(objid_type(layout->eld_objid)))
+		return merr(EINVAL);
 
 	objid = layout->eld_objid;
 	cslot = objid_slot(objid);

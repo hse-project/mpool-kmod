@@ -49,16 +49,17 @@ void evc_fini(void)
 	if (!evc)
 		return;
 
-	printk("\n%s: %16s %6s %16s %10s\n",
-	       modname, "FILE", "LINE", "FUNC", "ODOMETER");
+	printk("\n%s: %14s %6s %12s  %s\n",
+	       modname, "FILE", "LINE", "ODOMETER", "FUNC");
 
 	while (evc) {
 		file = strrchr(evc->evc_file, '/');
 		file = file ? file + 1 : evc->evc_file;
 
-		printk("%s: %16s %6d %16s %10lu\n",
-		       modname, file, evc->evc_line, evc->evc_func,
-		       (ulong)atomic64_read(&evc->evc_odometer));
+		printk("%s: %14s %6d %12lu  %s\n",
+		       modname, file, evc->evc_line,
+		       (ulong)atomic64_read(&evc->evc_odometer),
+		       evc->evc_func);
 
 		evc = evc->evc_next;
 	}
