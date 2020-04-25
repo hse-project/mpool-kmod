@@ -2104,7 +2104,7 @@ static merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 
 	for (i = 0; i < 2; ++i) {
 		err = mlog_find_get(mp, root_mlog_id[i], 1, NULL, &ml_desc);
-		if (!ev(err)) {
+		if (!err) {
 			mlog_put(mp, ml_desc);
 			continue;
 		}

@@ -9,30 +9,57 @@
 
 #include <mpcore/evc.h>
 
-static void evc_get_timestamp(atomic64_t *timestamp)
+static struct {
+	spinlock_t  lock;
+	struct evc *head;
+} evc_root;
+
+
+void evc_count(struct evc *evc)
 {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0)
-	ktime_t t;
-#define XXTIME t.tv64
-#else
-	u64 t;
-#define XXTIME t
-#endif
-	t = ktime_get_real();
-	atomic64_set(timestamp, XXTIME);
+	if (likely(atomic64_inc_return(&evc->evc_odometer) != 1u))
+		return;
+
+	spin_lock(&evc_root.lock);
+	if (!evc->evc_next) {
+		evc->evc_next = evc_root.head;
+		evc_root.head = evc;
+	}
+	spin_unlock(&evc_root.lock);
 }
 
 void evc_init(void)
 {
-	static struct evc evc __maybe_unused = {
-		.evc_odometer = ATOMIC_INIT(0),
-	};
+	spin_lock_init(&evc_root.lock);
+	evc_root.head = NULL;
 }
 
-void evc_count(struct evc *evc)
+/* TODO: Wire this up to a sysctl proc rather than module unload...
+ */
+void evc_fini(void)
 {
-	if (unlikely(atomic64_inc_return(&evc->evc_odometer) == 1)) {
-		/* TODO: to be implemented/enhanced */
-		evc_get_timestamp(&evc->evc_odometer_timestamp);
+	const char *modname = "mpool";
+	const char *file;
+	struct evc *evc;
+
+	spin_lock(&evc_root.lock);
+	evc = evc_root.head;
+	spin_unlock(&evc_root.lock);
+
+	if (!evc)
+		return;
+
+	printk("\n%s: %16s %6s %16s %10s\n",
+	       modname, "FILE", "LINE", "FUNC", "ODOMETER");
+
+	while (evc) {
+		file = strrchr(evc->evc_file, '/');
+		file = file ? file + 1 : evc->evc_file;
+
+		printk("%s: %16s %6d %16s %10lu\n",
+		       modname, file, evc->evc_line, evc->evc_func,
+		       (ulong)atomic64_read(&evc->evc_odometer));
+
+		evc = evc->evc_next;
 	}
 }

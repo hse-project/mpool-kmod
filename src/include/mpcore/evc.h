@@ -10,11 +10,11 @@
 #include <linux/cache.h>
 
 struct evc {
-	atomic64_t      evc_odometer;
-	atomic64_t      evc_odometer_timestamp;
-	atomic64_t      evc_trip_odometer_timestamp;
-	int             evc_trip_odometer;
-	u32             evc_flags;
+	atomic64_t  evc_odometer;
+	struct evc *evc_next;
+	const char *evc_file;
+	const char *evc_func;
+	int         evc_line;
 } ____cacheline_aligned;
 
 #define _evc_section       __attribute__((__section__("mpool_evc")))
@@ -23,15 +23,18 @@ struct evc {
 	({							\
 		static struct evc _evc _evc_section = {		\
 			.evc_odometer = ATOMIC_INIT(0),		\
-			.evc_trip_odometer = 0,			\
-			.evc_flags = 0,				\
+			.evc_next = NULL,			\
+			.evc_file = __FILE__,			\
+			.evc_func = __func__,			\
+			.evc_line = __LINE__,			\
 		};						\
 		typeof(_expr) _tmp = (_expr);			\
 								\
 		unlikely(_tmp) ? (evc_count(&_evc), _tmp) : _tmp;	\
 	})
 
-void evc_init(void);
 void evc_count(struct evc *evc);
+void evc_init(void);
+void evc_fini(void);
 
 #endif

@@ -214,7 +214,7 @@ static const struct mpc_uinfo mpc_uinfo_mpool = {
 static struct mpc_softstate   *mpc_softstate __read_mostly;
 
 static struct workqueue_struct *mpc_wq_trunc __read_mostly;
-static struct workqueue_struct *mpc_wq_rav[8] __read_mostly;
+static struct workqueue_struct *mpc_wq_rav[4] __read_mostly;
 static struct mpc_reap *mpc_reap __read_mostly;
 
 static size_t mpc_vma_cachesz[2] __read_mostly;
@@ -871,7 +871,7 @@ static void mpc_unit_put(struct mpc_unit *unit)
 	struct mpc_softstate   *ss;
 	bool                    destroyme;
 
-	if (ev(!unit))
+	if (!unit)
 		return;
 
 	ss = unit->un_ss;
@@ -1155,7 +1155,7 @@ static void mpc_vma_put(struct mpc_vma *vma)
 	/* Wait for all in-progress readaheads to complete
 	 * before we drop our mblock references.
 	 */
-	if (atomic_add_return(WQ_MAX_ACTIVE, &vma->mcm_rabusy) > 0)
+	if (atomic_add_return(WQ_MAX_ACTIVE, &vma->mcm_rabusy) > WQ_MAX_ACTIVE)
 		flush_workqueue(mpc_rgn2wq(vma->mcm_rgn));
 
 	for (i = 0; i < vma->mcm_mbinfoc; ++i)
@@ -1433,7 +1433,7 @@ static void mpc_readpages_cb(struct work_struct *work)
 	/* Synchronize with mpc_vma_put() to prevent dropping our
 	 * mblock references while there are reads in progress.
 	 */
-	if (atomic_inc_return(&meta->mcm_rabusy) > WQ_MAX_ACTIVE) {
+	if (ev(atomic_inc_return(&meta->mcm_rabusy) > WQ_MAX_ACTIVE)) {
 		err = merr(ENXIO);
 		goto errout;
 	}
@@ -1445,26 +1445,26 @@ static void mpc_readpages_cb(struct work_struct *work)
 
 	err = mblock_read(meta->mcm_mpdesc, args->a_mbdesc,
 			  iov, pagec, args->a_mboffset);
-	if (!err) {
-		atomic_dec(&meta->mcm_rabusy);
+	if (ev(err))
+		goto errout;
 
-		if (meta->mcm_hcpagesp)
-			atomic64_add(pagec, meta->mcm_hcpagesp);
-		atomic64_add(pagec, &meta->mcm_nrpages);
+	if (meta->mcm_hcpagesp)
+		atomic64_add(pagec, meta->mcm_hcpagesp);
+	atomic64_add(pagec, &meta->mcm_nrpages);
+	atomic_dec(&meta->mcm_rabusy);
 
-		for (i = 0; i < pagec; ++i) {
-			struct page *page = args->a_pagev[i];
+	for (i = 0; i < pagec; ++i) {
+		struct page *page = args->a_pagev[i];
 
-			SetPagePrivate(page);
-			set_page_private(page, (ulong)meta);
-			SetPageUptodate(page);
+		SetPagePrivate(page);
+		set_page_private(page, (ulong)meta);
+		SetPageUptodate(page);
 
-			unlock_page(page);
-			put_page(page);
-		}
-
-		return;
+		unlock_page(page);
+		put_page(page);
 	}
+
+	return;
 
 errout:
 	mp_pr_rl("mpool %s, vma %px, rgn %u, pagec %d, rabusy %d",
@@ -1527,13 +1527,13 @@ mpc_readpages(
 	meta = idr_find(&unit->un_metamap->mm_rgnmap, key);
 	rcu_read_unlock();
 
-	if (!meta)
+	if (ev(!meta))
 		return 0;
 
 	offset %= (1ul << mpc_vma_size_max);
 
 	mbnum = offset / meta->mcm_bktsz;
-	if (mbnum >= meta->mcm_mbinfoc)
+	if (ev(mbnum >= meta->mcm_mbinfoc))
 		return 0;
 
 	mbinfo = meta->mcm_mbinfov + mbnum;
@@ -2168,14 +2168,14 @@ mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_params *set)
 	if (params->mp_spare_cap != MPOOL_SPARES_INVALID) {
 		err = mpool_drive_spares(mp, MP_MED_CAPACITY,
 					 params->mp_spare_cap);
-		if (ev(err) && merr_errno(err) != ENOENT)
+		if (ev(err && merr_errno(err) != ENOENT))
 			rerr = err;
 	}
 
 	if (params->mp_spare_stg != MPOOL_SPARES_INVALID) {
 		err = mpool_drive_spares(mp, MP_MED_STAGING,
 					 params->mp_spare_stg);
-		if (ev(err) && merr_errno(err) != ENOENT)
+		if (ev(err && merr_errno(err) != ENOENT))
 			rerr = err;
 	}
 
@@ -4237,7 +4237,9 @@ static __init int mpc_init(void)
 	ss = NULL;
 
 	if (mpc_softstate)
-		return -EBUSY; /* Do not call error_counter() */
+		return -EBUSY;
+
+	evc_init();
 
 	mpc_units_max = clamp_t(uint, mpc_units_max, 8, 8192);
 	mpc_vma_max = clamp_t(uint, mpc_vma_max, 1024, 1u << 30);
@@ -4295,11 +4297,12 @@ static __init int mpc_init(void)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
-		char name[16];
+		int     maxactive = WQ_DFL_ACTIVE / ARRAY_SIZE(mpc_wq_rav);
+		char    name[16];
 
 		snprintf(name, sizeof(name), "mpc_wa_ra%d", i);
 
-		mpc_wq_rav[i] = alloc_workqueue(name, 0, 32);
+		mpc_wq_rav[i] = alloc_workqueue(name, 0, maxactive);
 		if (!mpc_wq_rav[i]) {
 			errmsg = "mpctl ra workqueue alloc failed";
 			err = merr(ENOMEM);
@@ -4467,6 +4470,8 @@ static __exit void mpc_exit(void)
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
 	mpc_bdi_free();
 #endif
+
+	evc_fini();
 }
 
 static const struct file_operations mpc_fops_default = {
