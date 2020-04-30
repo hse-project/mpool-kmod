@@ -16,8 +16,7 @@
 
 #include <mpcore/init.h>
 
-/* TODO: forward decls */
-struct shash_desc;
+extern struct crypto_shash *mpool_tfm;
 
 extern struct kmem_cache *ecio_layout_desc_cache;
 extern struct kmem_cache *ecio_layout_mlo_cache; /* mlog only */
@@ -31,23 +30,5 @@ extern struct bio_set mpool_bioset;
 #else
 extern struct bio_set *mpool_bioset;
 #endif
-
-/**
- * shash_desc_get() - Acquire a crc32c crypto descriptor from the pool
- *                    of crypto descriptors.
- *
- * The thread that calls shash_desc_get() must be the exact same thread
- * that calls shash_desc_put() for a given descriptor.
- *
- * Return: Pointer to a locked/referenced descriptor.
- */
-struct shash_desc *shash_desc_get(void);
-
-/**
- * shash_desc_put() -
- * @desc:
- *
- */
-void shash_desc_put(struct shash_desc *desc);
 
 #endif

@@ -690,23 +690,18 @@ merr_t omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf)
 
 merr_t omf_cksum_crc32c_le(const char *dbuf, u64 dlen, u8 *obuf)
 {
-	struct shash_desc  *desc;
+	SHASH_DESC_ON_STACK(desc, mpool_tfm);
 
-	int rval;
+	int rc;
 
 	memset(obuf, 0, 4);
 
-	desc = shash_desc_get();
-	if (!desc)
-		return merr(EINVAL);
+	desc->tfm = mpool_tfm;
+	desc->flags = 0;
 
-	rval = crypto_shash_init(desc) ||
-	       crypto_shash_update(desc, (u8 *)dbuf, dlen) ||
-	       crypto_shash_final(desc, obuf);
+	rc = crypto_shash_digest(desc, (u8 *)dbuf, dlen, obuf);
 
-	shash_desc_put(desc);
-
-	return rval ? merr(EINVAL) : 0;
+	return merr(rc);
 }
 
 /**
