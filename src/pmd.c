@@ -42,7 +42,7 @@ pmd_write_meta_to_latest_version(
 
 static void pmd_mda_init(struct mpool_descriptor *mp)
 {
-	int             sidx = 0;
+	int    sidx;
 
 	/*
 	 * Initialize all MDC_SLOTS entries so they are ready to use, excepting
@@ -206,19 +206,17 @@ static const char *msg_unavail2 __maybe_unused =
 static merr_t
 pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 {
-	merr_t                          err;
 	struct omf_mdcrec_data          cdr;
 	struct pmd_mdc_info            *cinfo = NULL;
-	u64                             buflen = 0;
-	size_t                          rlen = 0;
 	struct omf_devparm_descriptor   netdev[MP_MED_NUMBER] = { };
-	int                             i = 0;
-	u64                             pdh = 0;
 	enum mp_media_classp            mclassp;
-	u8                              ftmax = 0;
 	struct media_class             *mc;
-	int                             spzone[MP_MED_NUMBER];
+	size_t                          rlen = 0;
+	merr_t                          err;
+	u64                             pdh, buflen;
+	int                             spzone[MP_MED_NUMBER], i;
 	bool                            zombie[MPOOL_DRIVES_MAX];
+	u8                              ftmax;
 
 	cinfo = &mp->pds_mda.mdi_slotv[0];
 	buflen = OMF_MDCREC_PACKLEN_MAX;
@@ -466,26 +464,22 @@ static void pmd_mdc_rdlock(struct rw_semaphore *sem, u8 slot)
 
 static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 {
-	merr_t                          err = 0;
-	u64                             mdcmax = 0;
-	u16                             slotvcnt = 0;
-	int                             i = 0;
-	struct pmd_mdc_info            *cinfo = NULL;
-	struct ecio_layout_descriptor  *layout = NULL;
-	struct rb_node                 *node = NULL;
-	merr_t                          err1 = 0;
-	merr_t                          err2 = 0;
-	u64                             mdcn = 0;
-	u64                             logid1 = 0;
-	u64                             logid2 = 0;
+	struct pmd_mdc_info            *cinfo;
+	struct ecio_layout_descriptor  *layout;
+	struct rb_node                 *node;
+	merr_t                          err = 0, err1, err2;
+	u64                             mdcn, mdcmax = 0;
+	u64                             logid1, logid2;
 	u32                             lcnt[MDC_SLOTS];
+	u16                             slotvcnt;
+	int                             i;
 
 	/* initialize lcnt */
 	for (i = 0; i < MDC_SLOTS; i++)
 		lcnt[i] = 0;
 
 	/*
-	 * called during mpool activation and mdc alloc because a failed
+	 * Called during mpool activation and mdc alloc because a failed
 	 * mdc alloc can result in extraneous mdc mlog objects which if
 	 * found we attempt to clean-up here. when called during activation
 	 * we may need to adjust mp.mda. this is not so when called from
@@ -1909,10 +1903,10 @@ pmd_mdc0_meta_update(
 	struct mpool_descriptor       *mp,
 	struct ecio_layout_descriptor *layout)
 {
-	struct omf_sb_descriptor *sb;
-	struct mc_parms		  mc_parms;
-	struct mpool_dev_info    *pd;
-	merr_t err;
+	struct omf_sb_descriptor   *sb;
+	struct mc_parms             mc_parms;
+	struct mpool_dev_info      *pd;
+	merr_t                      err;
 
 	pd = &(mp->pds_pdv[layout->eld_ld.ol_pdh]);
 
@@ -2132,21 +2126,17 @@ pmd_mdc_alloc(
 	u64                         mincap,
 	u32                         iter)
 {
+	struct ecio_err_report	        erpt;
+	enum mp_media_classp	        mclassp;
+	struct pmd_obj_capacity         ocap;
+	struct pmd_mdc_info            *cinfo, *cinew;
+	struct ecio_layout_descriptor  *layout1, *layout2;
+	const char                     *msg = "(no detail)";
+
 	merr_t err;
-	u64    mdcslot = 0;
-	u64    logid1 = 0;
-	u64    logid2 = 0;
+	u64    mdcslot, logid1, logid2;
 	u32    pdcnt;
 	bool   reverse = false;
-
-	struct ecio_err_report	 erpt;
-	enum mp_media_classp	 mclassp;
-	struct pmd_obj_capacity  ocap;
-	struct pmd_mdc_info	*cinfo = NULL;
-	struct pmd_mdc_info	*cinew = NULL;
-	struct ecio_layout_descriptor *layout1 = NULL;
-	struct ecio_layout_descriptor *layout2 = NULL;
-	const char              *msg = "(no detail)";
 
 	/*
 	 * serialize to prevent gap in mdc slot space in event of failure
@@ -2232,6 +2222,7 @@ pmd_mdc_alloc(
 	 * Each mlog must meet mincap since only one is active at a
 	 * time.
 	 */
+	layout1 = NULL;
 	err = pmd_obj_alloc_cmn(mp, reverse ? logid2 : logid1, OMF_OBJ_MLOG,
 				&ocap, mclassp, 0, 0, &layout1);
 	if (ev(err)) {
@@ -2240,6 +2231,7 @@ pmd_mdc_alloc(
 		goto exit;
 	}
 
+	layout2 = NULL;
 	err = pmd_obj_alloc_cmn(mp, reverse ? logid1 : logid2, OMF_OBJ_MLOG,
 				&ocap, mclassp, 0, 0, &layout2);
 	if (ev(err)) {
@@ -2582,8 +2574,7 @@ pmd_layout_alloc(
 	enum smap_space_type            spctype;
 	struct mc_smap_parms            mcsp;
 
-	u64     zoneaddr;
-	u64     align;
+	u64     zoneaddr, align;
 	u8      pdh;
 	merr_t  err;
 
@@ -2973,45 +2964,28 @@ retry:
  *
  * Locking: no lock needs to be held when calling this function.
  *
+ * NOTES:
+ * - Skip non-active MDC
+ * - Accumulate total capacity, total garbage and total in-use capacity
+ *   across all active MDCs.
+ * - Return true if total used capacity across all MDCs is threshold and
+ *   garbage is < a threshold that would yield significant free space upon
+ *   compaction.
  */
 bool pmd_mdc_needed(struct mpool_descriptor *mp)
 {
 	struct pmd_mdc_info        *cinfo;
 	struct pre_compact_ctrs    *pco_cnt;
-	u64    cap;
-	u64    tcap;
-	u64    used;
-	u64    garbage;
-	u64    record;
-	u64    rec;
-	u64    cobj;
-	u32    pct;
-	u32    pctg;
-	u32    mdccnt;
+
+	u64    cap, tcap, used, garbage, record, rec, cobj;
+	u32    pct, pctg, mdccnt;
 	u16    cslot;
-
-
-	/*
-	 * - There is room for new MDCs to be created
-	 * - Skip non-active MDC
-	 * - Accumulate total capacity, total garbage and total in-use
-	 *   capacity across all active MDCs.
-	 * - Return true if total used capacity across all MDCs is
-	 *    > threshold and garbage is < a threshold that would yield
-	 *    significant free space upon compaction.
-	 */
 
 	cap = used = garbage = record = pctg = 0;
 
 	assert(mp->pds_mda.mdi_slotvcnt <= MDC_SLOTS);
-	if (mp->pds_mda.mdi_slotvcnt == MDC_SLOTS) {
-		merr_t err = merr(ENOSPC);
-
-		mp_pr_debug("mpool %s is at MAX %u MDCs",
-			    err, mp->pds_name, mp->pds_mda.mdi_slotvcnt);
+	if (mp->pds_mda.mdi_slotvcnt == MDC_SLOTS)
 		return false;
-	}
-
 
 	for (cslot = 1, mdccnt = 0; cslot < mp->pds_mda.mdi_slotvcnt; cslot++) {
 
@@ -3117,18 +3091,11 @@ static int pmd_compare_free_space(const void *first, const void *second)
 static void
 pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slotnum)
 {
-	struct mdc_credit_set  *cset;
-	struct mdc_credit_set  *cs;
+	struct mdc_credit_set  *cset, *cs;
 	struct pmd_mdc_info    *cinfo;
-	u8     csidx;
-	u8     csmidx;
-	u8     num_cset;
-	u8     i;
-	u16    refcredit;
-	u16    neededcredit;
-	u16    tidx;
-	u16    totalcredit = 0;
 
+	u8     csidx, csmidx, num_cset, i;
+	u16    refcredit, neededcredit, tidx, totalcredit = 0;
 
 	cset = kcalloc(num_mdc, sizeof(*cset), GFP_KERNEL);
 	if (!cset)
@@ -3140,46 +3107,40 @@ pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slotnum)
 	csidx = 0; /* creditset index */
 	i     = 0; /* slotnum index   */
 	while (i < num_mdc) {
-
 		cs = &cset[csidx++];
 		neededcredit = refcredit;
 
 		csmidx = 0;
 		/* setup members of the credit set */
 		while (csmidx < MPOOL_MDC_SET_SZ  && i < num_mdc) {
-
 			/* slot 0 should never be there */
 			assert(slotnum[i] != 0);
+
 			cinfo = &mp->pds_mda.mdi_slotv[slotnum[i]];
-			cs->cs_num_csm    = csmidx+1;
+			cs->cs_num_csm = csmidx + 1;
 			cs->csm[csmidx].m_slot = slotnum[i];
 
-
 			if (neededcredit <= cinfo->mmi_credit.ci_credit) {
-				/* more than required credit is available,
+				/* More than required credit is available,
 				 * leftover will be assigned to the next set.
 				 */
 				cs->csm[csmidx].m_credit    += neededcredit;
 				cinfo->mmi_credit.ci_credit -= neededcredit;
 				totalcredit += neededcredit; /* Debug */
 				neededcredit = 0;
+
+				/* Some credit available stay at this mdc */
 				if (cinfo->mmi_credit.ci_credit == 0)
 					i++;
-
-				/* some credit available stay at this mdc */
-
 				break;
-
 			} else {
-
-				/* available credit is < needed, assign all
+				/* Available credit is < needed, assign all
 				 * the available credit and move to the next
 				 * mdc slot.
 				 */
 				cs->csm[csmidx].m_credit +=
-						cinfo->mmi_credit.ci_credit;
-				neededcredit -=
-						 cinfo->mmi_credit.ci_credit;
+					cinfo->mmi_credit.ci_credit;
+				neededcredit -= cinfo->mmi_credit.ci_credit;
 				totalcredit  += cinfo->mmi_credit.ci_credit;
 				cinfo->mmi_credit.ci_credit = 0;
 
@@ -3196,7 +3157,6 @@ pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slotnum)
 	csidx = 0;
 	while (tidx < MDC_TBL_SZ) {
 		cs = &cset[csidx];
-
 		if (cs->cs_idx < cs->cs_num_csm) {
 			csmidx = cs->cs_idx;
 			if (cs->csm[csmidx].m_credit) {
@@ -3234,24 +3194,15 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 	struct pmd_mdc_info        *cinfo;
 	struct pre_compact_ctrs    *pco_cnt;
 
-	u8       sidx;
-	u8       nidx;
-	u8       num_mdc;
-	u16      credit;
-	u16      cslot;
-	u64      cap;
-	u64      used;
-	u64      free;
-	u64      nmtoc;
-	u8       slotnum[16] = { 0 };
+	u64      cap, used, free, nmtoc;
+	u16      credit, cslot;
+	u8       sidx, nidx, num_mdc;
+	u8       slotnum[MDC_SLOTS] = { 0 };
 	void   **sarray = mp->pds_mda.mdi_sel.mds_smdc;
 	u32      nbnoalloc = (u32)mp->pds_params.mp_pconbnoalloc;
 
-	/* assert(!spin_is_locked(&mp->pds_mda.mdi_slotvlock)); */
-
 	if (mp->pds_mda.mdi_slotvcnt < 2) {
-		mp_pr_warn("ENTER MDCn cnt %u NO MDCn",
-			   mp->pds_mda.mdi_slotvcnt - 1);
+		mp_pr_warn("Not enough MDCn %u", mp->pds_mda.mdi_slotvcnt - 1);
 		return;
 	}
 
@@ -3273,7 +3224,7 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 
 		num_mdc = mp->pds_mda.mdi_slotvcnt - 1;
 		cslot  = 1;
-		mp_pr_debug("ENTER MDCn cnt %u, CANNOT skip %u num_mdc %u",
+		mp_pr_debug("MDCn cnt %u, cannot skip %u num_mdc %u",
 			    err, mp->pds_mda.mdi_slotvcnt - 1,
 			    (u32)nmtoc, num_mdc);
 	} else {
@@ -3284,7 +3235,6 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 
 	/* Walkthrough all MDCs and exclude MDCs that are almost full */
 	for (nidx = 0, sidx = 0; nidx < num_mdc; nidx++) {
-
 		cslot = cslot % (mp->pds_mda.mdi_slotvcnt - 1) + 1;
 
 		if (cslot == 0)
@@ -3308,15 +3258,7 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 	/* Sort the array with decreasing order of space */
 	sort((void *)sarray, sidx,
 			 sizeof(sarray[0]), pmd_compare_free_space, NULL);
-
-	/* Count of valid MDCs in the array but no more than
-	 * MPOOL_MDC_SET_SZ. All the testing prior to this implementation
-	 * has been done with MDCs MPOOL_MDC_SET_SZ-3 therefore sticking
-	 * with MPOOL_MDC_SET_SZ for now. A larger set can be considered
-	 * later.
-	 */
-	num_mdc = min_t(u8, sidx, MPOOL_MDC_SET_SZ);
-
+	num_mdc = sidx;
 
 	/* Calculate total free space across the chosen MDC set */
 	for (sidx = 0, free = 0; sidx < num_mdc; sidx++) {
@@ -3329,7 +3271,6 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 	 * will not exceed the total slots in mds_tbl
 	 */
 	for (sidx = 0, credit = 0; sidx < num_mdc; sidx++) {
-
 		cinfo = &mp->pds_mda.mdi_slotv[slotnum[sidx]];
 		cinfo->mmi_credit.ci_credit = (MDC_TBL_SZ *
 					cinfo->mmi_credit.ci_free) / free;
@@ -3341,7 +3282,6 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 	 * credits so table can be filled all the way.
 	 */
 	if (credit < MDC_TBL_SZ) {
-
 		credit = MDC_TBL_SZ - credit;
 
 		sidx = 0;
@@ -3370,18 +3310,14 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 
 void pmd_mdc_alloc_set(struct mpool_descriptor *mp)
 {
-	u8       mdc_cnt;
-	u8       sidx;
+	u8       mdc_cnt, sidx;
 	merr_t   err;
-
-	/* assert(!spin_is_locked(&mp->pds_mda.mdi_slotvlock)); */
 
 	/* MDCs are created in multiple of MPOOL_MDC_SET_SZ.
 	 * However, if past allocation had failed there may not be an
 	 * even multiple of MDCs in that case create any remaining
 	 * MDCs to get an even multiple.
 	 */
-
 	mdc_cnt =  MPOOL_MDC_SET_SZ -
 			((mp->pds_mda.mdi_slotvcnt - 1) % MPOOL_MDC_SET_SZ);
 
@@ -3427,8 +3363,8 @@ static bool pmd_need_compact(
 	struct pre_compact_ctrs    *pco_cnt;
 	struct pmd_mdc_info        *cinfo;
 
-	u64 rec, cobj, len, cap;
-	u32 garbage, pct;
+	u64    rec, cobj, len, cap;
+	u32    garbage, pct;
 
 	assert(cslot > 0);
 
@@ -3440,10 +3376,8 @@ static bool pmd_need_compact(
 		return false; /* MDC closed for now. */
 
 	len = atomic64_read(&pco_cnt->pcc_len);
-	rec = atomic_read(&pco_cnt->pcc_cr) +
-		atomic_read(&pco_cnt->pcc_up) +
-		atomic_read(&pco_cnt->pcc_del) +
-		atomic_read(&pco_cnt->pcc_er);
+	rec = atomic_read(&pco_cnt->pcc_cr) + atomic_read(&pco_cnt->pcc_up) +
+		atomic_read(&pco_cnt->pcc_del) + atomic_read(&pco_cnt->pcc_er);
 	cobj = atomic_read(&pco_cnt->pcc_cobj);
 
 	pct = (len * 100) / cap;
@@ -3464,7 +3398,7 @@ static bool pmd_need_compact(
 	}
 
 	if (garbage < mp->pds_params.mp_pcopctgarbage)
-		return false; /* Insufficient garbage to compact */
+		return false;
 
 	if (msgbuf)
 		snprintf(msgbuf, msgsz,
@@ -3582,13 +3516,12 @@ pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 cap)
 {
 	struct pre_compact_ctrs    *pco_cnt;
 	struct pmd_mdc_info        *cinfo;
-	int ret;
-	u8  cslot; /* MDCi index, aka "i" */
 
+	int    ret;
+	u8     cslot;
 
 	ret = pmd_mlogid2cslot(objid);
 	if (ret <= 0)
-		/* Nothing to record, not a MDC1/255 */
 		return;
 
 	cslot = ret;
@@ -3643,10 +3576,11 @@ pmd_write_meta_to_latest_version(
 {
 	struct pmd_mdc_info *cinfo;
 	struct pmd_mdc_info *cinfo_converted = NULL;
-	char	buf1[MAX_MDCCVERSTR] __maybe_unused;
-	char	buf2[MAX_MDCCVERSTR] __maybe_unused;
-	merr_t	err;
-	u32	cslot;
+
+	char   buf1[MAX_MDCCVERSTR] __maybe_unused;
+	char   buf2[MAX_MDCCVERSTR] __maybe_unused;
+	merr_t err;
+	u32    cslot;
 
 	/*
 	 * Compact MDC0 first (before MDC1-255 compaction appends in MDC0) to
@@ -3668,13 +3602,11 @@ pmd_write_meta_to_latest_version(
 		upg_mdccver2str(upg_mdccver_latest(), buf2, sizeof(buf2));
 
 		if (!permitted) {
-			const char *com1 =
-				upg_mdccver_comment(&cinfo->mmi_mdccver);
-			const char *com2 = upg_mdccver_latest_comment();
-
 			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 				     "metadata upgrade needed from version %s (%s) to %s (%s)",
-				     buf1, com1, buf2, com2);
+				     buf1,
+				     upg_mdccver_comment(&cinfo->mmi_mdccver),
+				     buf2, upg_mdccver_latest_comment());
 
 			err = merr(EPERM);
 			mp_pr_err("mpool %s, MDC%u upgrade needed from version %s to %s",
