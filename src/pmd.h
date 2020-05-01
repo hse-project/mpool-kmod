@@ -636,45 +636,34 @@ pmd_obj_put(
 
 /**
  * pmd_obj_rdlock() - Read-lock object layout with appropriate nesting level.
- * @mp:
  * @layout:
- *
  */
 void
 pmd_obj_rdlock(
-	struct mpool_descriptor        *mp,
 	struct ecio_layout_descriptor  *layout);
 
 /**
  * pmd_obj_rdunlock() - Release read lock on object layout.
- * @mp:
  * @layout:
- *
  */
 void
 pmd_obj_rdunlock(
-	struct mpool_descriptor        *mp,
 	struct ecio_layout_descriptor  *layout);
+
 /**
  * pmd_obj_wrlock() - Write-lock object layout with appropriate nesting level.
- * @mp:
  * @layout:
- *
  */
 void
 pmd_obj_wrlock(
-	struct mpool_descriptor         *mp,
 	struct ecio_layout_descriptor   *layout);
 
 /**
  * pmd_obj_wrunlock() - Release write lock on object layout.
- * @mp:
  * @layout:
- *
  */
 void
 pmd_obj_wrunlock(
-	struct mpool_descriptor        *mp,
 	struct ecio_layout_descriptor  *layout);
 
 /**

@@ -1625,9 +1625,9 @@ pmd_obj_commit(
 	if (!objtype_user(objid_type(layout->eld_objid)))
 		return merr(EINVAL);
 
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 	if (layout->eld_state & ECIO_LYT_COMMITTED) {
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 		return 0;
 	}
 
@@ -1689,7 +1689,7 @@ pmd_obj_commit(
 	}
 
 	pmd_mdc_unlock(&cinfo->mmi_compactlock);
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	if (!err)
 		pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_COMMIT);
@@ -1765,7 +1765,7 @@ pmd_obj_abort(
 	cinfo = &mp->pds_mda.mdi_slotv[cslot];
 	found = NULL;
 
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 
 	pmd_mdc_lock(&cinfo->mmi_uncolock, cslot);
 	refcnt = atomic64_read(&layout->eld_refcnt);
@@ -1779,7 +1779,7 @@ pmd_obj_abort(
 	}
 	pmd_mdc_unlock(&cinfo->mmi_uncolock);
 
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	if (!found)
 		return merr(refcnt > 2 ? EBUSY : EINVAL);
@@ -1830,7 +1830,7 @@ pmd_obj_delete(
 	 * removing object from the list of committed objects to prevent
 	 * race with MDC compaction
 	 */
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 	pmd_mdc_lock(&cinfo->mmi_compactlock, cslot);
 
 	pmd_mdc_wrlock(&cinfo->mmi_colock, cslot);
@@ -1846,7 +1846,7 @@ pmd_obj_delete(
 
 	if (!found) {
 		pmd_mdc_unlock(&cinfo->mmi_compactlock);
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		return merr(refcnt > 2 ? EBUSY : EINVAL);
 	}
@@ -1861,7 +1861,7 @@ pmd_obj_delete(
 	}
 
 	pmd_mdc_unlock(&cinfo->mmi_compactlock);
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	if (!found) {
 		mp_pr_rl("mpool %s, objid 0x%lx, pmd_log_del failed",
@@ -2087,13 +2087,9 @@ pmd_obj_find_get(
 
 /*
  * Nesting levels for layout rwlock.
- *
- * The mpool_descriptor is passed as an argument to pmd_obj_*lock/unlock
- * routines in prep for moving to a lock pool(for layout rw lock).
  */
 void
 pmd_obj_rdlock(
-	struct mpool_descriptor        *mp,
 	struct ecio_layout_descriptor  *layout)
 {
 	if (objid_slot(layout->eld_objid))
@@ -2106,7 +2102,6 @@ pmd_obj_rdlock(
 
 void
 pmd_obj_rdunlock(
-	struct mpool_descriptor        *mp,
 	struct ecio_layout_descriptor  *layout)
 {
 	up_read(layout->eld_rwlock);
@@ -2114,7 +2109,6 @@ pmd_obj_rdunlock(
 
 void
 pmd_obj_wrlock(
-	struct mpool_descriptor        *mp,
 	struct ecio_layout_descriptor  *layout)
 {
 	if (objid_slot(layout->eld_objid))
@@ -2127,7 +2121,6 @@ pmd_obj_wrlock(
 
 void
 pmd_obj_wrunlock(
-	struct mpool_descriptor        *mp,
 	struct ecio_layout_descriptor  *layout)
 {
 	up_write(layout->eld_rwlock);
@@ -2261,8 +2254,8 @@ pmd_mdc_alloc(
 	 * empty; mlogs not committed so pmd_obj_erase()
 	 * not needed to make atomic.
 	 */
-	pmd_obj_wrlock(mp, layout1);
-	pmd_obj_wrlock(mp, layout2);
+	pmd_obj_wrlock(layout1);
+	pmd_obj_wrlock(layout2);
 	err = ecio_mlog_erase(mp, layout1, 0, &erpt);
 	if (err) {
 		msg = "erase of first mlog failed";
@@ -2271,8 +2264,8 @@ pmd_mdc_alloc(
 		if (err)
 			msg = "erase of second mlog failed";
 	}
-	pmd_obj_wrunlock(mp, layout2);
-	pmd_obj_wrunlock(mp, layout1);
+	pmd_obj_wrunlock(layout2);
+	pmd_obj_wrunlock(layout1);
 	if (ev(err)) {
 		pmd_obj_abort(mp, layout1);
 		pmd_obj_abort(mp, layout2);

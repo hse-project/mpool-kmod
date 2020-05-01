@@ -152,11 +152,11 @@ mlog_alloc_cmn(
 	 * erase in-line; mlog not committed so pmd_obj_erase()
 	 * not needed to make atomic
 	 */
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 	err = ecio_mlog_erase(mp, layout, 0, &erpt);
 	if (!ev(err))
 		mlog_getprops_cmn(mp, layout, prop);
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	if (err) {
 		pmd_obj_abort(mp, layout);
@@ -249,9 +249,9 @@ mlog_find_get(
 		return merr(ENOENT);
 
 	if (prop) {
-		pmd_obj_rdlock(mp, layout);
+		pmd_obj_rdlock(layout);
 		mlog_getprops_cmn(mp, layout, prop);
-		pmd_obj_rdunlock(mp, layout);
+		pmd_obj_rdunlock(layout);
 	}
 
 	*mlh = layout2mlog(layout);
@@ -469,7 +469,7 @@ merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 		return merr(EINVAL);
 
 	/* remove from open list and discard buffered log data */
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 	if (layout->eld_lstat) {
 		struct ecio_layout_descriptor *found_l;
 
@@ -482,7 +482,7 @@ merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 		mlog_stat_free(layout);
 	}
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	return pmd_obj_delete(mp, layout);
 }
@@ -709,12 +709,12 @@ mlog_stat_reinit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	if (!layout)
 		return merr(EINVAL);
 
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 
 	lstat = (struct mlog_stat *)layout->eld_lstat;
 	if (!lstat) {
 		/* Nothing to free, erase called on a closed mlog */
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		return 0;
 	}
@@ -724,7 +724,7 @@ mlog_stat_reinit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 	mlog_stat_init_common(layout, lstat);
 
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	return 0;
 }
@@ -812,14 +812,11 @@ mlog_rw_raw(
 	if (!layout)
 		return merr(EINVAL);
 
-	pmd_obj_wrlock(mp, layout);
-
+	pmd_obj_wrlock(layout);
 	err = mlog_rw_internal(mp, mlh, iov, iovcnt, boff, rw);
-	ev(err);
+	pmd_obj_wrunlock(layout);
 
-	pmd_obj_wrunlock(mp, layout);
-
-	return err;
+	return ev(err);
 }
 
 /**
@@ -1450,7 +1447,7 @@ mlog_open(
 
 	*gen = 0;
 
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 
 	flags &= MLOG_OF_SKIP_SER | MLOG_OF_COMPACT_SEM;
 
@@ -1464,32 +1461,33 @@ mlog_open(
 		/* log already open */
 		lstat = (struct mlog_stat *)layout->eld_lstat;
 		if (csem && !lstat->lst_csem) {
+			pmd_obj_wrunlock(layout);
+
 			/* re-open has inconsistent csem flag */
-			pmd_obj_wrunlock(mp, layout);
 			err = merr(EINVAL);
 			mp_pr_err("mpool %s, re-opening of mlog 0x%lx, inconsistent compaction setting %u %u",
 				  err, mp->pds_name, (ulong)layout->eld_objid,
 				  csem, lstat->lst_csem);
 		} else if (skip_ser &&
 				!(layout->eld_flags & MLOG_OF_SKIP_SER)) {
-			pmd_obj_wrunlock(mp, layout);
-			err = merr(EINVAL);
+			pmd_obj_wrunlock(layout);
 
 			/* re-open has inconsistent seralization flag */
+			err = merr(EINVAL);
 			mp_pr_err("mpool %s, re-opening of mlog 0x%lx, inconsistent serialization setting %u %u",
 				  err, mp->pds_name, (ulong)layout->eld_objid,
 				  skip_ser,
 				  layout->eld_flags & MLOG_OF_SKIP_SER);
 		} else {
 			*gen = layout->eld_gen;
-			pmd_obj_wrunlock(mp, layout);
+			pmd_obj_wrunlock(layout);
 		}
 		return err;
 	}
 
 	if (!(layout->eld_state & ECIO_LYT_COMMITTED)) {
 		*gen = 0;
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		err = merr(EINVAL);
 		mp_pr_err("mpool %s, mlog 0x%lx, not committed",
@@ -1503,7 +1501,7 @@ mlog_open(
 	err = mlog_stat_init(mp, mlh, csem);
 	if (err) {
 		*gen = 0;
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		mp_pr_err("mpool %s, mlog 0x%lx, mlog status initialization failed",
 			  err, mp->pds_name, (ulong)layout->eld_objid);
@@ -1516,7 +1514,7 @@ mlog_open(
 	err = mlog_read_and_validate(mp, layout, &lempty, &erpt);
 	if (err) {
 		mlog_stat_free(layout);
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		mp_pr_err("mpool %s, mlog 0x%lx, mlog content validation failed",
 			  err, mp->pds_name, (ulong)layout->eld_objid);
@@ -1524,14 +1522,16 @@ mlog_open(
 	} else if (!lempty && csem) {
 		if (!lstat->lst_cstart) {
 			mlog_stat_free(layout);
-			pmd_obj_wrunlock(mp, layout);
+			pmd_obj_wrunlock(layout);
+
 			err = merr(ENODATA);
 			mp_pr_err("mpool %s, mlog 0x%lx, compaction start missing",
 				  err, mp->pds_name, (ulong)layout->eld_objid);
 			return err;
 		} else if (!lstat->lst_cend) {
 			mlog_stat_free(layout);
-			pmd_obj_wrunlock(mp, layout);
+			pmd_obj_wrunlock(layout);
+
 			/* incomplete compaction */
 			err = merr(EMSGSIZE);
 			mp_pr_err("mpool %s, mlog 0x%lx, incomplete compaction",
@@ -1545,7 +1545,7 @@ mlog_open(
 	objid_to_layout_insert_oml(&mp->pds_oml, layout);
 	mutex_unlock(&mp->pds_omlock);
 
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	return err;
 }
@@ -2044,13 +2044,13 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	 */
 	pmd_precompact_alsz(mp, layout->eld_objid, 0, 0);
 
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 
 	lstat = (struct mlog_stat *)layout->eld_lstat;
 
 	if (!lstat) {
 		/* Log already closed */
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		return 0;
 	}
@@ -2079,7 +2079,7 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	/* Reset Mlog flags */
 	layout->eld_flags &= (~MLOG_OF_SKIP_SER);
 
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	return err;
 }
@@ -2101,12 +2101,12 @@ merr_t mlog_flush(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	if (!layout)
 		return merr(EINVAL);
 
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 
 	lstat = (struct mlog_stat *)layout->eld_lstat;
 
 	if (!lstat) {
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 		return merr(EINVAL);
 	}
 
@@ -2116,7 +2116,7 @@ merr_t mlog_flush(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 		lstat->lst_abdirty = false;
 	}
 
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	return err;
 }
@@ -2138,9 +2138,9 @@ mlog_gen(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *gen)
 	if (!layout)
 		return merr(EINVAL);
 
-	pmd_obj_rdlock(mp, layout);
+	pmd_obj_rdlock(layout);
 	*gen = layout->eld_gen;
-	pmd_obj_rdunlock(mp, layout);
+	pmd_obj_rdunlock(layout);
 
 	return 0;
 }
@@ -2167,7 +2167,7 @@ mlog_empty(
 	if (!layout)
 		return merr(EINVAL);
 
-	pmd_obj_rdlock(mp, layout);
+	pmd_obj_rdlock(layout);
 
 	if (layout->eld_lstat) {
 		lstat = (struct mlog_stat *)layout->eld_lstat;
@@ -2178,7 +2178,7 @@ mlog_empty(
 		err = merr(ENOENT);
 	}
 
-	pmd_obj_rdunlock(mp, layout);
+	pmd_obj_rdunlock(layout);
 
 	if (err)
 		mp_pr_err("mpool %s, determining if mlog 0x%lx is empty, inconsistency: no mlog status",
@@ -2206,7 +2206,7 @@ mlog_len(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *len)
 	if (!layout)
 		return merr(EINVAL);
 
-	pmd_obj_rdlock(mp, layout);
+	pmd_obj_rdlock(layout);
 
 	lstat = layout->eld_lstat;
 	if (lstat)
@@ -2215,7 +2215,7 @@ mlog_len(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *len)
 	else
 		err = merr(ENOENT);
 
-	pmd_obj_rdunlock(mp, layout);
+	pmd_obj_rdunlock(layout);
 
 	if (err)
 		mp_pr_err("mpool %s, determining mlog 0x%lx bytes consumed, inconsistency: no mlog status",
@@ -2248,11 +2248,11 @@ mlog_erase(
 	if (!layout)
 		return merr(EINVAL);
 
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 
 	/* must be committed to log erase start/end markers */
 	if (!(layout->eld_state & ECIO_LYT_COMMITTED)) {
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		err = merr(EINVAL);
 		mp_pr_err("mpool %s, erasing mlog 0x%lx, mlog not committed",
@@ -2265,7 +2265,7 @@ mlog_erase(
 	/* if successful updates state and gen in layout */
 	err = pmd_obj_erase(mp, layout, newgen);
 	if (err) {
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		mp_pr_err("mpool %s, erasing mlog 0x%lx, logging erase start failed",
 			  err, mp->pds_name, (ulong)layout->eld_objid);
@@ -2294,7 +2294,7 @@ mlog_erase(
 		mlog_stat_init_common(layout, lstat);
 	}
 
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	return err;
 }
@@ -2442,11 +2442,11 @@ mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	if (!layout)
 		return merr(EINVAL);
 
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 
 	lstat = layout->eld_lstat;
 	if (!lstat) {
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		err = merr(ENOENT);
 		mp_pr_err("mpool %s, in mlog 0x%lx, inconsistency: no mlog status",
@@ -2455,7 +2455,7 @@ mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	}
 
 	if (!lstat->lst_csem || lstat->lst_cstart) {
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		err = merr(EINVAL);
 		mp_pr_err("mpool %s, in mlog 0x%lx, inconsistent state %u %u",
@@ -2466,7 +2466,7 @@ mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 	err = mlog_append_marker(mp, layout, OMF_LOGREC_CSTART);
 	if (err) {
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		mp_pr_err("mpool %s, in mlog 0x%lx, marker append failed",
 			  err, mp->pds_name, (ulong)layout->eld_objid);
@@ -2474,7 +2474,7 @@ mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	}
 
 	lstat->lst_cstart = 1;
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	return 0;
 }
@@ -2498,11 +2498,11 @@ mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	if (!layout)
 		return merr(EINVAL);
 
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 
 	lstat = layout->eld_lstat;
 	if (!lstat) {
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		err =  merr(ENOENT);
 		mp_pr_err("mpool %s, mlog 0x%lx, inconsistency: no mlog status",
@@ -2511,7 +2511,7 @@ mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	}
 
 	if (!lstat->lst_csem || !lstat->lst_cstart || lstat->lst_cend) {
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		err = merr(EINVAL);
 		mp_pr_err("mpool %s, mlog 0x%lx, inconsistent state %u %u %u",
@@ -2523,7 +2523,7 @@ mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 	err = mlog_append_marker(mp, layout, OMF_LOGREC_CEND);
 	if (err) {
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 		mp_pr_err("mpool %s, mlog 0x%lx, marker append failed",
 			  err, mp->pds_name, (ulong)layout->eld_objid);
@@ -2531,7 +2531,7 @@ mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	}
 
 	lstat->lst_cend = 1;
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	return 0;
 }
@@ -2745,7 +2745,7 @@ mlog_append_datav(
 		skip_ser = true;
 
 	if (!skip_ser)
-		pmd_obj_wrlock(mp, layout);
+		pmd_obj_wrlock(layout);
 
 	lstat = (struct mlog_stat *)layout->eld_lstat;
 
@@ -2777,7 +2777,7 @@ mlog_append_datav(
 
 	if (ev(err)) {
 		if (!skip_ser)
-			pmd_obj_wrunlock(mp, layout);
+			pmd_obj_wrunlock(layout);
 		return err;
 	}
 
@@ -2794,7 +2794,7 @@ mlog_append_datav(
 	}
 
 	if (!skip_ser)
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 	return err;
 }
@@ -2839,7 +2839,7 @@ mlog_read_data_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 	lstat = layout->eld_lstat;
 
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 
 	if (!lstat) {
 		err = merr(ENOENT);
@@ -2849,7 +2849,7 @@ mlog_read_data_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 		mlog_read_iter_init(layout, lstat, lri);
 	}
 
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
 	return err;
 }
@@ -3200,7 +3200,7 @@ mlog_read_data_next_impl(
 	 * for concurrent readers.
 	 */
 	if (!skip_ser)
-		pmd_obj_wrlock(mp, layout);
+		pmd_obj_wrlock(layout);
 
 	lstat = (struct mlog_stat *)layout->eld_lstat;
 
@@ -3210,7 +3210,7 @@ mlog_read_data_next_impl(
 
 		if (!lri->lri_valid) {
 			if (!skip_ser)
-				pmd_obj_wrunlock(mp, layout);
+				pmd_obj_wrunlock(layout);
 
 			err = merr(EINVAL);
 			mp_pr_err("mpool %s, mlog 0x%lx, invalid iterator",
@@ -3242,7 +3242,7 @@ mlog_read_data_next_impl(
 
 	if (err) {
 		if (!skip_ser)
-			pmd_obj_wrunlock(mp, layout);
+			pmd_obj_wrunlock(layout);
 		if (merr_errno(err) == ENOMSG) {
 			err = 0;
 			if (rdlen)
@@ -3264,7 +3264,7 @@ mlog_read_data_next_impl(
 		if (err) {
 			if (merr_errno(err) == ENOMSG) {
 				if (!skip_ser)
-					pmd_obj_wrunlock(mp, layout);
+					pmd_obj_wrunlock(layout);
 				err = 0;
 				if (rdlen)
 					*rdlen = 0;
@@ -3399,7 +3399,7 @@ mlog_read_data_next_impl(
 		lri->lri_valid = 0;
 
 	if (!skip_ser)
-		pmd_obj_wrunlock(mp, layout);
+		pmd_obj_wrunlock(layout);
 
 	return err;
 }
@@ -3503,9 +3503,9 @@ mlog_get_props(
 	if (!layout)
 		return merr(EINVAL);
 
-	pmd_obj_rdlock(mp, layout);
+	pmd_obj_rdlock(layout);
 	mlog_getprops_cmn(mp, layout, prop);
-	pmd_obj_rdunlock(mp, layout);
+	pmd_obj_rdunlock(layout);
 
 	return 0;
 }
@@ -3529,7 +3529,7 @@ mlog_get_props_ex(
 	if (!layout)
 		return merr(EINVAL);
 
-	pmd_obj_rdlock(mp, layout);
+	pmd_obj_rdlock(layout);
 
 	mlog_getprops_cmn(mp, layout, &prop->lpx_props);
 	prop->lpx_zonecnt    = layout->eld_ld.ol_zcnt;
@@ -3538,7 +3538,7 @@ mlog_get_props_ex(
 	prop->lpx_totsec    = ecio_obj_get_cap_from_layout(mp, layout)
 							>> prop->lpx_secshift;
 
-	pmd_obj_rdunlock(mp, layout);
+	pmd_obj_rdunlock(layout);
 
 	return 0;
 }

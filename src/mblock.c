@@ -135,9 +135,9 @@ mblock_alloc_cmn(
 		return merr(EBUG);
 
 	if (prop) {
-		pmd_obj_rdlock(mp, layout);
+		pmd_obj_rdlock(layout);
 		mblock_getprops_cmn(mp, layout, prop);
-		pmd_obj_rdunlock(mp, layout);
+		pmd_obj_rdunlock(layout);
 	}
 
 	*mbh = layout2mblock(layout);
@@ -191,9 +191,9 @@ mblock_find_get(
 		return merr(ENOENT);
 
 	if (prop) {
-		pmd_obj_rdlock(mp, layout);
+		pmd_obj_rdlock(layout);
 		mblock_getprops_cmn(mp, layout, prop);
-		pmd_obj_rdunlock(mp, layout);
+		pmd_obj_rdunlock(layout);
 	}
 
 	*mbh = layout2mblock(layout);
@@ -258,11 +258,11 @@ mblock_is_committed(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 	if (!layout)
 		return 0;
 
-	pmd_obj_rdlock(mp, layout);
+	pmd_obj_rdlock(layout);
 	if (layout->eld_state & ECIO_LYT_COMMITTED)
 		answer = 1;
 
-	pmd_obj_rdunlock(mp, layout);
+	pmd_obj_rdunlock(layout);
 
 	return answer;
 }
@@ -321,19 +321,13 @@ mblock_write(
 		return merr(EINVAL);
 	}
 
-	pmd_obj_wrlock(mp, layout);
+	pmd_obj_wrlock(layout);
 	state = layout->eld_state;
 	if (!(state & ECIO_LYT_COMMITTED))
 		err = ecio_mblock_write(mp, layout, iov, iovcnt, &erpt, &tdata);
-	pmd_obj_wrunlock(mp, layout);
+	pmd_obj_wrunlock(layout);
 
-	if (ev(state & ECIO_LYT_COMMITTED)) {
-		err = merr(EALREADY);
-		mp_pr_rl("mpool %s, mblock 0x%lx committed 0x%lx",
-			 err, mp->pds_name, (ulong)layout->eld_objid, state);
-	}
-
-	return err;
+	return (!(state & ECIO_LYT_COMMITTED)) ? err : merr(EALREADY);
 }
 
 merr_t
@@ -364,19 +358,13 @@ mblock_read(
 	 * against a rebuild.
 	 * mblock writes are serialized but concurrent with reads
 	 */
-	pmd_obj_rdlock(mp, layout);
+	pmd_obj_rdlock(layout);
 	state = layout->eld_state;
 	if (state & ECIO_LYT_COMMITTED)
 		err = ecio_mblock_read(mp, layout, iov, iovcnt, boff, &erpt);
-	pmd_obj_rdunlock(mp, layout);
+	pmd_obj_rdunlock(layout);
 
-	if (ev(!(state & ECIO_LYT_COMMITTED))) {
-		err = merr(EAGAIN);
-		mp_pr_rl("mpool %s, mblock 0x%lx not committed 0x%lx",
-			 err, mp->pds_name, (ulong)layout->eld_objid, state);
-	}
-
-	return err;
+	return (state & ECIO_LYT_COMMITTED) ? err : merr(EAGAIN);
 }
 
 merr_t
@@ -393,9 +381,9 @@ mblock_get_props(
 		return merr(EINVAL);
 	}
 
-	pmd_obj_rdlock(mp, layout);
+	pmd_obj_rdlock(layout);
 	mblock_getprops_cmn(mp, layout, prop);
-	pmd_obj_rdunlock(mp, layout);
+	pmd_obj_rdunlock(layout);
 
 	return 0;
 }
@@ -414,13 +402,10 @@ mblock_get_props_ex(
 		return merr(EINVAL);
 	}
 
-	pmd_obj_rdlock(mp, layout);
-
-	prop->mbx_zonecnt  = layout->eld_ld.ol_zcnt;
-
+	pmd_obj_rdlock(layout);
+	prop->mbx_zonecnt = layout->eld_ld.ol_zcnt;
 	mblock_getprops_cmn(mp, layout, &prop->mbx_props);
-
-	pmd_obj_rdunlock(mp, layout);
+	pmd_obj_rdunlock(layout);
 
 	return 0;
 }
