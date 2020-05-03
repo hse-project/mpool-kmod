@@ -216,20 +216,15 @@ struct pmd_mdc_stats {
 /**
  * struct pmd_mdc_info - Metadata container (mdc) info.
  * @mmi_compactlock:    compaction lock
+ * @mmi_uc_lock:        uncommitted objects tree lock
+ * @mmi_uc_root:        uncommitted objects tree root
+ * @mmi_co_lock:        committed objects tree lock
+ * @mmi_co_root:        committed objects tree root
  * @mmi_uqlock:         uniquifier lock
- * @mmi_colock:         committed objid index lock
- * @mmi_uncolock:       uncommitted objid index lock
  * @mmi_luniq:          uniquifier of last object assigned to container
  * @mmi_mdc:            MDC implementing container
  * @mmi_recbuf:         buffer for (un)packing log records
  * @mmi_lckpt:          last objid checkpointed
- * @mmi_obj:            rbtree maps objids to committed
- *                      object layouts
- *                      node: objids_to_layouts_rb
- * @mmi_uncobj:         rbtree maps objids to un-committed
- *                      layouts node: objids_to_layouts_rb
- * @mmi_obj_nb:         number of objects in mmi_obj. Only used for debug.
- * @mmi_uncobj_nb:      number of objects in mmi_uncobj. Only used for debug.
  * @mmi_stats:          per-MDC usage stats
  * @mmi_stats_lock:     lock for protecting mmi_stats
  * @mmi_pco_cnt:        counters used by the pre compaction of MDC1/255.
@@ -242,8 +237,8 @@ struct pmd_mdc_stats {
  * LOCKING:
  * + mmi_luniq: protected by uqlock
  * + mmi_mdc, recbuf, lckpt: protected by compactlock
- * + mmi_obj: protected by colock
- * + mmi_uncobj: protected by uncolock
+ * + mmi_co_root: protected by co_lock
+ * + mmi_uc_root: protected by uc_lock
  * + mmi_stats: protected by mmi_stats_lock
  * + mmi_pco_counters: updates serialized by mmi_compactlock
  *
@@ -266,25 +261,26 @@ struct pmd_mdc_stats {
  *    bottleneck and it saves memory by not having a lock per object
  */
 struct pmd_mdc_info {
-	struct rw_semaphore     mmi_colock;
-	struct rb_root          mmi_obj;
-
-	____cacheline_aligned
 	struct mutex            mmi_compactlock;
+	char                   *mmi_recbuf;
+	u64                     mmi_lckpt;
+	struct mp_mdc          *mmi_mdc;
 
 	____cacheline_aligned
-	struct mutex            mmi_uncolock;
-	struct rb_root          mmi_uncobj;
+	struct mutex            mmi_uc_lock;
+	struct rb_root          mmi_uc_root;
+
+	____cacheline_aligned
+	struct rw_semaphore     mmi_co_lock;
+	struct rb_root          mmi_co_root;
 
 	____cacheline_aligned
 	struct mutex            mmi_uqlock;
 	u64                     mmi_luniq;
-	u64                     mmi_lckpt;
-	struct mp_mdc          *mmi_mdc;
-	char                   *mmi_recbuf;
 
-	struct omf_mdccver      mmi_mdccver;
+	____cacheline_aligned
 	struct credit_info      mmi_credit;
+	struct omf_mdccver      mmi_mdccver;
 
 	____cacheline_aligned
 	struct mutex            mmi_stats_lock;
