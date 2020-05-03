@@ -42,7 +42,7 @@ pmd_write_meta_to_latest_version(
 
 static void pmd_mda_init(struct mpool_descriptor *mp)
 {
-	int    sidx;
+	int i;
 
 	/*
 	 * Initialize all MDC_SLOTS entries so they are ready to use, excepting
@@ -52,35 +52,35 @@ static void pmd_mda_init(struct mpool_descriptor *mp)
 	mp->pds_mda.mdi_lslot = 0;
 	mp->pds_mda.mdi_slotvcnt = 0;
 
-	for (sidx = 0; sidx < MDC_SLOTS; sidx++) {
-		mutex_init(&mp->pds_mda.mdi_slotv[sidx].mmi_compactlock);
-		mutex_init(&mp->pds_mda.mdi_slotv[sidx].mmi_uqlock);
-		init_rwsem(&mp->pds_mda.mdi_slotv[sidx].mmi_colock);
-		mutex_init(&mp->pds_mda.mdi_slotv[sidx].mmi_uncolock);
-		mp->pds_mda.mdi_slotv[sidx].mmi_luniq = 0;
-		mp->pds_mda.mdi_slotv[sidx].mmi_recbuf = NULL;
-		mp->pds_mda.mdi_slotv[sidx].mmi_obj = RB_ROOT;
-		mp->pds_mda.mdi_slotv[sidx].mmi_uncobj = RB_ROOT;
-		mp->pds_mda.mdi_slotv[sidx].mmi_lckpt =
-			objid_make(0, OMF_OBJ_UNDEF, sidx);
-		memset(&mp->pds_mda.mdi_slotv[sidx].mmi_stats, 0,
-		       sizeof(mp->pds_mda.mdi_slotv[sidx].mmi_stats));
+	for (i = 0; i < MDC_SLOTS; ++i) {
+		struct pmd_mdc_info *pmi = mp->pds_mda.mdi_slotv + i;
+
+		mutex_init(&pmi->mmi_compactlock);
+		mutex_init(&pmi->mmi_uqlock);
+		init_rwsem(&pmi->mmi_colock);
+		mutex_init(&pmi->mmi_uncolock);
+		pmi->mmi_luniq = 0;
+		pmi->mmi_recbuf = NULL;
+		pmi->mmi_obj = RB_ROOT;
+		pmi->mmi_uncobj = RB_ROOT;
+		pmi->mmi_lckpt = objid_make(0, OMF_OBJ_UNDEF, i);
+		memset(&pmi->mmi_stats, 0, sizeof(pmi->mmi_stats));
 
 		/*
 		 * Initial mpool metadata content version.
 		 */
-		mp->pds_mda.mdi_slotv[sidx].mmi_mdccver.mv_mdccver_major = 1;
-		mp->pds_mda.mdi_slotv[sidx].mmi_mdccver.mv_mdccver_minor = 0;
-		mp->pds_mda.mdi_slotv[sidx].mmi_mdccver.mv_mdccver_patch = 0;
-		mp->pds_mda.mdi_slotv[sidx].mmi_mdccver.mv_mdccver_dev   = 0;
+		pmi->mmi_mdccver.mv_mdccver_major = 1;
+		pmi->mmi_mdccver.mv_mdccver_minor = 0;
+		pmi->mmi_mdccver.mv_mdccver_patch = 0;
+		pmi->mmi_mdccver.mv_mdccver_dev   = 0;
 
-		mp->pds_mda.mdi_slotv[sidx].mmi_credit.ci_slot  = sidx;
+		pmi->mmi_credit.ci_slot = i;
 
-		mutex_init(&mp->pds_mda.mdi_slotv[sidx].mmi_stats_lock);
+		mutex_init(&pmi->mmi_stats_lock);
 
 	}
-	mp->pds_mda.mdi_slotv[1].mmi_luniq = UROOT_OBJID_MAX;
 
+	mp->pds_mda.mdi_slotv[1].mmi_luniq = UROOT_OBJID_MAX;
 	mp->pds_mda.mdi_sel.mds_tbl_idx.counter = 0;
 }
 
@@ -90,16 +90,14 @@ pmd_mdc0_init(
 	struct ecio_layout_descriptor  *mdc01,
 	struct ecio_layout_descriptor  *mdc02)
 {
-	struct pmd_mdc_info            *cinfo = &mp->pds_mda.mdi_slotv[0];
-	struct ecio_layout_descriptor  *found = NULL;
-	merr_t                          err;
+	struct pmd_mdc_info    *cinfo = &mp->pds_mda.mdi_slotv[0];
+	merr_t                  err;
 
-	cinfo->mmi_recbuf = kcalloc(OMF_MDCREC_PACKLEN_MAX, sizeof(char),
-				GFP_KERNEL);
+	cinfo->mmi_recbuf = kzalloc(OMF_MDCREC_PACKLEN_MAX, GFP_KERNEL);
 	if (!cinfo->mmi_recbuf) {
 		err = merr(ENOMEM);
-		mp_pr_err("mpool %s, log rec buffer alloc %lu failed",
-			  err, mp->pds_name, (ulong)OMF_MDCREC_PACKLEN_MAX);
+		mp_pr_err("mpool %s, log rec buffer alloc %zu failed",
+			  err, mp->pds_name, OMF_MDCREC_PACKLEN_MAX);
 		return err;
 	}
 
@@ -118,8 +116,10 @@ pmd_mdc0_init(
 	objid_to_layout_insert_mdc(&cinfo->mmi_obj, mdc02);
 
 	err = mp_mdc_open(mp, mdc01->eld_objid, mdc02->eld_objid,
-		MDC_OF_SKIP_SER, &cinfo->mmi_mdc);
+			  MDC_OF_SKIP_SER, &cinfo->mmi_mdc);
 	if (err) {
+		struct ecio_layout_descriptor *found;
+
 		mp_pr_err("mpool %s, MDC0 open failed",
 			  err, mp->pds_name);
 
