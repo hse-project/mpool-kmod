@@ -2082,40 +2082,40 @@ pmd_obj_find_get(
 /*
  * Nesting levels for layout rwlock.
  */
-void
-pmd_obj_rdlock(
-	struct ecio_layout_descriptor  *layout)
+void pmd_obj_rdlock(struct ecio_layout_descriptor *layout)
 {
+	enum pmd_lock_class lc __maybe_unused = PMD_MDC_NORMAL;
+
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
 	if (objid_slot(layout->eld_objid))
-		down_read_nested(layout->eld_rwlock, PMD_OBJ_CLIENT);
+		lc = PMD_OBJ_CLIENT;
 	else if (objid_mdc0log(layout->eld_objid))
-		down_read_nested(layout->eld_rwlock, PMD_MDC_ZERO);
-	else
-		down_read_nested(layout->eld_rwlock, PMD_MDC_NORMAL);
+		lc = PMD_MDC_ZERO;
+#endif
+
+	down_read_nested(layout->eld_rwlock, lc);
 }
 
-void
-pmd_obj_rdunlock(
-	struct ecio_layout_descriptor  *layout)
+void pmd_obj_rdunlock(struct ecio_layout_descriptor *layout)
 {
 	up_read(layout->eld_rwlock);
 }
 
-void
-pmd_obj_wrlock(
-	struct ecio_layout_descriptor  *layout)
+void pmd_obj_wrlock(struct ecio_layout_descriptor *layout)
 {
+	enum pmd_lock_class lc __maybe_unused = PMD_MDC_NORMAL;
+
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
 	if (objid_slot(layout->eld_objid))
-		down_write_nested(layout->eld_rwlock, PMD_OBJ_CLIENT);
+		lc = PMD_OBJ_CLIENT;
 	else if (objid_mdc0log(layout->eld_objid))
-		down_write_nested(layout->eld_rwlock, PMD_MDC_ZERO);
-	else
-		down_write_nested(layout->eld_rwlock, PMD_MDC_NORMAL);
+		lc = PMD_MDC_ZERO;
+#endif
+
+	down_write_nested(layout->eld_rwlock, lc);
 }
 
-void
-pmd_obj_wrunlock(
-	struct ecio_layout_descriptor  *layout)
+void pmd_obj_wrunlock(struct ecio_layout_descriptor *layout)
 {
 	up_write(layout->eld_rwlock);
 }
