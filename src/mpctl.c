@@ -166,7 +166,7 @@ struct mpc_metabkt {
  * @mm_bktv:    lockpool to serialize mpc_vma updates
  */
 struct mpc_metamap {
-	struct mutex        mm_rgnlock;
+	spinlock_t          mm_rgnlock;
 	struct idr          mm_rgnmap;
 	atomic_t            mm_refcnt;
 
@@ -1027,7 +1027,7 @@ static merr_t mpc_metamap_create(struct mpc_metamap **mmp)
 	if (ev(!mm))
 		return merr(ENOMEM);
 
-	mutex_init(&mm->mm_rgnlock);
+	spin_lock_init(&mm->mm_rgnlock);
 	idr_init(&mm->mm_rgnmap);
 	atomic_set(&mm->mm_refcnt, 0);
 
@@ -1096,9 +1096,9 @@ again:
 
 	mm = meta->mcm_metamap;
 
-	mutex_lock(&mm->mm_rgnlock);
+	spin_lock(&mm->mm_rgnlock);
 	idr_remove(&mm->mm_rgnmap, meta->mcm_rgn);
-	mutex_unlock(&mm->mm_rgnlock);
+	spin_unlock(&mm->mm_rgnlock);
 
 	meta->mcm_magic = 0xbadcafe;
 	meta->mcm_rgn = -1;
@@ -3556,10 +3556,10 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 
 	idr_preload(GFP_KERNEL);
 
-	mutex_lock(&mm->mm_rgnlock);
+	spin_lock(&mm->mm_rgnlock);
 	meta->mcm_rgn = idr_alloc(&mm->mm_rgnmap, NULL, 1, -1, GFP_ATOMIC);
 	if (meta->mcm_rgn < 1) {
-		mutex_unlock(&mm->mm_rgnlock);
+		spin_unlock(&mm->mm_rgnlock);
 
 		err = merr(meta->mcm_rgn ?: EINVAL);
 		idr_preload_end();
@@ -3574,7 +3574,7 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 	atomic_inc(&mm->mm_refcnt);
 
 	idr_replace(&mm->mm_rgnmap, meta, meta->mcm_rgn);
-	mutex_unlock(&mm->mm_rgnlock);
+	spin_unlock(&mm->mm_rgnlock);
 
 	idr_preload_end();
 
