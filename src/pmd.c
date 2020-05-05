@@ -2247,17 +2247,19 @@ pmd_mdc_alloc(
 	 * not needed to make atomic.
 	 */
 	pmd_obj_wrlock(layout1);
-	pmd_obj_wrlock(layout2);
 	err = ecio_mlog_erase(mp, layout1, 0, &erpt);
+	pmd_obj_wrunlock(layout1);
+
 	if (err) {
 		msg = "erase of first mlog failed";
 	} else {
+		pmd_obj_wrlock(layout2);
 		err = ecio_mlog_erase(mp, layout2, 0, &erpt);
+		pmd_obj_wrunlock(layout2);
+
 		if (err)
 			msg = "erase of second mlog failed";
 	}
-	pmd_obj_wrunlock(layout2);
-	pmd_obj_wrunlock(layout1);
 	if (ev(err)) {
 		pmd_obj_abort(mp, layout1);
 		pmd_obj_abort(mp, layout2);
