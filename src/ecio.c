@@ -535,12 +535,7 @@ ecio_layout_alloc(
 
 	rwidx = ecio_objid2rwidx(objid, mp->pds_mda.mdi_slotvcnt_shift);
 
-	rwl = numa_elmset_addr(mp->pds_ecio_layout_rwl,
-			       numa_node(rwidx), rwidx);
-	if (ev(!rwl))
-		return NULL;
-
-	__builtin_prefetch(rwl, 1);
+	rwl = numa_elmset_addr(mp->pds_ecio_layout_rwl, numa_node_id(), rwidx);
 
 	layout = kmem_cache_zalloc(ecio_layout_desc_cache, GFP_KERNEL);
 	if (ev(!layout))

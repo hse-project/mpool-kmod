@@ -23,8 +23,6 @@ void free_aligned(const void *ptr);
 
 struct numa_elmset;
 
-#define numa_node(_x)           numa_node_id()
-
 /**
  * numa_elmset_create() - Create a set of elements/buffers from
  *	each system numa node.
