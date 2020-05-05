@@ -12,11 +12,6 @@
 
 #include "mpcore_defs.h"
 
-#define ECIO_FST_RW   2 /* Number of rw locks for first layer */
-#define ECIO_SND_RW  32 /* Number of rw locks for second layer */
-_Static_assert(ECIO_SND_RW + ECIO_FST_RW < ECIO_RWL_PER_NODE,
-	       "Not enough ecio layout rw locks");
-
 /*
  * ecio API functions
  */
@@ -495,28 +490,27 @@ ecio_mlog_erase(
  */
 static u32 ecio_objid2rwidx(u64 objid, u8 mdc1_shift)
 {
-	u32    idx = 0;
+	u64 idx;
 
 	if (objid == MDC0_OBJID_LOG1)
-		idx = 0; /* First layer, object metadata in SB */
+		return 0; /* First layer, object metadata in SB */
 	else if (objid == MDC0_OBJID_LOG2)
-		idx = 1; /* First layer */
+		return 1; /* First layer */
 	else if (!objid_slot(objid))
 		/* Second layer, obj metadata in MDC0 : rw locks 2 to 33 */
-		idx = objid_uniq(objid)%ECIO_SND_RW + ECIO_FST_RW;
-	else
-		/*
-		 * Client layer, obj metadata in MDC1-255
-		 * Use the mdc1_shift lower bits of the cslot and the
-		 * lower bits of the unique id.
-		 * rw locks 34 to ECIO_RWL_PER_NODE -1
-		 */
-		idx = (((objid & ((1 << mdc1_shift) - 1)) |
-			(objid_uniq(objid) << mdc1_shift)) %
-			(ECIO_RWL_PER_NODE - ECIO_SND_RW - ECIO_FST_RW)) +
-			ECIO_SND_RW + ECIO_FST_RW;
+		return objid_uniq(objid) % ECIO_RWL_L2 + ECIO_RWL_L1;
 
-	return idx;
+	/*
+	 * Client layer, obj metadata in MDC1-255
+	 * Use the mdc1_shift lower bits of the cslot and the
+	 * lower bits of the unique id.
+	 * rw locks 34 to ECIO_RWL_PER_NODE -1
+	 */
+	idx = objid_uniq(objid) << mdc1_shift;
+	idx |= objid & ((1u << mdc1_shift) - 1);
+	idx %= (ECIO_RWL_PER_NODE - ECIO_RWL_L2 - ECIO_RWL_L1);
+
+	return idx + ECIO_RWL_L2 + ECIO_RWL_L1;
 }
 
 /*

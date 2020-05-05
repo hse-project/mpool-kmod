@@ -61,7 +61,9 @@ struct ecio_layout_mlo {
 
 /* ecio_layout_descriptor lock pool object count (per-numa node)
  */
-#define ECIO_RWL_PER_NODE       512
+#define ECIO_RWL_L1          2 /* Number of rw locks for first layer */
+#define ECIO_RWL_L2         32 /* Number of rw locks for second layer */
+#define ECIO_RWL_PER_NODE   (ECIO_RWL_L1 + ECIO_RWL_L2 + 478)
 
 /**
  * struct ecio_layout_descriptor
