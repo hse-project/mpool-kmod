@@ -12,42 +12,6 @@
 #include <mpcore/assert.h>
 #include <mpcore/alloc.h>
 
-#ifndef ARCH_KMALLOC_MINALIGN
-#define ARCH_KMALLOC_MINALIGN   __alignof__(unsigned long long)
-#endif
-
-void *alloc_aligned(size_t size, size_t align, gfp_t flags)
-{
-	void   *mem;
-	size_t  sz;
-
-	assert(!(align & (align - 1))); /* must be a power-of-2 */
-
-	if (align < ARCH_KMALLOC_MINALIGN)
-		align = ARCH_KMALLOC_MINALIGN;
-
-	sz = size < align ? align : size;
-	sz = ALIGN(sz, align);
-
-	mem = kmalloc(sz + align, flags);
-	if (mem) {
-		void **ptr = (void *)(((uintptr_t)mem + align) & ~(align - 1));
-
-		*(ptr - 1) = mem;
-		mem = ptr;
-	}
-
-	return mem;
-}
-
-void free_aligned(const void *ptr)
-{
-	if (ptr) {
-		ptr = *((const void **)ptr - 1);
-		kfree(ptr);
-	}
-}
-
 /**
  * struct numa_elmset - "nm" stands for numa
  * @nm_elm_per_node: max elements per numa node

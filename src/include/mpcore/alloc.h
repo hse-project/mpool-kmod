@@ -8,19 +8,6 @@
 
 #include <linux/gfp.h>
 
-/**
- * alloc_aligned() - allocated aligned memory
- * @size:   desired number of bytes
- * @align:  desired alignment
- * @flags:  flags passed to kmalloc()
- *
- * %align must be a power-of-two less than or equal to PAGE_SIZE.
- */
-void *alloc_aligned(size_t size, size_t align, gfp_t flags);
-
-void free_aligned(const void *ptr);
-
-
 struct numa_elmset;
 
 /**

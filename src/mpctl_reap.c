@@ -425,15 +425,13 @@ merr_t mpc_reap_create(struct mpc_reap **reapp)
 	flags = WQ_UNBOUND | WQ_HIGHPRI | WQ_CPU_INTENSIVE;
 	*reapp = NULL;
 
-	reap = alloc_aligned(sizeof(*reap), 128, GFP_KERNEL);
+	reap = kzalloc(roundup_pow_of_two(sizeof(*reap)), GFP_KERNEL);
 	if (ev(!reap))
 		return merr(ENOMEM);
 
-	memset(reap, 0, sizeof(*reap));
-
 	reap->reap_wq = alloc_workqueue("mpc_reap", flags, REAP_ELEM_MAX + 1);
 	if (ev(!reap->reap_wq)) {
-		free_aligned(reap);
+		kfree(reap);
 		return merr(ENOMEM);
 	}
 
@@ -465,7 +463,7 @@ merr_t mpc_reap_create(struct mpc_reap **reapp)
 	err = mpc_reap_params_register(reap);
 	if (ev(err)) {
 		destroy_workqueue(reap->reap_wq);
-		free_aligned(reap);
+		kfree(reap);
 		return err;
 	}
 
@@ -507,7 +505,7 @@ void mpc_reap_destroy(struct mpc_reap *reap)
 
 	destroy_workqueue(reap->reap_wq);
 	mpc_reap_params_unregister(reap);
-	free_aligned(reap);
+	kfree(reap);
 }
 
 void mpc_reap_vma_add(struct mpc_reap *reap, struct mpc_vma *meta)
