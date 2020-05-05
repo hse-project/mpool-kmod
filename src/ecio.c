@@ -488,29 +488,35 @@ ecio_mlog_erase(
  * To avoid the deadlock, we make sure that any rw lock can be used solely by
  * one of these three layers.
  */
-static u32 ecio_objid2rwidx(u64 objid, u8 mdc1_shift)
+static void *ecio_objid2rwl(
+	struct mpool_descriptor    *mp,
+	u64                         objid)
 {
+	u32 mdc1_shift = mp->pds_mda.mdi_slotvcnt_shift;
 	u64 idx;
 
-	if (objid == MDC0_OBJID_LOG1)
-		return 0; /* First layer, object metadata in SB */
-	else if (objid == MDC0_OBJID_LOG2)
-		return 1; /* First layer */
-	else if (!objid_slot(objid))
+	if (objid == MDC0_OBJID_LOG1) {
+		idx = 0; /* First layer, object metadata in SB */
+	} else if (objid == MDC0_OBJID_LOG2) {
+		idx = 1; /* First layer */
+	} else if (!objid_slot(objid)) {
 		/* Second layer, obj metadata in MDC0 : rw locks 2 to 33 */
-		return objid_uniq(objid) % ECIO_RWL_L2 + ECIO_RWL_L1;
+		idx = objid_uniq(objid) % ECIO_RWL_L2 + ECIO_RWL_L1;
+	} else {
 
-	/*
-	 * Client layer, obj metadata in MDC1-255
-	 * Use the mdc1_shift lower bits of the cslot and the
-	 * lower bits of the unique id.
-	 * rw locks 34 to ECIO_RWL_PER_NODE -1
-	 */
-	idx = objid_uniq(objid) << mdc1_shift;
-	idx |= objid & ((1u << mdc1_shift) - 1);
-	idx %= (ECIO_RWL_PER_NODE - ECIO_RWL_L2 - ECIO_RWL_L1);
+		/*
+		 * Client layer, obj metadata in MDC1-255
+		 * Use the mdc1_shift lower bits of the cslot and the
+		 * lower bits of the unique id.
+		 * rw locks 34 to ECIO_RWL_PER_NODE -1
+		 */
+		idx = objid_uniq(objid) << mdc1_shift;
+		idx |= objid & ((1u << mdc1_shift) - 1);
+		idx %= (ECIO_RWL_PER_NODE - ECIO_RWL_L2 - ECIO_RWL_L1);
+		idx += ECIO_RWL_L2 + ECIO_RWL_L1;
+	}
 
-	return idx + ECIO_RWL_L2 + ECIO_RWL_L1;
+	return numa_elmset_addr(mp->pds_ecio_layout_rwl, numa_node_id(), idx);
 }
 
 /*
@@ -529,13 +535,6 @@ ecio_layout_alloc(
 	u32                         zcnt)
 {
 	struct ecio_layout_descriptor  *layout;
-	struct rw_semaphore            *rwl;
-
-	u32    rwidx;
-
-	rwidx = ecio_objid2rwidx(objid, mp->pds_mda.mdi_slotvcnt_shift);
-
-	rwl = numa_elmset_addr(mp->pds_ecio_layout_rwl, numa_node_id(), rwidx);
 
 	layout = kmem_cache_zalloc(ecio_layout_desc_cache, GFP_KERNEL);
 	if (ev(!layout))
@@ -556,7 +555,7 @@ ecio_layout_alloc(
 	layout->eld_gen       = gen;
 	layout->eld_mblen     = mblen;
 	layout->eld_state     = ECIO_LYT_NONE;
-	layout->eld_rwlock    = rwl;
+	layout->eld_rwlock    = ecio_objid2rwl(mp, objid);
 	layout->eld_ld.ol_zcnt = zcnt;
 	atomic64_set(&layout->eld_refcnt, 1);
 
