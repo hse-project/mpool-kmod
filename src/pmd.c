@@ -3068,8 +3068,7 @@ static int pmd_compare_free_space(const void *first, const void *second)
 	if (f->mmi_credit.ci_free < s->mmi_credit.ci_free)
 		return 1;
 
-	/* return  0 - do not swap */
-	return 1;
+	return 0;
 
 }
 
