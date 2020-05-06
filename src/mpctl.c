@@ -18,6 +18,7 @@
 #include <linux/kobject.h>
 #include <linux/mm_inline.h>
 #include <linux/version.h>
+#include <linux/kref.h>
 
 #include <linux/backing-dev.h>
 #include <linux/spinlock.h>
@@ -120,7 +121,7 @@ struct mpc_unit {
  */
 struct mpc_mpool {
 	struct mpc_softstate       *mp_ss;
-	uint                        mp_refcnt;
+	struct kref                 mp_ref;
 	struct rw_semaphore         mp_lock;
 	struct mpool_descriptor    *mp_desc;
 	struct mp_mdc              *mp_mdc;
@@ -340,49 +341,12 @@ static gid_t mpc_current_gid(void)
 }
 
 /**
- * mpc_mpool_get() - Acquire an additional reference on an mpool object.
- * @mpool:  mpool ptr
- *
- * Caller must already hold a reference.
+ * mpc_mpool_release() - release kref handler for mpc_mpool object
+ * @refp:  kref pointer
  */
-static void mpc_mpool_get(struct mpc_mpool *mpool)
+static void mpc_mpool_release(struct kref *refp)
 {
-	struct mpc_softstate   *ss;
-
-	if (mpool) {
-		ss = mpool->mp_ss;
-
-		mutex_lock(&ss->ss_lock);
-		++mpool->mp_refcnt;
-		mutex_unlock(&ss->ss_lock);
-	}
-}
-
-/**
- * mpc_mpool_put() - Release a reference on an mpool object.
- * @mpool:  mpool ptr
- *
- * Returns: merr_t, usually EBUSY or 0.
- */
-static void mpc_mpool_put(struct mpc_mpool *mpool)
-{
-	struct mpc_softstate   *ss;
-	bool                    destroyme;
-
-	/* This is normal because mpc_unit_foo will call with NULL for
-	 * MPC_DEV_CTLPATH, i.e. in mpc_init() or mpc_exit().
-	 */
-	if (ev(!mpool))
-		return;
-
-	ss = mpool->mp_ss;
-
-	mutex_lock(&ss->ss_lock);
-	destroyme = (0 == --mpool->mp_refcnt);
-	mutex_unlock(&ss->ss_lock);
-
-	if (!destroyme)
-		return;
+	struct mpc_mpool *mpool = container_of(refp, struct mpc_mpool, mp_ref);
 
 	if (mpool->mp_desc) {
 		merr_t err;
@@ -596,7 +560,7 @@ mpc_mpool_open(
 	}
 
 	mpool->mp_ss = ss;
-	mpool->mp_refcnt = 1;
+	kref_init(&mpool->mp_ref);
 	init_rwsem(&mpool->mp_lock);
 	mpool->mp_dpathc = dpathc;
 	mpool->mp_dpathv = dpathv;
@@ -718,7 +682,7 @@ static void mpc_unit_destroy(struct mpc_unit *unit)
 	mutex_unlock(&ss->ss_lock);
 
 	if (unit->un_mpool)
-		mpc_mpool_put(unit->un_mpool);
+		kref_put(&unit->un_mpool->mp_ref, mpc_mpool_release);
 
 	if (unit->un_device)
 		device_destroy(ss->ss_class, unit->un_devno);
@@ -993,7 +957,7 @@ errout:
 		 * the unit's birth and caller's references which should
 		 * destroy the unit.
 		 */
-		mpc_mpool_get(mpool);
+		kref_get(&mpool->mp_ref);
 		mpc_unit_put(unit);
 		mpc_unit_put(unit);
 	}
@@ -2441,7 +2405,7 @@ errout:
 		mpc_unit_put(mpool_unit); /* Release ctl device caller's ref */
 
 	if (mpool)
-		mpc_mpool_put(mpool);
+		kref_put(&mpool->mp_ref, mpc_mpool_release);
 
 	return err;
 }
@@ -2545,7 +2509,7 @@ errout:
 		mpc_unit_put(mpool_unit); /* Release ctl device caller's ref */
 
 	if (mpool)
-		mpc_mpool_put(mpool);
+		kref_put(&mpool->mp_ref, mpc_mpool_release);
 
 	return err;
 }
