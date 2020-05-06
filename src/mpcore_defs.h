@@ -20,7 +20,6 @@
 
 #include <mpcore/mpcore_printk.h>
 #include <mpcore/mpcore_defs.h>
-#include <mpcore/alloc.h>
 #include <mpcore/evc.h>
 #include <mpcore/assert.h>
 

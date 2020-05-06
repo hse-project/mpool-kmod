@@ -35,7 +35,6 @@
 
 #include <mpcore/mpcore_printk.h>
 #include <mpcore/assert.h>
-#include <mpcore/alloc.h>
 #include <mpcore/evc.h>
 
 #include "mpctl_params.h"
