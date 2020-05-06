@@ -27,7 +27,7 @@
  * + mpool_s_lock
  * + pmd_s_lock
  * + mp.mda.mdi_slotv[x].(unc)obj[objid].rwlock (per object per mdc);
- *   normally obtained by calling pmd_obj_*lock(mp, layout)
+ *   normally obtained by calling pmd_obj_*lock(layout)
  * + mp.omlock
  * + mp.spcap_lock
  * + mp.mda.mdi_slotvlock
@@ -159,7 +159,6 @@ struct pre_compact_ctrl {
  * @pds_workq:    Workqueue per mpool.
  * @pds_sbmdc0:   Used to store in RAM the MDC0 metadata. Loaded at activate
  *                time, changed when MDC0 is compacted.
- * @pds_ecio_rwl: rw locks used by ecio objects layouts.
  * @pds_mda:      metadata container array (this thing is huge!)
  *
  * LOCKING:
@@ -199,7 +198,6 @@ struct mpool_descriptor {
 	____cacheline_aligned
 	u16                         pds_pdvcnt;
 	struct mpdesc_mdparm        pds_mdparm;
-	struct numa_elmset         *pds_ecio_layout_rwl;
 	struct workqueue_struct    *pds_workq;
 	struct workqueue_struct    *pds_erase_wq;
 	struct workqueue_struct    *pds_precompact_wq;

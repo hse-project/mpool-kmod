@@ -1721,7 +1721,6 @@ mlog_flush_abuf(
 	u8     nseclpg;
 
 	lstat  = (struct mlog_stat *)layout->eld_lstat;
-	mp_obj_rwl_prefetch((struct mp_obj_descriptor *)layout, 1);
 	mlog_extract_fsetparms(lstat, &sectsz, NULL, NULL, &nseclpg);
 
 	abidx   = lstat->lst_abidx;

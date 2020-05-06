@@ -310,19 +310,12 @@ struct pmd_mdc_selector {
  * struct pmd_mda_info - Metadata container array (mda).
  * @mdi_slotvlock:   it is assumed that this spinlock is NOT taken from
  *	interrupt context
- * @mdi_lslot:       container slot last alloced from excluding mdc0
- * @mdi_slotvcnt_shift:
- * ((mdi_slotvcnt-1) rounded up to next power of 2) == 2^mdi_slotvcnt_shift
- *	Cached here to avoid recomputing it each time ecio_objid2rwidx() is
- *	called. The -1 is to not count MDC0.
- *	If the number of existing/allocated slots among MDC1-255 is a power
- *	of 2, then it is equal to 2^mdi_slotvcnt_shift.
  * @mdi_slotvcnt:    number of active slotv entries
  * @mdi_slotv:       per mdc info
  * @mdi_sel:         MDC allocation selector
  *
  * LOCKING:
- *  + mdi_lslot, mdi_slotvcnt, mdi_slotvcnt_shift: protected by mdi_slotvlock
+ *  + mdi_slotvcnt: protected by mdi_slotvlock
  *
  * NOTE:
  *  + mdi_slotvcnt only ever increases so mdi_slotv[x], x < mdi_slotvcnt, is
@@ -332,8 +325,6 @@ struct pmd_mdc_selector {
  */
 struct pmd_mda_info {
 	spinlock_t              mdi_slotvlock;
-	u8                      mdi_lslot;
-	u8                      mdi_slotvcnt_shift;
 	u16                     mdi_slotvcnt;
 
 	struct pmd_mdc_info     mdi_slotv[MDC_SLOTS];

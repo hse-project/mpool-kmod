@@ -2184,11 +2184,6 @@ mpool_devrpt(
 	}
 }
 
-static void linit_rwsem(void *mem)
-{
-	init_rwsem(mem);
-}
-
 struct mpool_descriptor *mpool_desc_alloc(void)
 {
 	struct mpool_descriptor    *mp;
@@ -2204,15 +2199,6 @@ struct mpool_descriptor *mpool_desc_alloc(void)
 	mp->pds_oml = RB_ROOT;
 
 	mp->pds_mdparm.md_mclass = MP_MED_INVALID;
-
-	/* Allocate rw lock pool for ecio objects layouts.
-	 */
-	mp->pds_ecio_layout_rwl = numa_elmset_create(ECIO_RWL_PER_NODE,
-		sizeof(struct rw_semaphore), linit_rwsem);
-	if (!mp->pds_ecio_layout_rwl) {
-		kfree(mp);
-		return NULL;
-	}
 
 	mpcore_params_defaults(&mp->pds_params);
 
@@ -2246,7 +2232,6 @@ void mpool_desc_free(struct mpool_descriptor *mp)
 			pd_bio_dev_close(&mp->pds_pdv[i].pdi_parm);
 	}
 
-	numa_elmset_destroy(mp->pds_ecio_layout_rwl);
 	kfree(mp);
 }
 

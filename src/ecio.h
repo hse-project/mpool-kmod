@@ -55,21 +55,11 @@ struct ecio_layout_mlo {
  * LOCKING:
  * + objid: constant; no locking required
  * + lstat: lstat and *lstat are protected by pmd_obj_*lock()
- * + refcnt and isdel: protected by mmi_reflock of object's MDC
  * + all other fields: see notes
  */
 
-/* ecio_layout_descriptor lock pool object count (per-numa node)
- */
-#define ECIO_RWL_L1          2 /* Number of rw locks for first layer */
-#define ECIO_RWL_L2         32 /* Number of rw locks for second layer */
-#define ECIO_RWL_PER_NODE   (ECIO_RWL_L1 + ECIO_RWL_L2 + 478)
-
 /**
- * struct ecio_layout_descriptor
- *
- * The size of this structure should stay <= 128 bytes.
- * It contains holes that can be used to add new fields/information.
+ * struct ecio_layout_descriptor -
  *
  * NOTE:
  * + committed object fields (other): to update hold pmd_obj_wrlock()
@@ -78,30 +68,29 @@ struct ecio_layout_mlo {
  *   See the comments associated with struct pmd_mdc_info for
  *   further details.
  *
- * @eld_nodemdc: for both ucobj and obj rbtrees, obj. only in one tree
- * @eld_objid:   object id associated with layout
- * @eld_rwlock:  implements pmd_obj_*lock() for this layout
+ * @eld_nodemdc: rbtree node for uncommitted and committed objects
+ * @eld_objid:   object ID associated with layout
  * @eld_mblen:   Amount of data written in the mblock in bytes (0 for mlogs)
  * @eld_state:   enum ecio_layout_state
  * @eld_flags:   enum mlog_open_flags for mlogs
  * @eld_mlo:     info. specific to an mlog, NULL for mblocks.
  * @eld_gen:     object generation
- * @eld_refcnt:  user ref count from alloc/get/put
  * @eld_ld:
+ * @eld_refcnt:  user ref count from alloc/get/put
+ * @eld_rwlock:  implements pmd_obj_*lock() for this layout
  */
 struct ecio_layout_descriptor {
 	struct rb_node                  eld_nodemdc;
 	u64                             eld_objid;
-	struct rw_semaphore            *eld_rwlock;
 	u32                             eld_mblen;
 	u8                              eld_state;
 	u8                              eld_flags;
-
 	struct ecio_layout_mlo         *eld_mlo;
 	u64                             eld_gen;
+	struct omf_layout_descriptor    eld_ld;
 
 	atomic64_t                      eld_refcnt;
-	struct omf_layout_descriptor    eld_ld;
+	struct rw_semaphore             eld_rwlock;
 };
 
 /* Shortcuts */

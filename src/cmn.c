@@ -234,15 +234,3 @@ merr_t check_for_dups(char **listv, int cnt, int *dup, int *offset)
 	kfree(sortedv);
 	return 0;
 }
-
-void mp_obj_rwl_prefetch(struct mp_obj_descriptor *obj, bool w)
-{
-	if (obj) {
-		if (w)
-			__builtin_prefetch(
-			((struct ecio_layout_descriptor *)obj)->eld_rwlock, 1);
-		else
-			__builtin_prefetch(
-			((struct ecio_layout_descriptor *)obj)->eld_rwlock, 0);
-	}
-}

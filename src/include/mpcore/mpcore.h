@@ -501,14 +501,6 @@ struct mpool_descriptor *mpool_user_desc_alloc(char *mpname);
 void mpool_user_desc_free(struct mpool_descriptor *mp);
 
 /**
- * mp_obj_rwl_prefetch() - prefetch the rw lock of an mpool object (mlog,
- *	mblock,...)
- * @mb:
- * @w: true if the prefetch is to write in the cache line.
- */
-void mp_obj_rwl_prefetch(struct mp_obj_descriptor *obj, bool w);
-
-/**
  * mpool_fzero_use_discard() - issue discard command to zero out LBA range
  * @mp:
  */

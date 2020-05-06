@@ -49,7 +49,6 @@ static void pmd_mda_init(struct mpool_descriptor *mp)
 	 * recbuf which gets allocated dynamically if slot is actually used.
 	 */
 	spin_lock_init(&mp->pds_mda.mdi_slotvlock);
-	mp->pds_mda.mdi_lslot = 0;
 	mp->pds_mda.mdi_slotvcnt = 0;
 
 	for (i = 0; i < MDC_SLOTS; ++i) {
@@ -77,7 +76,6 @@ static void pmd_mda_init(struct mpool_descriptor *mp)
 		pmi->mmi_credit.ci_slot = i;
 
 		mutex_init(&pmi->mmi_stats_lock);
-
 	}
 
 	mp->pds_mda.mdi_slotv[1].mmi_luniq = UROOT_OBJID_MAX;
@@ -983,11 +981,6 @@ pmd_objs_load(
 		/* mdc0: finish initializing mda */
 		cinfo->mmi_luniq = mdcmax;
 		mp->pds_mda.mdi_slotvcnt = mdcmax + 1;
-		mp->pds_mda.mdi_slotvcnt_shift = 0;
-		if (mdcmax > 1)
-			mp->pds_mda.mdi_slotvcnt_shift =
-				__builtin_ctz(roundup_pow_of_two(mdcmax));
-
 
 		/* mdc0 only: validate other mdc metadata; may make adjustments
 		 * to mp.mda.
@@ -2093,12 +2086,12 @@ void pmd_obj_rdlock(struct ecio_layout_descriptor *layout)
 		lc = PMD_MDC_ZERO;
 #endif
 
-	down_read_nested(layout->eld_rwlock, lc);
+	down_read_nested(&layout->eld_rwlock, lc);
 }
 
 void pmd_obj_rdunlock(struct ecio_layout_descriptor *layout)
 {
-	up_read(layout->eld_rwlock);
+	up_read(&layout->eld_rwlock);
 }
 
 void pmd_obj_wrlock(struct ecio_layout_descriptor *layout)
@@ -2112,12 +2105,12 @@ void pmd_obj_wrlock(struct ecio_layout_descriptor *layout)
 		lc = PMD_MDC_ZERO;
 #endif
 
-	down_write_nested(layout->eld_rwlock, lc);
+	down_write_nested(&layout->eld_rwlock, lc);
 }
 
 void pmd_obj_wrunlock(struct ecio_layout_descriptor *layout)
 {
-	up_write(layout->eld_rwlock);
+	up_write(&layout->eld_rwlock);
 }
 
 merr_t
@@ -2331,10 +2324,6 @@ pmd_mdc_alloc(
 	spin_lock(&mp->pds_mda.mdi_slotvlock);
 	cinfo->mmi_luniq = mdcslot;
 	mp->pds_mda.mdi_slotvcnt = mdcslot + 1;
-	mp->pds_mda.mdi_slotvcnt_shift = 0;
-	if (mdcslot > 1)
-		mp->pds_mda.mdi_slotvcnt_shift =
-			__builtin_ctz(roundup_pow_of_two(mdcslot));
 	spin_unlock(&mp->pds_mda.mdi_slotvlock);
 
 	pmd_mdc_unlock(&cinfo->mmi_uqlock);

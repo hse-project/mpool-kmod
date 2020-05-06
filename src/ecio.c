@@ -472,53 +472,6 @@ ecio_mlog_erase(
 	return err;
 }
 
-/**
- * ecio_objid2rwidx() - compute an index in the rw locks of a node from
- *	the obj id.
- * @objid:
- * @mdc1_shift:
- * ((mdi_slotvcnt-1) rounded up to next power of 2) == 2^mdc1_shift)
- *	The -1 is to not count MDC0.
- *	If the number of existing/allocated slots among MDC1-255 is a power
- *	of 2, then it is equal to 2^mdc1_shift.
- *
- * A same thread can take the rw lock of a client obj, then the one of
- * a MDCi (i>0) mlog, then the one of a MDC0 mlog. If these rw locks where
- * the same, it would result in a deadlock.
- * To avoid the deadlock, we make sure that any rw lock can be used solely by
- * one of these three layers.
- */
-static void *ecio_objid2rwl(
-	struct mpool_descriptor    *mp,
-	u64                         objid)
-{
-	u32 mdc1_shift = mp->pds_mda.mdi_slotvcnt_shift;
-	u64 idx;
-
-	if (objid == MDC0_OBJID_LOG1) {
-		idx = 0; /* First layer, object metadata in SB */
-	} else if (objid == MDC0_OBJID_LOG2) {
-		idx = 1; /* First layer */
-	} else if (!objid_slot(objid)) {
-		/* Second layer, obj metadata in MDC0 : rw locks 2 to 33 */
-		idx = objid_uniq(objid) % ECIO_RWL_L2 + ECIO_RWL_L1;
-	} else {
-
-		/*
-		 * Client layer, obj metadata in MDC1-255
-		 * Use the mdc1_shift lower bits of the cslot and the
-		 * lower bits of the unique id.
-		 * rw locks 34 to ECIO_RWL_PER_NODE -1
-		 */
-		idx = objid_uniq(objid) << mdc1_shift;
-		idx |= objid & ((1u << mdc1_shift) - 1);
-		idx %= (ECIO_RWL_PER_NODE - ECIO_RWL_L2 - ECIO_RWL_L1);
-		idx += ECIO_RWL_L2 + ECIO_RWL_L1;
-	}
-
-	return numa_elmset_addr(mp->pds_ecio_layout_rwl, numa_node_id(), idx);
-}
-
 /*
  * Alloc and init object layout; non-arg fields and all strip descriptor
  * fields are set to 0/UNDEF/NONE; no auxiliary object info is allocated.
@@ -555,9 +508,9 @@ ecio_layout_alloc(
 	layout->eld_gen       = gen;
 	layout->eld_mblen     = mblen;
 	layout->eld_state     = ECIO_LYT_NONE;
-	layout->eld_rwlock    = ecio_objid2rwl(mp, objid);
 	layout->eld_ld.ol_zcnt = zcnt;
 	atomic64_set(&layout->eld_refcnt, 1);
+	init_rwsem(&layout->eld_rwlock);
 
 	/*
 	 * must set stype=UNDEF in all strips; pmd_layout_free()
