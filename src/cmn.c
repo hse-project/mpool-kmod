@@ -11,8 +11,6 @@
 
 #include <linux/sort.h>
 
-#include <mpcore/atomic.h>
-
 #include "mpcore_defs.h"
 
 enum pd_status mpool_pd_status_get(struct mpool_dev_info *pd)
@@ -22,7 +20,7 @@ enum pd_status mpool_pd_status_get(struct mpool_dev_info *pd)
 	/* Acquire semantics used so that no reads will be re-ordered from
 	 * before to after this read.
 	 */
-	val = atomic_read_acq(&pd->pdi_status);
+	val = atomic_read_acquire(&pd->pdi_status);
 
 	return val;
 }
