@@ -15,6 +15,19 @@ struct mc_smap_parms;
 /*
  * Common defs
  */
+
+/**
+ * struct u64_to_u64_rb -
+ * @utu_node:
+ * @utu_key:
+ * @utu_value:
+ */
+struct u64_to_u64_rb {
+	struct rb_node  utu_node;
+	u64             utu_key;
+	u64             utu_value;
+};
+
 /*
  * enum smap_space_type - space allocation policy flag
  *
