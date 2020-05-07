@@ -99,7 +99,6 @@ struct mpc_unit {
 	uid_t                       un_uid;
 	gid_t                       un_gid;
 	mode_t                      un_mode;
-	bool                        un_transient;
 	const struct mpc_uinfo     *un_uinfo;
 	struct mpc_mpool           *un_mpool;
 	struct mpc_metamap         *un_metamap;
@@ -659,7 +658,6 @@ mpc_unit_create(
 	sema_init(&unit->un_open_lock, 1);
 	unit->un_open_excl = false;
 	unit->un_open_cnt = 0;
-	unit->un_transient = true;
 	unit->un_devno = NODEV;
 	unit->un_refcnt = 2;
 	unit->un_ss = ss;
@@ -754,7 +752,7 @@ mpc_unit_iterate(
 	for (i = 0; i < ss->ss_units_max; ++i) {
 		struct mpc_unit *unit = ss->ss_unitv[i];
 
-		if (!unit || unit->un_transient)
+		if (!unit)
 			continue;
 
 		if (!atomic) {
@@ -794,7 +792,7 @@ mpc_unit_lookup(struct mpc_softstate *ss, uint minor, struct mpc_unit **unitp)
 	if (minor < ss->ss_units_max) {
 		struct mpc_unit *unit = ss->ss_unitv[minor];
 
-		if (unit && !unit->un_transient) {
+		if (unit) {
 			++unit->un_refcnt;
 			*unitp = unit;
 		}
@@ -878,8 +876,6 @@ static void mpc_unit_put(struct mpc_unit *unit)
 
 	mutex_lock(&ss->ss_lock);
 	destroyme = (0 == --unit->un_refcnt);
-	if (destroyme)
-		unit->un_transient = true;
 	mutex_unlock(&ss->ss_lock);
 
 	if (destroyme)
@@ -977,10 +973,6 @@ mpc_unit_setup(
 
 	unit->un_device = device;
 	unit->un_uinfo = uinfo;
-
-	mutex_lock(&ss->ss_lock);
-	unit->un_transient = false;
-	mutex_unlock(&ss->ss_lock);
 
 	dev_info(unit->un_device,
 		 "minor %u, uid %u, gid %u, mode 0%02o",
@@ -2638,8 +2630,7 @@ mp_deactivate_impl(
 		/* If the unit is not idle we set unitc to zero to prevent
 		 * the ensuing loops from making any state changes.
 		 */
-		if (un->un_open_cnt > 0 || un->un_refcnt > reftgt ||
-		    un->un_transient) {
+		if (un->un_open_cnt > 0 || un->un_refcnt > reftgt) {
 			mpc_errinfo(&mp->mp_cmn, MPOOL_RC_STAT, un->un_name);
 			err = merr(EBUSY);
 			unitc = 0;
