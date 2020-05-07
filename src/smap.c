@@ -18,6 +18,52 @@
  * smap API functions
  */
 
+static struct u64_to_u64_rb *
+u64_to_u64_find(struct rb_root *root, u64 key)
+{
+	struct rb_node *node = root->rb_node;
+	struct u64_to_u64_rb *elem;
+
+	while (node) {
+		elem = rb_entry(node, typeof(*elem), utu_node);
+
+		if (key < elem->utu_key)
+			node = node->rb_left;
+		else if (key > elem->utu_key)
+			node = node->rb_right;
+		else
+			return elem;
+	}
+
+	return NULL;
+}
+
+static int
+u64_to_u64_insert(struct rb_root *root, struct u64_to_u64_rb *item)
+{
+	struct rb_node **pos = &root->rb_node, *parent = NULL;
+	struct u64_to_u64_rb *this;
+
+	/* Figure out where to put new node */
+	while (*pos) {
+		this = rb_entry(*pos, typeof(*this), utu_node);
+		parent = *pos;
+
+		if (item->utu_key < this->utu_key)
+			pos = &(*pos)->rb_left;
+		else if (item->utu_key > this->utu_key)
+			pos = &(*pos)->rb_right;
+		else
+			return false;
+	}
+
+	/* Add new node and rebalance tree. */
+	rb_link_node(&item->utu_node, parent, pos);
+	rb_insert_color(&item->utu_node, root);
+
+	return true;
+}
+
 /**
  * See smap.h.
  */
@@ -667,7 +713,7 @@ smap_drive_alloc(
 			for (rgn2 = 0; rgn2 < rgn; rgn2++) {
 				rmroot = &pd->pdi_rmbktv[rgn2].pdi_rmroot;
 
-				found_ue = u64_to_u64_search(rmroot, 0);
+				found_ue = u64_to_u64_find(rmroot, 0);
 				if (found_ue) {
 					rb_erase(&found_ue->utu_node, rmroot);
 					kmem_cache_free(u64_to_u64_rb_cache,

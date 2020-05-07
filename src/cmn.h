@@ -49,46 +49,6 @@ struct u64_to_u64_rb {
 };
 
 /**
- * u64_to_u64_search() -
- * @root:
- * @key_u64:
- *
- * Return: pointer to struct u64_to_u64_rb if found else NULL.
- */
-struct u64_to_u64_rb *u64_to_u64_search(struct rb_root *root, u64 key_u64);
-
-/**
- * u64_to_u64_insert() -
- * @root:
- * @data:
- *
- * Return: true on success else false.
- */
-int u64_to_u64_insert(struct rb_root *root, struct u64_to_u64_rb *data);
-
-/**
- * objid_to_layout_search_oml() -
- * @root:
- * @key_objid:
- *
- * Return: pointer to objid_to_layout_search_oml if found else NULL.
- */
-struct ecio_layout_descriptor *
-objid_to_layout_search_oml(struct rb_root *root, u64 key_objid);
-
-/**
- * objid_to_layout_insert_oml() -
- * @root:
- * @data:
- *
- * Return: true on success else false.
- */
-int
-objid_to_layout_insert_oml(
-	struct rb_root                 *root,
-	struct ecio_layout_descriptor  *data);
-
-/**
  * calc_io_len() -
  * @iov:
  * @iovcnt:

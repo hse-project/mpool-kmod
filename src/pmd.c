@@ -40,20 +40,20 @@ pmd_write_meta_to_latest_version(
 static DEFINE_MUTEX(pmd_s_lock);
 
 static struct ecio_layout_descriptor *
-ecio_layout_find(struct rb_root *root, u64 objid)
+ecio_layout_find(struct rb_root *root, u64 key)
 {
 	struct rb_node *node = root->rb_node;
-	struct ecio_layout_descriptor *layout;
+	struct ecio_layout_descriptor *this;
 
 	while (node) {
-		layout = rb_entry(node, typeof(*layout), eld_nodemdc);
+		this = rb_entry(node, typeof(*this), eld_nodemdc);
 
-		if (objid < layout->eld_objid)
+		if (key < this->eld_objid)
 			node = node->rb_left;
-		else if (objid > layout->eld_objid)
+		else if (key > this->eld_objid)
 			node = node->rb_right;
 		else
-			return layout;
+			return this;
 	}
 
 	return NULL;

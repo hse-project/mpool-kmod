@@ -17,6 +17,58 @@
  */
 bool mlog_force_4ka = true;
 
+static struct ecio_layout_descriptor *
+objid_to_layout_search_oml(struct rb_root *root, u64 key)
+{
+	struct rb_node *node = root->rb_node;
+	struct ecio_layout_descriptor *this;
+	struct ecio_layout_mlo *mlo;
+
+	while (node) {
+		mlo = rb_entry(node, typeof(*mlo), mlo_nodeoml);
+		this = mlo->mlo_layout;
+
+		if (key < this->eld_objid)
+			node = node->rb_left;
+		else if (key > this->eld_objid)
+			node = node->rb_right;
+		else
+			return this;
+	}
+
+	return NULL;
+}
+
+static int
+objid_to_layout_insert_oml(
+	struct rb_root                 *root,
+	struct ecio_layout_descriptor  *item)
+{
+	struct rb_node **pos = &root->rb_node, *parent = NULL;
+	struct ecio_layout_descriptor *this;
+	struct ecio_layout_mlo *mlo;
+
+	/* Figure out where to put new node */
+	while (*pos) {
+		mlo = rb_entry(*pos, typeof(*mlo), mlo_nodeoml);
+		this = mlo->mlo_layout;
+
+		parent = *pos;
+		if (item->eld_objid < this->eld_objid)
+			pos = &(*pos)->rb_left;
+		else if (item->eld_objid > this->eld_objid)
+			pos = &(*pos)->rb_right;
+		else
+			return false;
+	}
+
+	/* Add new node and rebalance tree. */
+	rb_link_node(&item->eld_nodeoml, parent, pos);
+	rb_insert_color(&item->eld_nodeoml, root);
+
+	return true;
+}
+
 /**
  * mlog2layout() - convert opaque mlog handle to ecio_layout_descriptor
  *
