@@ -90,7 +90,7 @@ struct mpc_uinfo {
  */
 struct mpc_unit {
 	struct mpc_softstate       *un_ss;
-	uint                        un_refcnt;
+	struct kref                 un_ref;
 	struct semaphore            un_open_lock;   /* Protects un_open_* */
 	struct backing_dev_info    *un_saved_bdi;
 	bool                        un_open_excl;   /* Unit exclusively open */
@@ -623,7 +623,8 @@ mpc_unit_create(
 	unit->un_open_excl = false;
 	unit->un_open_cnt = 0;
 	unit->un_devno = NODEV;
-	unit->un_refcnt = 2;
+	kref_init(&unit->un_ref);
+	kref_get(&unit->un_ref);
 	unit->un_ss = ss;
 	unit->un_mpool = mpool;
 
@@ -667,15 +668,12 @@ mpc_unit_create(
  * mpc_unit_destroy() - Destroy a unit object created by mpc_unit_create().
  * @unit:
  *
- * Do not call this function directly, call mpc_unit_put()
- * to release your reference and it will call this function
- * when the ref count reaches zero.
- *
  * Returns: merr_t, usually EBUSY or 0.
  */
-static void mpc_unit_destroy(struct mpc_unit *unit)
+static void mpc_unit_destroy(struct kref *refp)
 {
-	struct mpc_softstate   *ss = unit->un_ss;
+	struct mpc_unit *unit = container_of(refp, struct mpc_unit, un_ref);
+	struct mpc_softstate *ss = unit->un_ss;
 
 	mutex_lock(&ss->ss_lock);
 	ss->ss_unitv[MINOR(unit->un_devno)] = NULL;
@@ -720,7 +718,7 @@ mpc_unit_iterate(
 			continue;
 
 		if (!atomic) {
-			++unit->un_refcnt;
+			kref_get(&unit->un_ref);
 			mutex_unlock(&ss->ss_lock);
 		}
 
@@ -728,7 +726,7 @@ mpc_unit_iterate(
 
 		if (!atomic) {
 			mutex_lock(&ss->ss_lock);
-			--unit->un_refcnt;
+			kref_put(&unit->un_ref, mpc_unit_destroy);
 		}
 
 		if (rc == ITERCB_DONE)
@@ -745,7 +743,6 @@ mpc_unit_iterate(
  *
  * Returns a referenced ptr to the unit (via *unitp) if found,
  * otherwise it sets *unitp to NULL.
- * Caller must release the reference by calling mpc_unit_put();
  */
 static void
 mpc_unit_lookup(struct mpc_softstate *ss, uint minor, struct mpc_unit **unitp)
@@ -757,7 +754,7 @@ mpc_unit_lookup(struct mpc_softstate *ss, uint minor, struct mpc_unit **unitp)
 		struct mpc_unit *unit = ss->ss_unitv[minor];
 
 		if (unit) {
-			++unit->un_refcnt;
+			kref_get(&unit->un_ref);
 			*unitp = unit;
 		}
 	}
@@ -788,7 +785,7 @@ static int mpc_unit_lookup_by_name_itercb(struct mpc_unit *unit, void *arg)
 		return ITERCB_NEXT;
 
 	if (strcmp(unit->un_name, name) == 0) {
-		++unit->un_refcnt;
+		kref_get(&unit->un_ref);
 		argv[2] = unit;
 		return ITERCB_DONE;
 	}
@@ -805,8 +802,6 @@ static int mpc_unit_lookup_by_name_itercb(struct mpc_unit *unit, void *arg)
  * If a unit exists in the system which has the given name and parent
  * then it is referenced and returned via *unitp.  Otherwise, *unitp
  * is set to NULL.
- *
- * Caller must release the reference by calling mpc_unit_put().
  */
 static void
 mpc_unit_lookup_by_name(
@@ -820,30 +815,6 @@ mpc_unit_lookup_by_name(
 			 argv);
 
 	*unitp = argv[2];
-}
-
-/**
- * mpc_unit_put() -  Release a reference on a unit.
- * @unit:   unit ptr
- *
- * Causes the unit to be destroyed when the ref count drops to zero.
- */
-static void mpc_unit_put(struct mpc_unit *unit)
-{
-	struct mpc_softstate   *ss;
-	bool                    destroyme;
-
-	if (!unit)
-		return;
-
-	ss = unit->un_ss;
-
-	mutex_lock(&ss->ss_lock);
-	destroyme = (0 == --unit->un_refcnt);
-	mutex_unlock(&ss->ss_lock);
-
-	if (destroyme)
-		mpc_unit_destroy(unit);
 }
 
 /**
@@ -946,7 +917,7 @@ mpc_unit_setup(
 	if (unitp)
 		*unitp = unit;
 	else
-		mpc_unit_put(unit); /* caller doesn't need/want a reference */
+		kref_put(&unit->un_ref, mpc_unit_destroy);
 
 errout:
 	if (err) {
@@ -958,8 +929,8 @@ errout:
 		 * destroy the unit.
 		 */
 		kref_get(&mpool->mp_ref);
-		mpc_unit_put(unit);
-		mpc_unit_put(unit);
+		kref_put(&unit->un_ref, mpc_unit_destroy);
+		kref_put(&unit->un_ref, mpc_unit_destroy);
 	}
 
 	return err;
@@ -1750,7 +1721,7 @@ errout:
 	if (err) {
 		if (merr_errno(err) != EBUSY)
 			mp_pr_err("open %s failed", err, unit->un_name);
-		mpc_unit_put(unit);
+		kref_put(&unit->un_ref, mpc_unit_destroy);
 	}
 
 	return -merr_errno(err);
@@ -1794,7 +1765,7 @@ static int mpc_release(struct inode *ip, struct file *fp)
 errout:
 	up(&unit->un_open_lock);
 
-	mpc_unit_put(unit);
+	kref_put(&unit->un_ref, mpc_unit_destroy);
 
 	return 0;
 }
@@ -2402,7 +2373,7 @@ mpioc_mp_create(
 
 errout:
 	if (mpool_unit)
-		mpc_unit_put(mpool_unit); /* Release ctl device caller's ref */
+		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
 
 	if (mpool)
 		kref_put(&mpool->mp_ref, mpc_mpool_release);
@@ -2506,7 +2477,7 @@ mpioc_mp_activate(
 
 errout:
 	if (mpool_unit)
-		mpc_unit_put(mpool_unit); /* Release ctl device caller's ref */
+		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
 
 	if (mpool)
 		kref_put(&mpool->mp_ref, mpc_mpool_release);
@@ -2594,7 +2565,7 @@ mp_deactivate_impl(
 		/* If the unit is not idle we set unitc to zero to prevent
 		 * the ensuing loops from making any state changes.
 		 */
-		if (un->un_open_cnt > 0 || un->un_refcnt > reftgt) {
+		if (un->un_open_cnt > 0 || kref_read(&un->un_ref) > reftgt) {
 			mpc_errinfo(&mp->mp_cmn, MPOOL_RC_STAT, un->un_name);
 			err = merr(EBUSY);
 			unitc = 0;
@@ -2608,8 +2579,9 @@ mp_deactivate_impl(
 		ss->ss_unitv[MINOR(unitv[i]->un_devno)] = NULL;
 	mutex_unlock(&ss->ss_lock);
 
+	/* Release birth ref. */
 	for (i = 0; i < unitc; ++i)
-		mpc_unit_put(unitv[i]); /* release birth ref */
+		kref_put(&unitv[i]->un_ref, mpc_unit_destroy);
 
 	dev_dbg(mpunit->un_device,
 		"mpool %s deactivated, %d units",
@@ -2617,7 +2589,7 @@ mp_deactivate_impl(
 
 	mpc_params_unregister(mpunit);
 
-	mpc_unit_put(mpunit);
+	kref_put(&mpunit->un_ref, mpc_unit_destroy);
 
 err_exit:
 	if (!locked)
@@ -2705,7 +2677,7 @@ mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 
 	/* If mpc_unit_lookup_by_name() succeeds it will have acquired
 	 * a reference on mpool_unit.  We release that reference at the
-	 * end of this function by calling mpc_unit_put().
+	 * end of this function.
 	 */
 	mpc_unit_lookup_by_name(ctl, mp->mp_params.mp_name, &mpool_unit);
 
@@ -2782,7 +2754,7 @@ mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 
 	case MPIOC_MP_DESTROY:
 		if (mpool_unit) {
-			mpc_unit_put(mpool_unit);
+			kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
 			mpool_unit = NULL;
 
 			err = mp_deactivate_impl(ctl, cmd, mp, true);
@@ -2809,7 +2781,7 @@ mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 
 errout:
 	if (mpool_unit)
-		mpc_unit_put(mpool_unit);
+		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
 
 	up(&ss->ss_op_sema);
 
@@ -4340,7 +4312,7 @@ static __init int mpc_init(void)
 
 	mpc_softstate = ss;
 
-	mpc_unit_put(unit);
+	kref_put(&unit->un_ref, mpc_unit_destroy);
 
 	return 0;
 
@@ -4395,8 +4367,11 @@ static __exit void mpc_exit(void)
 
 	ss = mpc_softstate;
 	if (ss) {
-		for (i = ss->ss_units_max - 1; i >= 0; --i)
-			mpc_unit_put(ss->ss_unitv[i]);
+		for (i = ss->ss_units_max - 1; i >= 0; --i) {
+			if (ss->ss_unitv[i])
+				kref_put(&ss->ss_unitv[i]->un_ref,
+					 mpc_unit_destroy);
+		}
 
 		cdev_del(&ss->ss_cdev);
 		class_destroy(ss->ss_class);
