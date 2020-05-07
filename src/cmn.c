@@ -127,55 +127,6 @@ objid_to_layout_insert_oml(
 	return true;
 }
 
-struct ecio_layout_descriptor *
-objid_to_layout_search_mdc(struct rb_root *root, u64 key_objid)
-{
-	struct rb_node *node = root->rb_node;
-
-	while (node) {
-		struct ecio_layout_descriptor *data =
-			rb_entry(node, struct ecio_layout_descriptor,
-				 eld_nodemdc);
-		if (key_objid < data->eld_objid)
-			node = node->rb_left;
-		else if (key_objid > data->eld_objid)
-			node = node->rb_right;
-		else
-			return data;
-	}
-	return NULL;
-}
-
-struct ecio_layout_descriptor *
-objid_to_layout_insert_mdc(
-	struct rb_root                 *root,
-	struct ecio_layout_descriptor  *data)
-{
-	struct rb_node **new = &(root->rb_node), *parent = NULL;
-
-	/* Figure out where to insert given layout, or return the colliding
-	 * layout if there's already a layout in the tree with the given ID.
-	 */
-	while (*new) {
-		struct ecio_layout_descriptor *this =
-			rb_entry(*new, struct ecio_layout_descriptor,
-				     eld_nodemdc);
-		parent = *new;
-		if (data->eld_objid < this->eld_objid)
-			new = &((*new)->rb_left);
-		else if (data->eld_objid > this->eld_objid)
-			new = &((*new)->rb_right);
-		else
-			return this;
-	}
-
-	/* Add new node and rebalance tree. */
-	rb_link_node(&data->eld_nodemdc, parent, new);
-	rb_insert_color(&data->eld_nodemdc, root);
-
-	return NULL;
-}
-
 static int comp_func(const void *c1, const void *c2)
 {
 	return strcmp(*(char **)c1, *(char **)c2);

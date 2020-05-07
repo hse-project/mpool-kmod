@@ -89,29 +89,6 @@ objid_to_layout_insert_oml(
 	struct ecio_layout_descriptor  *data);
 
 /**
- * objid_to_layout_search_mdc() -
- * @root:
- * @key_objid:
- *
- * Return: pointer to struct ecio_layout_descriptor if found else NULL.
- */
-struct ecio_layout_descriptor *
-objid_to_layout_search_mdc(struct rb_root *root, u64 key_objid);
-
-/**
- * objid_to_layout_insert_mdc() -
- * @root:
- * @data:
- *
- * Return: NULL if successfully inserted, otherwise returns
- * a pointer to the colliding layout.
- */
-struct ecio_layout_descriptor *
-objid_to_layout_insert_mdc(
-	struct rb_root                 *root,
-	struct ecio_layout_descriptor  *data);
-
-/**
  * calc_io_len() -
  * @iov:
  * @iovcnt:

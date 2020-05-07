@@ -26,6 +26,12 @@
 
 #include "mpcore/qos.h"
 
+static merr_t
+pmd_write_meta_to_latest_version(
+	struct mpool_descriptor    *mp,
+	bool                        permitted,
+	struct mpool_devrpt        *devrpt);
+
 /*
  * lock for serializing certain pmd ops where required/desirable; could be per
  * mpool but no meaningful performance benefit in doing so for these rare ops
@@ -33,21 +39,213 @@
  */
 static DEFINE_MUTEX(pmd_s_lock);
 
+static struct ecio_layout_descriptor *
+ecio_layout_find(struct rb_root *root, u64 objid)
+{
+	struct rb_node *node = root->rb_node;
 
-static merr_t
-pmd_write_meta_to_latest_version(
+	while (node) {
+		struct ecio_layout_descriptor *data =
+			rb_entry(node, struct ecio_layout_descriptor,
+				 eld_nodemdc);
+		if (objid < data->eld_objid)
+			node = node->rb_left;
+		else if (objid > data->eld_objid)
+			node = node->rb_right;
+		else
+			return data;
+	}
+
+	return NULL;
+}
+
+static struct ecio_layout_descriptor *
+ecio_layout_insert(
+	struct rb_root                 *root,
+	struct ecio_layout_descriptor  *data)
+{
+	struct rb_node **new = &(root->rb_node), *parent = NULL;
+
+	/* Figure out where to insert given layout, or return the colliding
+	 * layout if there's already a layout in the tree with the given ID.
+	 */
+	while (*new) {
+		struct ecio_layout_descriptor *this =
+			rb_entry(*new, struct ecio_layout_descriptor,
+				     eld_nodemdc);
+		parent = *new;
+		if (data->eld_objid < this->eld_objid)
+			new = &((*new)->rb_left);
+		else if (data->eld_objid > this->eld_objid)
+			new = &((*new)->rb_right);
+		else
+			return this;
+	}
+
+	/* Add new node and rebalance tree. */
+	rb_link_node(&data->eld_nodemdc, parent, new);
+	rb_insert_color(&data->eld_nodemdc, root);
+
+	return NULL;
+}
+
+/* Committed object tree operations...
+ */
+static inline void pmd_co_rlock(struct pmd_mdc_info *cinfo, u8 slot)
+{
+	down_read_nested(&cinfo->mmi_co_lock,
+			 slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
+}
+
+static inline void pmd_co_runlock(struct pmd_mdc_info *cinfo)
+{
+	up_read(&cinfo->mmi_co_lock);
+}
+
+static inline void pmd_co_wlock(struct pmd_mdc_info *cinfo, u8 slot)
+{
+	down_write_nested(&cinfo->mmi_co_lock,
+			  slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
+}
+
+static inline void pmd_co_wunlock(struct pmd_mdc_info *cinfo)
+{
+	up_write(&cinfo->mmi_co_lock);
+}
+
+static inline struct ecio_layout_descriptor *
+pmd_co_find(struct pmd_mdc_info *cinfo, u64 objid)
+{
+	return ecio_layout_find(&cinfo->mmi_co_root, objid);
+}
+
+static inline struct ecio_layout_descriptor *
+pmd_co_insert(
+	struct pmd_mdc_info            *cinfo,
+	struct ecio_layout_descriptor  *layout)
+{
+	return ecio_layout_insert(&cinfo->mmi_co_root, layout);
+}
+
+static inline struct ecio_layout_descriptor *
+pmd_co_remove(
+	struct pmd_mdc_info            *cinfo,
+	struct ecio_layout_descriptor  *layout)
+{
+	struct ecio_layout_descriptor *found;
+
+	found = pmd_co_find(cinfo, layout->eld_objid);
+	if (found)
+		rb_erase(&found->eld_nodemdc, &cinfo->mmi_co_root);
+
+	return found;
+}
+
+/* Uncommitted object tree operations...
+ */
+static inline void pmd_uc_lock(struct pmd_mdc_info *cinfo, u8 slot)
+{
+	mutex_lock_nested(&cinfo->mmi_uc_lock,
+			  slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
+}
+
+static inline void pmd_uc_unlock(struct pmd_mdc_info *cinfo)
+{
+	mutex_unlock(&cinfo->mmi_uc_lock);
+}
+
+static inline struct ecio_layout_descriptor *
+pmd_uc_find(struct pmd_mdc_info *cinfo, u64 objid)
+{
+	return ecio_layout_find(&cinfo->mmi_uc_root, objid);
+}
+
+static inline struct ecio_layout_descriptor *
+pmd_uc_insert(
+	struct pmd_mdc_info            *cinfo,
+	struct ecio_layout_descriptor  *layout)
+{
+	return ecio_layout_insert(&cinfo->mmi_uc_root, layout);
+}
+
+static inline struct ecio_layout_descriptor *
+pmd_uc_remove(
+	struct pmd_mdc_info            *cinfo,
+	struct ecio_layout_descriptor  *layout)
+{
+	struct ecio_layout_descriptor *found;
+
+	found = pmd_uc_find(cinfo, layout->eld_objid);
+	if (found)
+		rb_erase(&found->eld_nodemdc, &cinfo->mmi_uc_root);
+
+	return found;
+}
+
+struct ecio_layout_descriptor *
+pmd_obj_find_get(
 	struct mpool_descriptor    *mp,
-	bool                        permitted,
-	struct mpool_devrpt        *devrpt);
+	u64                         objid,
+	int                         which)
+{
+	struct ecio_layout_descriptor  *found;
+	struct pmd_mdc_info            *cinfo;
+	u8                              cslot;
+
+	if (!objtype_user(objid_type(objid)))
+		return NULL;
+
+	cslot = objid_slot(objid);
+	cinfo = &mp->pds_mda.mdi_slotv[cslot];
+	found = NULL;
+
+	/* which < 0  - search uncommitted tree only
+	 * which > 0  - search tree only
+	 * which == 0 - search both trees
+	 */
+	if (which <= 0) {
+		pmd_uc_lock(cinfo, cslot);
+		found = pmd_uc_find(cinfo, objid);
+		if (found)
+			atomic64_inc(&found->eld_refcnt);
+		pmd_uc_unlock(cinfo);
+	}
+
+	if (!found && which >= 0) {
+		pmd_co_rlock(cinfo, cslot);
+		found = pmd_co_find(cinfo, objid);
+		if (found)
+			atomic64_inc(&found->eld_refcnt);
+		pmd_co_runlock(cinfo);
+	}
+
+	return found;
+}
+
+void
+pmd_obj_put(
+	struct mpool_descriptor       *mp,
+	struct ecio_layout_descriptor *layout)
+{
+	ecio_layout_put(layout);
+}
+
+/* General mdc locking (has external callers...)
+ */
+void pmd_mdc_lock(struct mutex *lock, u8 slot)
+{
+	mutex_lock_nested(lock, slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
+}
+
+void pmd_mdc_unlock(struct mutex *lock)
+{
+	mutex_unlock(lock);
+}
 
 static void pmd_mda_init(struct mpool_descriptor *mp)
 {
 	int i;
 
-	/*
-	 * Initialize all MDC_SLOTS entries so they are ready to use, excepting
-	 * recbuf which gets allocated dynamically if slot is actually used.
-	 */
 	spin_lock_init(&mp->pds_mda.mdi_slotvlock);
 	mp->pds_mda.mdi_slotvcnt = 0;
 
@@ -110,26 +308,16 @@ pmd_mdc0_init(
 	 */
 
 	mp->pds_mda.mdi_slotvcnt = 1;
-	objid_to_layout_insert_mdc(&cinfo->mmi_co_root, mdc01);
-	objid_to_layout_insert_mdc(&cinfo->mmi_co_root, mdc02);
+	pmd_co_insert(cinfo, mdc01);
+	pmd_co_insert(cinfo, mdc02);
 
 	err = mp_mdc_open(mp, mdc01->eld_objid, mdc02->eld_objid,
 			  MDC_OF_SKIP_SER, &cinfo->mmi_mdc);
 	if (err) {
-		struct ecio_layout_descriptor *found;
+		mp_pr_err("mpool %s, MDC0 open failed", err, mp->pds_name);
 
-		mp_pr_err("mpool %s, MDC0 open failed",
-			  err, mp->pds_name);
-
-		found =	objid_to_layout_search_mdc(&cinfo->mmi_co_root,
-						   mdc01->eld_objid);
-		if (found)
-			rb_erase(&found->eld_nodemdc, &cinfo->mmi_co_root);
-
-		found =	objid_to_layout_search_mdc(&cinfo->mmi_co_root,
-						   mdc02->eld_objid);
-		if (found)
-			rb_erase(&found->eld_nodemdc, &cinfo->mmi_co_root);
+		pmd_co_remove(cinfo, mdc01);
+		pmd_co_remove(cinfo, mdc02);
 
 		kfree(cinfo->mmi_recbuf);
 		cinfo->mmi_recbuf = NULL;
@@ -450,16 +638,6 @@ pmd_smap_insert(
 	return err;
 }
 
-static void pmd_mdc_rdunlock(struct rw_semaphore *sem)
-{
-	up_read(sem);
-}
-
-static void pmd_mdc_rdlock(struct rw_semaphore *sem, u8 slot)
-{
-	down_read_nested(sem, slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
-}
-
 static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 {
 	struct pmd_mdc_info            *cinfo;
@@ -500,7 +678,7 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 
 	cinfo = &mp->pds_mda.mdi_slotv[0];
 
-	pmd_mdc_rdlock(&cinfo->mmi_co_lock, 0);
+	pmd_co_rlock(cinfo, 0);
 
 	for (node = rb_first(&cinfo->mmi_co_root); node;
 	     node = rb_next(node)) {
@@ -523,7 +701,7 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 		}
 	}
 
-	pmd_mdc_rdunlock(&cinfo->mmi_co_lock);
+	pmd_co_runlock(cinfo);
 
 	if (ev(err))
 		return err;
@@ -828,7 +1006,7 @@ pmd_objs_load(
 			layout = cdr.u.obj.omd_layout;
 			layout->eld_state = ECIO_LYT_COMMITTED;
 
-			found = objid_to_layout_insert_mdc(croot, layout);
+			found = pmd_co_insert(cinfo, layout);
 			if (found) {
 				msg = "OCREATE duplicate object ID";
 				ecio_layout_put(layout);
@@ -843,14 +1021,14 @@ pmd_objs_load(
 		}
 
 		if (cdr.omd_rtype == OMF_MDR_ODELETE) {
-			found = objid_to_layout_search_mdc(croot, objid);
+			found = pmd_co_find(cinfo, objid);
 			if (!found) {
 				msg = "ODELETE object not found";
 				err = merr(ENOENT);
 				break;
 			}
 
-			rb_erase(&found->eld_nodemdc, croot);
+			pmd_co_remove(cinfo, found);
 			ecio_layout_put(found);
 
 			atomic_inc(&cinfo->mmi_pco_cnt.pcc_del);
@@ -880,7 +1058,7 @@ pmd_objs_load(
 		}
 
 		if (cdr.omd_rtype == OMF_MDR_OERASE) {
-			layout = objid_to_layout_search_mdc(croot, objid);
+			layout = pmd_co_find(cinfo, objid);
 			if (!layout) {
 				msg = "OERASE object not found";
 				err = merr(ENOENT);
@@ -907,7 +1085,7 @@ pmd_objs_load(
 		if (cdr.omd_rtype == OMF_MDR_OUPDATE) {
 			layout = cdr.u.obj.omd_layout;
 
-			found = objid_to_layout_search_mdc(croot, objid);
+			found = pmd_co_find(cinfo, objid);
 			if (!found) {
 				msg = "OUPDATE object not found";
 				ecio_layout_put(layout);
@@ -915,11 +1093,11 @@ pmd_objs_load(
 				break;
 			}
 
-			rb_erase(&found->eld_nodemdc, croot);
+			pmd_co_remove(cinfo, found);
 			ecio_layout_put(found);
 
 			layout->eld_state = ECIO_LYT_COMMITTED;
-			objid_to_layout_insert_mdc(croot, layout);
+			pmd_co_insert(cinfo, layout);
 
 			atomic_inc(&cinfo->mmi_pco_cnt.pcc_up);
 
@@ -1244,58 +1422,6 @@ void pmd_mpool_deactivate(struct mpool_descriptor *mp)
 }
 
 merr_t
-pmd_obj_alloc(
-	struct mpool_descriptor        *mp,
-	enum obj_type_omf               otype,
-	struct pmd_obj_capacity        *ocap,
-	enum mp_media_classp            mclassp,
-	struct ecio_layout_descriptor **olayout)
-{
-	return pmd_obj_alloc_cmn(mp, 0, otype, ocap, mclassp, 0, 1, olayout);
-}
-
-merr_t
-pmd_obj_realloc(
-	struct mpool_descriptor        *mp,
-	u64                             objid,
-	struct pmd_obj_capacity        *ocap,
-	enum mp_media_classp            mclassp,
-	struct ecio_layout_descriptor **olayout)
-{
-	if (!pmd_objid_isuser(objid)) {
-		*olayout = NULL;
-		return merr(EINVAL);
-	}
-
-	return pmd_obj_alloc_cmn(mp, objid, objid_type(objid),
-				 ocap, mclassp, 1, 1, olayout);
-}
-
-void pmd_mdc_lock(struct mutex *lock, u8 slot)
-{
-	mutex_lock_nested(lock, slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
-}
-
-void pmd_mdc_unlock(struct mutex *lock)
-{
-	mutex_unlock(lock);
-}
-
-/*
- * Nesting levels for pmd_mdc_info rwsem.
- */
-
-static void pmd_mdc_wrlock(struct rw_semaphore *sem, u8 slot)
-{
-	down_write_nested(sem, slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
-}
-
-static void pmd_mdc_wrunlock(struct rw_semaphore *sem)
-{
-	up_write(sem);
-}
-
-merr_t
 pmd_mdc_append(
 	struct mpool_descriptor    *mp,
 	u8                          cslot,
@@ -1588,6 +1714,18 @@ pmd_mdc_addrec(
 }
 
 static merr_t
+pmd_log_delete(
+	struct mpool_descriptor    *mp,
+	u64                         objid)
+{
+	struct omf_mdcrec_data  cdr;
+
+	cdr.omd_rtype = OMF_MDR_ODELETE;
+	cdr.u.obj.omd_objid = objid;
+	return pmd_mdc_addrec(mp, objid_slot(objid), &cdr);
+}
+
+static merr_t
 pmd_log_create(
 	struct mpool_descriptor        *mp,
 	struct ecio_layout_descriptor  *layout)
@@ -1597,6 +1735,76 @@ pmd_log_create(
 	cdr.omd_rtype = OMF_MDR_OCREATE;
 	cdr.u.obj.omd_layout = layout;
 	return pmd_mdc_addrec(mp, objid_slot(layout->eld_objid), &cdr);
+}
+
+/* General object operations for both internal and external callers...
+ *
+ * See pmd.h for the various nesting levels for a locking class.
+ */
+void pmd_obj_rdlock(struct ecio_layout_descriptor *layout)
+{
+	enum pmd_lock_class lc __maybe_unused = PMD_MDC_NORMAL;
+
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	if (objid_slot(layout->eld_objid))
+		lc = PMD_OBJ_CLIENT;
+	else if (objid_mdc0log(layout->eld_objid))
+		lc = PMD_MDC_ZERO;
+#endif
+
+	down_read_nested(&layout->eld_rwlock, lc);
+}
+
+void pmd_obj_rdunlock(struct ecio_layout_descriptor *layout)
+{
+	up_read(&layout->eld_rwlock);
+}
+
+void pmd_obj_wrlock(struct ecio_layout_descriptor *layout)
+{
+	enum pmd_lock_class lc __maybe_unused = PMD_MDC_NORMAL;
+
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	if (objid_slot(layout->eld_objid))
+		lc = PMD_OBJ_CLIENT;
+	else if (objid_mdc0log(layout->eld_objid))
+		lc = PMD_MDC_ZERO;
+#endif
+
+	down_write_nested(&layout->eld_rwlock, lc);
+}
+
+void pmd_obj_wrunlock(struct ecio_layout_descriptor *layout)
+{
+	up_write(&layout->eld_rwlock);
+}
+
+merr_t
+pmd_obj_alloc(
+	struct mpool_descriptor        *mp,
+	enum obj_type_omf               otype,
+	struct pmd_obj_capacity        *ocap,
+	enum mp_media_classp            mclassp,
+	struct ecio_layout_descriptor **olayout)
+{
+	return pmd_obj_alloc_cmn(mp, 0, otype, ocap, mclassp, 0, 1, olayout);
+}
+
+merr_t
+pmd_obj_realloc(
+	struct mpool_descriptor        *mp,
+	u64                             objid,
+	struct pmd_obj_capacity        *ocap,
+	enum mp_media_classp            mclassp,
+	struct ecio_layout_descriptor **olayout)
+{
+	if (!pmd_objid_isuser(objid)) {
+		*olayout = NULL;
+		return merr(EINVAL);
+	}
+
+	return pmd_obj_alloc_cmn(mp, objid, objid_type(objid),
+				 ocap, mclassp, 1, 1, olayout);
 }
 
 merr_t
@@ -1631,18 +1839,15 @@ pmd_obj_commit(
 
 	err = pmd_log_create(mp, layout);
 	if (!ev(err)) {
-		pmd_mdc_lock(&cinfo->mmi_uc_lock, cslot);
-		found =	objid_to_layout_search_mdc(&cinfo->mmi_uc_root,
-						   layout->eld_objid);
-		if (found)
-			rb_erase(&found->eld_nodemdc, &cinfo->mmi_uc_root);
-		pmd_mdc_unlock(&cinfo->mmi_uc_lock);
+		pmd_uc_lock(cinfo, cslot);
+		found = pmd_uc_remove(cinfo, layout);
+		pmd_uc_unlock(cinfo);
 
-		pmd_mdc_wrlock(&cinfo->mmi_co_lock, cslot);
-		found = objid_to_layout_insert_mdc(&cinfo->mmi_co_root, layout);
+		pmd_co_wlock(cinfo, cslot);
+		found = pmd_co_insert(cinfo, layout);
 		if (!found)
 			layout->eld_state |= ECIO_LYT_COMMITTED;
-		pmd_mdc_wrunlock(&cinfo->mmi_co_lock);
+		pmd_co_wunlock(cinfo);
 
 		if (found) {
 			err = merr(EEXIST);
@@ -1666,9 +1871,9 @@ pmd_obj_commit(
 				   err, mp->pds_name, (ulong)layout->eld_objid);
 
 			/* Put the object back in the uncommited objects tree */
-			pmd_mdc_lock(&cinfo->mmi_uc_lock, cslot);
-			objid_to_layout_insert_mdc(&cinfo->mmi_uc_root, layout);
-			pmd_mdc_unlock(&cinfo->mmi_uc_lock);
+			pmd_uc_lock(cinfo, cslot);
+			pmd_uc_insert(cinfo, layout);
+			pmd_uc_unlock(cinfo);
 		} else {
 			atomic_inc(&cinfo->mmi_pco_cnt.pcc_cr);
 			atomic_inc(&cinfo->mmi_pco_cnt.pcc_cobj);
@@ -1754,17 +1959,14 @@ pmd_obj_abort(
 
 	pmd_obj_wrlock(layout);
 
-	pmd_mdc_lock(&cinfo->mmi_uc_lock, cslot);
+	pmd_uc_lock(cinfo, cslot);
 	refcnt = atomic64_read(&layout->eld_refcnt);
 	if (refcnt == 2) {
-		found = objid_to_layout_search_mdc(&cinfo->mmi_uc_root,
-						   layout->eld_objid);
-		if (found) {
-			rb_erase(&found->eld_nodemdc, &cinfo->mmi_uc_root);
+		found = pmd_uc_remove(cinfo, layout);
+		if (found)
 			found->eld_state |= ECIO_LYT_REMOVED;
-		}
 	}
-	pmd_mdc_unlock(&cinfo->mmi_uc_lock);
+	pmd_uc_unlock(cinfo);
 
 	pmd_obj_wrunlock(layout);
 
@@ -1776,18 +1978,6 @@ pmd_obj_abort(
 	ecio_layout_put(layout);
 
 	return 0;
-}
-
-merr_t
-pmd_log_delete(
-	struct mpool_descriptor    *mp,
-	u64                         objid)
-{
-	struct omf_mdcrec_data  cdr;
-
-	cdr.omd_rtype = OMF_MDR_ODELETE;
-	cdr.u.obj.omd_objid = objid;
-	return pmd_mdc_addrec(mp, objid_slot(objid), &cdr);
 }
 
 merr_t
@@ -1820,16 +2010,14 @@ pmd_obj_delete(
 	pmd_obj_wrlock(layout);
 	pmd_mdc_lock(&cinfo->mmi_compactlock, cslot);
 
-	pmd_mdc_wrlock(&cinfo->mmi_co_lock, cslot);
+	pmd_co_wlock(cinfo, cslot);
 	refcnt = atomic64_read(&layout->eld_refcnt);
 	if (refcnt == 2) {
-		found = objid_to_layout_search_mdc(&cinfo->mmi_co_root, objid);
-		if (found) {
-			rb_erase(&found->eld_nodemdc, &cinfo->mmi_co_root);
+		found = pmd_co_remove(cinfo, layout);
+		if (found)
 			found->eld_state |= ECIO_LYT_REMOVED;
-		}
 	}
-	pmd_mdc_wrunlock(&cinfo->mmi_co_lock);
+	pmd_co_wunlock(cinfo);
 
 	if (!found) {
 		pmd_mdc_unlock(&cinfo->mmi_compactlock);
@@ -1840,11 +2028,11 @@ pmd_obj_delete(
 
 	err = pmd_log_delete(mp, objid);
 	if (err) {
-		pmd_mdc_wrlock(&cinfo->mmi_co_lock, cslot);
-		objid_to_layout_insert_mdc(&cinfo->mmi_co_root, found);
+		pmd_co_wlock(cinfo, cslot);
+		pmd_co_insert(cinfo, found);
 		found->eld_state &= ~ECIO_LYT_REMOVED;
 		found = NULL;
-		pmd_mdc_wrunlock(&cinfo->mmi_co_lock);
+		pmd_co_wunlock(cinfo);
 	}
 
 	pmd_mdc_unlock(&cinfo->mmi_compactlock);
@@ -2020,97 +2208,6 @@ pmd_obj_erase(
 	}
 
 	return err;
-}
-
-void
-pmd_obj_put(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout)
-{
-	ecio_layout_put(layout);
-}
-
-struct ecio_layout_descriptor *
-pmd_obj_find_get(
-	struct mpool_descriptor    *mp,
-	u64                         objid,
-	int                         which)
-{
-	struct ecio_layout_descriptor  *found;
-	struct pmd_mdc_info            *cinfo;
-	u8                              cslot;
-
-	if (!objtype_user(objid_type(objid)))
-		return NULL;
-
-	cslot = objid_slot(objid);
-	cinfo = &mp->pds_mda.mdi_slotv[cslot];
-	found = NULL;
-
-	/* which < 0  - search uncommitted tree only
-	 * which > 0  - search tree only
-	 * which == 0 - search both trees
-	 */
-	if (which <= 0) {
-		pmd_mdc_lock(&cinfo->mmi_uc_lock, cslot);
-		found = objid_to_layout_search_mdc(&cinfo->mmi_uc_root, objid);
-		if (found)
-			atomic64_inc(&found->eld_refcnt);
-		pmd_mdc_unlock(&cinfo->mmi_uc_lock);
-	}
-
-	if (!found && which >= 0) {
-		pmd_mdc_rdlock(&cinfo->mmi_co_lock, cslot);
-		found = objid_to_layout_search_mdc(&cinfo->mmi_co_root, objid);
-		if (found)
-			atomic64_inc(&found->eld_refcnt);
-		pmd_mdc_rdunlock(&cinfo->mmi_co_lock);
-	}
-
-	return found;
-}
-
-/* Please see pmd.h for the various nesting levels for a locking class */
-
-/*
- * Nesting levels for layout rwlock.
- */
-void pmd_obj_rdlock(struct ecio_layout_descriptor *layout)
-{
-	enum pmd_lock_class lc __maybe_unused = PMD_MDC_NORMAL;
-
-#ifdef CONFIG_DEBUG_LOCK_ALLOC
-	if (objid_slot(layout->eld_objid))
-		lc = PMD_OBJ_CLIENT;
-	else if (objid_mdc0log(layout->eld_objid))
-		lc = PMD_MDC_ZERO;
-#endif
-
-	down_read_nested(&layout->eld_rwlock, lc);
-}
-
-void pmd_obj_rdunlock(struct ecio_layout_descriptor *layout)
-{
-	up_read(&layout->eld_rwlock);
-}
-
-void pmd_obj_wrlock(struct ecio_layout_descriptor *layout)
-{
-	enum pmd_lock_class lc __maybe_unused = PMD_MDC_NORMAL;
-
-#ifdef CONFIG_DEBUG_LOCK_ALLOC
-	if (objid_slot(layout->eld_objid))
-		lc = PMD_OBJ_CLIENT;
-	else if (objid_mdc0log(layout->eld_objid))
-		lc = PMD_MDC_ZERO;
-#endif
-
-	down_write_nested(&layout->eld_rwlock, lc);
-}
-
-void pmd_obj_wrunlock(struct ecio_layout_descriptor *layout)
-{
-	up_write(&layout->eld_rwlock);
 }
 
 merr_t
@@ -2385,7 +2482,7 @@ pmd_mdc_cap(
 
 	/*  taking compactlock to freeze all object layout metadata in mdc0 */
 	pmd_mdc_lock(&cinfo->mmi_compactlock, 0);
-	pmd_mdc_rdlock(&cinfo->mmi_co_lock, 0);
+	pmd_co_rlock(cinfo, 0);
 
 	for (node = rb_first(&cinfo->mmi_co_root); node; node = rb_next(node)) {
 		layout = rb_entry(node, struct ecio_layout_descriptor,
@@ -2405,7 +2502,7 @@ pmd_mdc_cap(
 			*mdccap = *mdccap + mlogsz;
 	}
 
-	pmd_mdc_rdunlock(&cinfo->mmi_co_lock);
+	pmd_co_runlock(cinfo);
 	pmd_mdc_unlock(&cinfo->mmi_compactlock);
 	mutex_unlock(&pmd_s_lock);
 
@@ -2905,12 +3002,12 @@ retry:
 	 * tree lock) that objid is not in the committed obj tree in order
 	 * to protect against an invalid *_realloc() call.
 	 */
-	pmd_mdc_lock(&cinfo->mmi_uc_lock, cslot);
+	pmd_uc_lock(cinfo, cslot);
 	if (realloc) {
-		pmd_mdc_rdlock(&cinfo->mmi_co_lock, cslot);
-		if (objid_to_layout_search_mdc(&cinfo->mmi_co_root, objid))
+		pmd_co_rlock(cinfo, cslot);
+		if (pmd_co_find(cinfo, objid))
 			err = merr(EEXIST);
-		pmd_mdc_rdunlock(&cinfo->mmi_co_lock);
+		pmd_co_runlock(cinfo);
 	}
 
 	/* For both alloc and realloc, confirm that objid is not in the
@@ -2920,13 +3017,13 @@ retry:
 	if (!err) {
 		struct ecio_layout_descriptor *dup;
 
-		dup = objid_to_layout_insert_mdc(&cinfo->mmi_uc_root, *layout);
+		dup = pmd_uc_insert(cinfo, *layout);
 		if (dup)
 			err = merr(EEXIST);
 		else
 			atomic64_add(arefs, &(*layout)->eld_refcnt);
 	}
-	pmd_mdc_unlock(&cinfo->mmi_uc_lock);
+	pmd_uc_unlock(cinfo);
 
 	if (err) {
 		mp_pr_err("mpool %s, %sallocated object 0x%lx should not be in the %scommitted tree",
