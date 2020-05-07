@@ -790,7 +790,7 @@ pmd_layout_free(
  * @ocap:
  * @mclassp: media class
  * @realloc:
- * @arefs:  number of additional references needed
+ * @needref: whether a ref is needed
  * @layout: output, guaranteed to be not NULL if no error returned.
  *
  * Allocate object of type otype with parameters and capacity as specified
@@ -808,7 +808,7 @@ pmd_obj_alloc_cmn(
 	struct pmd_obj_capacity        *ocap,
 	enum mp_media_classp            mclassp,
 	int                             realloc,
-	uint                            arefs,
+	bool                            needref,
 	struct ecio_layout_descriptor **layout);
 
 /*

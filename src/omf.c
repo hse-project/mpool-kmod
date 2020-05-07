@@ -594,7 +594,7 @@ omf_ecio_layout_unpack_letoh(
 	}
 
 	if (i >= mp->pds_pdvcnt) {
-		ecio_layout_put(ecl);
+		kref_put(&ecl->eld_ref, ecio_layout_release);
 
 		err = merr(ENOENT);
 		mp_pr_err("mpool %s, unpacking layout failed, mclass %u not in mpool",

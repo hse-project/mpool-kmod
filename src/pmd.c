@@ -210,7 +210,7 @@ pmd_obj_find_get(
 		pmd_uc_lock(cinfo, cslot);
 		found = pmd_uc_find(cinfo, objid);
 		if (found)
-			atomic64_inc(&found->eld_refcnt);
+			kref_get(&found->eld_ref);
 		pmd_uc_unlock(cinfo);
 	}
 
@@ -218,7 +218,7 @@ pmd_obj_find_get(
 		pmd_co_rlock(cinfo, cslot);
 		found = pmd_co_find(cinfo, objid);
 		if (found)
-			atomic64_inc(&found->eld_refcnt);
+			kref_get(&found->eld_ref);
 		pmd_co_runlock(cinfo);
 	}
 
@@ -230,7 +230,7 @@ pmd_obj_put(
 	struct mpool_descriptor       *mp,
 	struct ecio_layout_descriptor *layout)
 {
-	ecio_layout_put(layout);
+	kref_put(&layout->eld_ref, ecio_layout_release);
 }
 
 /* General mdc locking (has external callers...)
@@ -1008,7 +1008,7 @@ pmd_objs_load(
 			found = pmd_co_insert(cinfo, layout);
 			if (found) {
 				msg = "OCREATE duplicate object ID";
-				ecio_layout_put(layout);
+				kref_put(&layout->eld_ref, ecio_layout_release);
 				err = merr(EEXIST);
 				break;
 			}
@@ -1028,7 +1028,7 @@ pmd_objs_load(
 			}
 
 			pmd_co_remove(cinfo, found);
-			ecio_layout_put(found);
+			kref_put(&found->eld_ref, ecio_layout_release);
 
 			atomic_inc(&cinfo->mmi_pco_cnt.pcc_del);
 			atomic_dec(&cinfo->mmi_pco_cnt.pcc_cobj);
@@ -1087,13 +1087,13 @@ pmd_objs_load(
 			found = pmd_co_find(cinfo, objid);
 			if (!found) {
 				msg = "OUPDATE object not found";
-				ecio_layout_put(layout);
+				kref_put(&layout->eld_ref, ecio_layout_release);
 				err = merr(ENOENT);
 				break;
 			}
 
 			pmd_co_remove(cinfo, found);
-			ecio_layout_put(found);
+			kref_put(&found->eld_ref, ecio_layout_release);
 
 			layout->eld_state = ECIO_LYT_COMMITTED;
 			pmd_co_insert(cinfo, layout);
@@ -1214,7 +1214,7 @@ void pmd_mda_free(struct mpool_descriptor *mp)
 		rbtree_postorder_for_each_entry_safe(
 			layout, tmp, &cinfo->mmi_co_root, eld_nodemdc) {
 
-			ecio_layout_put(layout);
+			kref_put(&layout->eld_ref, ecio_layout_release);
 		}
 
 		/* Release uncommitted objects...
@@ -1222,7 +1222,7 @@ void pmd_mda_free(struct mpool_descriptor *mp)
 		rbtree_postorder_for_each_entry_safe(
 			layout, tmp, &cinfo->mmi_uc_root, eld_nodemdc) {
 
-			ecio_layout_put(layout);
+			kref_put(&layout->eld_ref, ecio_layout_release);
 		}
 	}
 }
@@ -1348,8 +1348,8 @@ pmd_mpool_activate(
 		 * pmd_mda_free() will dealloc mdc01/2 on subsequent
 		 * activation failures
 		 */
-		ecio_layout_put(mdc01);
-		ecio_layout_put(mdc02);
+		kref_put(&mdc01->eld_ref, ecio_layout_release);
+		kref_put(&mdc02->eld_ref, ecio_layout_release);
 		goto exit;
 	}
 
@@ -1785,7 +1785,7 @@ pmd_obj_alloc(
 	enum mp_media_classp            mclassp,
 	struct ecio_layout_descriptor **olayout)
 {
-	return pmd_obj_alloc_cmn(mp, 0, otype, ocap, mclassp, 0, 1, olayout);
+	return pmd_obj_alloc_cmn(mp, 0, otype, ocap, mclassp, 0, true, olayout);
 }
 
 merr_t
@@ -1802,7 +1802,7 @@ pmd_obj_realloc(
 	}
 
 	return pmd_obj_alloc_cmn(mp, objid, objid_type(objid),
-				 ocap, mclassp, 1, 1, olayout);
+				 ocap, mclassp, 1, true, olayout);
 }
 
 merr_t
@@ -1958,7 +1958,7 @@ pmd_obj_abort(
 	pmd_obj_wrlock(layout);
 
 	pmd_uc_lock(cinfo, cslot);
-	refcnt = atomic64_read(&layout->eld_refcnt);
+	refcnt = kref_read(&layout->eld_ref);
 	if (refcnt == 2) {
 		found = pmd_uc_remove(cinfo, layout);
 		if (found)
@@ -1973,7 +1973,7 @@ pmd_obj_abort(
 
 	pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_ABORT);
 	pmd_obj_erase_start(mp, layout);
-	ecio_layout_put(layout);
+	kref_put(&layout->eld_ref, ecio_layout_release);
 
 	return 0;
 }
@@ -2009,7 +2009,7 @@ pmd_obj_delete(
 	pmd_mdc_lock(&cinfo->mmi_compactlock, cslot);
 
 	pmd_co_wlock(cinfo, cslot);
-	refcnt = atomic64_read(&layout->eld_refcnt);
+	refcnt = kref_read(&layout->eld_ref);
 	if (refcnt == 2) {
 		found = pmd_co_remove(cinfo, layout);
 		if (found)
@@ -2046,7 +2046,7 @@ pmd_obj_delete(
 	atomic_dec(&cinfo->mmi_pco_cnt.pcc_cobj);
 	pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_DELETE);
 	pmd_obj_erase_start(mp, layout);
-	ecio_layout_put(layout);
+	kref_put(&layout->eld_ref, ecio_layout_release);
 
 	return 0;
 }
@@ -2312,7 +2312,7 @@ pmd_mdc_alloc(
 	 */
 	layout1 = NULL;
 	err = pmd_obj_alloc_cmn(mp, reverse ? logid2 : logid1, OMF_OBJ_MLOG,
-				&ocap, mclassp, 0, 0, &layout1);
+				&ocap, mclassp, 0, false, &layout1);
 	if (ev(err)) {
 		if (merr_errno(err) != ENOENT)
 			msg = "allocation of first mlog failed";
@@ -2321,7 +2321,7 @@ pmd_mdc_alloc(
 
 	layout2 = NULL;
 	err = pmd_obj_alloc_cmn(mp, reverse ? logid1 : logid2, OMF_OBJ_MLOG,
-				&ocap, mclassp, 0, 0, &layout2);
+				&ocap, mclassp, 0, false, &layout2);
 	if (ev(err)) {
 		pmd_obj_abort(mp, layout1);
 		if (merr_errno(err) != ENOENT)
@@ -2607,7 +2607,7 @@ pmd_layout_free(
 			  (ulong)layout->eld_objid);
 	}
 
-	ecio_layout_put(layout);
+	kref_put(&layout->eld_ref, ecio_layout_release);
 }
 
 /**
@@ -2861,7 +2861,7 @@ pmd_obj_alloc_cmn(
 	struct pmd_obj_capacity        *ocap,
 	enum mp_media_classp            mclassp,
 	int                             realloc,
-	uint                            arefs,
+	bool                            needref,
 	struct ecio_layout_descriptor **layout)
 {
 	u64                     zcnt = 0;
@@ -2946,7 +2946,7 @@ retry:
 
 		up_read(&mp->pds_pdvlock);
 
-		ecio_layout_put(*layout);
+		kref_put(&(*layout)->eld_ref, ecio_layout_release);
 		*layout = NULL;
 
 		/* TODO: Retry only if mperasewq is busy... */
@@ -3018,8 +3018,8 @@ retry:
 		dup = pmd_uc_insert(cinfo, *layout);
 		if (dup)
 			err = merr(EEXIST);
-		else
-			atomic64_add(arefs, &(*layout)->eld_refcnt);
+		else if (needref)
+			kref_get(&(*layout)->eld_ref);
 	}
 	pmd_uc_unlock(cinfo);
 

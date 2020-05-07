@@ -76,7 +76,7 @@ struct ecio_layout_mlo {
  * @eld_mlo:     info. specific to an mlog, NULL for mblocks.
  * @eld_gen:     object generation
  * @eld_ld:
- * @eld_refcnt:  user ref count from alloc/get/put
+ * @eld_ref:     user ref count from alloc/get/put
  * @eld_rwlock:  implements pmd_obj_*lock() for this layout
  */
 struct ecio_layout_descriptor {
@@ -89,7 +89,7 @@ struct ecio_layout_descriptor {
 	u64                             eld_gen;
 	struct omf_layout_descriptor    eld_ld;
 
-	atomic64_t                      eld_refcnt;
+	struct kref                     eld_ref;
 	struct rw_semaphore             eld_rwlock;
 };
 
@@ -304,14 +304,14 @@ ecio_layout_alloc(
 	u32                         zcnt);
 
 /**
- * ecio_layout_free() - free ecio_layout_descriptor and internal elements
+ * ecio_layout_release() - free ecio_layout_descriptor and internal elements
  * @layout:
  *
  * Deallocate all memory associated with object layout.
  *
  * Return: void
  */
-void ecio_layout_put(struct ecio_layout_descriptor *layout);
+void ecio_layout_release(struct kref *refp);
 
 /*
  * ecio internal functions

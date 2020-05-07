@@ -509,7 +509,7 @@ ecio_layout_alloc(
 	layout->eld_mblen     = mblen;
 	layout->eld_state     = ECIO_LYT_NONE;
 	layout->eld_ld.ol_zcnt = zcnt;
-	atomic64_set(&layout->eld_refcnt, 1);
+	kref_init(&layout->eld_ref);
 	init_rwsem(&layout->eld_rwlock);
 
 	/*
@@ -526,18 +526,18 @@ ecio_layout_alloc(
 /*
  * Deallocate all memory associated with object layout.
  */
-void ecio_layout_put(struct ecio_layout_descriptor *layout)
+void ecio_layout_release(struct kref *refp)
 {
-	struct ecio_layout_mlo *mlo;
+	struct ecio_layout_descriptor *layout;
+	struct ecio_layout_mlo        *mlo;
 
-	if (!layout || atomic64_dec_return(&layout->eld_refcnt) > 0)
-		return;
+	layout = container_of(refp, struct ecio_layout_descriptor, eld_ref);
 
 	WARN_ONCE(layout->eld_objid == 0 ||
-		  atomic64_read(&layout->eld_refcnt),
+		  kref_read(&layout->eld_ref),
 		  "%s: %px, objid %lx, state %x, refcnt %ld",
 		  __func__, layout, (ulong)layout->eld_objid,
-		  layout->eld_state, (long)atomic64_read(&layout->eld_refcnt));
+		  layout->eld_state, (long)kref_read(&layout->eld_ref));
 
 	mlo = layout->eld_mlo;
 	if (mlo && mlo->mlo_lstat)

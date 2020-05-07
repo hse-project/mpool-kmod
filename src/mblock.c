@@ -58,10 +58,10 @@ mblock2layout(struct mblock_descriptor *mbh)
 		return NULL;
 
 	WARN_ONCE(layout->eld_objid == 0 ||
-		  atomic64_read(&layout->eld_refcnt) < 2,
+		  kref_read(&layout->eld_ref) < 2,
 		  "%s: %px, objid %lx, state %x, refcnt %ld\n",
 		  __func__, layout, (ulong)layout->eld_objid,
-		  layout->eld_state, (long)atomic64_read(&layout->eld_refcnt));
+		  layout->eld_state, (long)kref_read(&layout->eld_ref));
 
 	return mblock_objid(layout->eld_objid) ? layout : NULL;
 }
