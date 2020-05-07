@@ -17,15 +17,15 @@ struct mc_smap_parms;
  */
 
 /**
- * struct u64_to_u64_rb -
- * @utu_node:
- * @utu_key:
- * @utu_value:
+ * struct smap_zone -
+ * @smz_node:
+ * @smz_key:
+ * @smz_value:
  */
-struct u64_to_u64_rb {
-	struct rb_node  utu_node;
-	u64             utu_key;
-	u64             utu_value;
+struct smap_zone {
+	struct rb_node  smz_node;
+	u64             smz_key;
+	u64             smz_value;
 };
 
 /*

@@ -22,10 +22,10 @@ struct omf_sb_descriptor SBCLEAR;
  * Slab caches to optimize the allocation/deallocation of
  * high-count objects.
  */
-struct kmem_cache  *ecio_layout_desc_cache;
-struct kmem_cache  *ecio_layout_mlo_cache;
-struct kmem_cache  *u64_to_u64_rb_cache;
-struct kmem_cache  *pmd_obj_erase_work_cache;
+struct kmem_cache  *pmd_obj_erase_work_cache __read_mostly;
+struct kmem_cache  *ecio_layout_desc_cache __read_mostly;
+struct kmem_cache  *ecio_layout_mlo_cache __read_mostly;
+struct kmem_cache  *smap_zone_cache __read_mostly;
 
 unsigned int mpc_rsvd_bios_max __read_mostly = 16;
 
@@ -89,15 +89,15 @@ int mpool_mod_init(void)
 		return -merr_errno(err);
 	}
 
-	u64_to_u64_rb_cache = kmem_cache_create(
-		"mpool_u64_to_u64_rb",
-		sizeof(struct u64_to_u64_rb),
+	smap_zone_cache = kmem_cache_create(
+		"mpool_smap_zone",
+		sizeof(struct smap_zone),
 		0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 
-	if (!u64_to_u64_rb_cache) {
+	if (!smap_zone_cache) {
 		err = merr(ENOMEM);
-		mp_pr_err("kmem_cache_create(u64_to_u64_rb, %zu) failed",
-			  err, sizeof(struct u64_to_u64_rb));
+		mp_pr_err("kmem_cache_create(smap_zone, %zu) failed",
+			  err, sizeof(struct smap_zone));
 		mpool_mod_exit();
 		return -merr_errno(err);
 	}
@@ -147,14 +147,15 @@ void mpool_mod_exit(void)
 		return;
 
 	/* Destroy the slab caches. */
-	kmem_cache_destroy(ecio_layout_desc_cache);
-	ecio_layout_desc_cache = NULL;
-	kmem_cache_destroy(ecio_layout_mlo_cache);
-	ecio_layout_mlo_cache = NULL;
-	kmem_cache_destroy(u64_to_u64_rb_cache);
-	u64_to_u64_rb_cache = NULL;
 	kmem_cache_destroy(pmd_obj_erase_work_cache);
+	kmem_cache_destroy(ecio_layout_desc_cache);
+	kmem_cache_destroy(ecio_layout_mlo_cache);
+	kmem_cache_destroy(smap_zone_cache);
+
 	pmd_obj_erase_work_cache = NULL;
+	ecio_layout_desc_cache = NULL;
+	ecio_layout_mlo_cache = NULL;
+	smap_zone_cache = NULL;
 
 	if (mpool_tfm)
 		crypto_free_shash(mpool_tfm);

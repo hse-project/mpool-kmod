@@ -18,18 +18,18 @@
  * smap API functions
  */
 
-static struct u64_to_u64_rb *
-u64_to_u64_find(struct rb_root *root, u64 key)
+static struct smap_zone *
+smap_zone_find(struct rb_root *root, u64 key)
 {
 	struct rb_node *node = root->rb_node;
-	struct u64_to_u64_rb *elem;
+	struct smap_zone *elem;
 
 	while (node) {
-		elem = rb_entry(node, typeof(*elem), utu_node);
+		elem = rb_entry(node, typeof(*elem), smz_node);
 
-		if (key < elem->utu_key)
+		if (key < elem->smz_key)
 			node = node->rb_left;
-		else if (key > elem->utu_key)
+		else if (key > elem->smz_key)
 			node = node->rb_right;
 		else
 			return elem;
@@ -39,27 +39,27 @@ u64_to_u64_find(struct rb_root *root, u64 key)
 }
 
 static int
-u64_to_u64_insert(struct rb_root *root, struct u64_to_u64_rb *item)
+smap_zone_insert(struct rb_root *root, struct smap_zone *item)
 {
 	struct rb_node **pos = &root->rb_node, *parent = NULL;
-	struct u64_to_u64_rb *this;
+	struct smap_zone *this;
 
 	/* Figure out where to put new node */
 	while (*pos) {
-		this = rb_entry(*pos, typeof(*this), utu_node);
+		this = rb_entry(*pos, typeof(*this), smz_node);
 		parent = *pos;
 
-		if (item->utu_key < this->utu_key)
+		if (item->smz_key < this->smz_key)
 			pos = &(*pos)->rb_left;
-		else if (item->utu_key > this->utu_key)
+		else if (item->smz_key > this->smz_key)
 			pos = &(*pos)->rb_right;
 		else
 			return false;
 	}
 
 	/* Add new node and rebalance tree. */
-	rb_link_node(&item->utu_node, parent, pos);
-	rb_insert_color(&item->utu_node, root);
+	rb_link_node(&item->smz_node, parent, pos);
+	rb_insert_color(&item->smz_node, root);
 
 	return true;
 }
@@ -292,9 +292,6 @@ void smap_drive_free(struct mpool_descriptor *mp, u16 pdh)
 {
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
 	u8                     rgn = 0;
-	struct rb_root        *rmap = NULL;
-	struct rb_node        *node = NULL;
-	struct u64_to_u64_rb  *urb_elem = NULL;
 
 	if (pd->pdi_rmbktv) {
 		struct media_class     *mc;
@@ -304,14 +301,15 @@ void smap_drive_free(struct mpool_descriptor *mp, u16 pdh)
 		(void)mc_smap_parms_get(mp, mc->mc_parms.mcp_classp, &mcsp);
 
 		for (rgn = 0; rgn < mcsp.mcsp_rgnc; rgn++) {
-			rmap = &pd->pdi_rmbktv[rgn].pdi_rmroot;
-			node = rb_first(rmap);
-			while (node) {
-				urb_elem = rb_entry(node, struct u64_to_u64_rb,
-						    utu_node);
-				node = rb_next(node);
-				rb_erase(&urb_elem->utu_node, rmap);
-				kmem_cache_free(u64_to_u64_rb_cache, urb_elem);
+			struct smap_zone   *zone, *tmp;
+			struct rb_root     *root;
+
+			root = &pd->pdi_rmbktv[rgn].pdi_rmroot;
+
+			rbtree_postorder_for_each_entry_safe(
+				zone, tmp, root, smz_node) {
+
+				kmem_cache_free(smap_zone_cache, zone);
 			}
 		}
 
@@ -471,7 +469,7 @@ smap_alloc(
 	struct smap_dev_alloc *ds;
 	struct mutex          *rmlock = NULL;
 	struct rb_root        *rmap = NULL;
-	struct u64_to_u64_rb  *elem = NULL;
+	struct smap_zone  *elem = NULL;
 	struct media_class    *mc;
 	struct mc_smap_parms   mcsp;
 	merr_t err;
@@ -521,9 +519,9 @@ smap_alloc(
 		mutex_lock(rmlock);
 
 		for (node = rb_first(rmap); node; node = rb_next(node)) {
-			elem  = rb_entry(node, struct u64_to_u64_rb, utu_node);
-			fsoff = elem->utu_key;
-			fslen = elem->utu_value;
+			elem  = rb_entry(node, struct smap_zone, smz_node);
+			fsoff = elem->smz_key;
+			fslen = elem->smz_value;
 
 			if (zonecnt > fslen)
 				continue;
@@ -562,19 +560,19 @@ smap_alloc(
 	fslen = fslen - ualen;
 
 	*zoneaddr = fsoff;
-	rb_erase(&elem->utu_node, rmap);
+	rb_erase(&elem->smz_node, rmap);
 
 	if (zonecnt < fslen) {
 		/* Re-use elem */
-		elem->utu_key   = fsoff + zonecnt;
-		elem->utu_value = fslen - zonecnt;
-		u64_to_u64_insert(rmap, elem);
+		elem->smz_key   = fsoff + zonecnt;
+		elem->smz_value = fslen - zonecnt;
+		smap_zone_insert(rmap, elem);
 		elem = NULL;
 	}
 
 	if (ualen) {
 		if (!elem) {
-			elem = kmem_cache_alloc(u64_to_u64_rb_cache,
+			elem = kmem_cache_alloc(smap_zone_cache,
 						GFP_ATOMIC);
 			if (ev(!elem)) {
 				mutex_unlock(rmlock);
@@ -582,16 +580,16 @@ smap_alloc(
 			}
 		}
 
-		elem->utu_key   = fsoff - ualen;
-		elem->utu_value = ualen;
-		u64_to_u64_insert(rmap, elem);
+		elem->smz_key   = fsoff - ualen;
+		elem->smz_value = ualen;
+		smap_zone_insert(rmap, elem);
 		elem = NULL;
 	}
 
 	mutex_unlock(rmlock);
 
 	if (elem)
-		kmem_cache_free(u64_to_u64_rb_cache, elem);
+		kmem_cache_free(smap_zone_cache, elem);
 
 	return 0;
 }
@@ -678,8 +676,8 @@ smap_drive_alloc(
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
 	u8                     rgn = 0;
 	u8                     rgn2 = 0;
-	struct u64_to_u64_rb  *urb_elem = NULL;
-	struct u64_to_u64_rb  *found_ue = NULL;
+	struct smap_zone  *urb_elem = NULL;
+	struct smap_zone  *found_ue = NULL;
 	u32                    rgnsz = 0;
 	merr_t                 err;
 	u8                     rgnc;
@@ -706,17 +704,17 @@ smap_drive_alloc(
 	for (rgn = 0; rgn < rgnc; rgn++) {
 		mutex_init(&pd->pdi_rmbktv[rgn].pdi_rmlock);
 
-		urb_elem = kmem_cache_alloc(u64_to_u64_rb_cache, GFP_KERNEL);
+		urb_elem = kmem_cache_alloc(smap_zone_cache, GFP_KERNEL);
 		if (!urb_elem) {
 			struct rb_root *rmroot;
 
 			for (rgn2 = 0; rgn2 < rgn; rgn2++) {
 				rmroot = &pd->pdi_rmbktv[rgn2].pdi_rmroot;
 
-				found_ue = u64_to_u64_find(rmroot, 0);
+				found_ue = smap_zone_find(rmroot, 0);
 				if (found_ue) {
-					rb_erase(&found_ue->utu_node, rmroot);
-					kmem_cache_free(u64_to_u64_rb_cache,
+					rb_erase(&found_ue->smz_node, rmroot);
+					kmem_cache_free(smap_zone_cache,
 							found_ue);
 				}
 			}
@@ -730,13 +728,13 @@ smap_drive_alloc(
 			return err;
 		}
 
-		urb_elem->utu_key = rgn * rgnsz;
+		urb_elem->smz_key = rgn * rgnsz;
 		if (rgn < rgnc - 1)
-			urb_elem->utu_value = rgnsz;
+			urb_elem->smz_value = rgnsz;
 		else
-			urb_elem->utu_value = pd->pdi_parm.dpr_zonetot -
+			urb_elem->smz_value = pd->pdi_parm.dpr_zonetot -
 					      (rgn * rgnsz);
-		u64_to_u64_insert(&pd->pdi_rmbktv[rgn].pdi_rmroot, urb_elem);
+		smap_zone_insert(&pd->pdi_rmbktv[rgn].pdi_rmroot, urb_elem);
 	}
 
 	spin_lock_init(&pd->pdi_ds.sda_dalock);
@@ -825,7 +823,7 @@ smap_insert_byrgn(
 	u16                     zonecnt)
 {
 	const char             *msg __maybe_unused;
-	struct u64_to_u64_rb   *elem = NULL;
+	struct smap_zone   *elem = NULL;
 	struct rb_root         *rmap;
 	struct rb_node         *node;
 	merr_t                  err;
@@ -849,18 +847,18 @@ smap_insert_byrgn(
 	/* Use binary search to find the insertion point in the tree.
 	 */
 	while (node) {
-		elem = rb_entry(node, struct u64_to_u64_rb, utu_node);
+		elem = rb_entry(node, struct smap_zone, smz_node);
 
-		if (zoneaddr < elem->utu_key)
+		if (zoneaddr < elem->smz_key)
 			node = node->rb_left;
-		else if (zoneaddr > elem->utu_key + elem->utu_value)
+		else if (zoneaddr > elem->smz_key + elem->smz_value)
 			node = node->rb_right;
 		else
 			break;
 	}
 
-	fsoff = elem->utu_key;
-	fslen = elem->utu_value;
+	fsoff = elem->smz_key;
+	fslen = elem->smz_value;
 
 	/* Bail out if we're past zoneaddr in space map w/o finding
 	 * the required chunk.
@@ -881,27 +879,27 @@ smap_insert_byrgn(
 		goto errout;
 	}
 
-	rb_erase(&elem->utu_node, rmap);
+	rb_erase(&elem->smz_node, rmap);
 
 	if (zoneaddr > fsoff) {
-		elem->utu_key = fsoff;
-		elem->utu_value = zoneaddr - fsoff;
-		u64_to_u64_insert(rmap, elem);
+		elem->smz_key = fsoff;
+		elem->smz_value = zoneaddr - fsoff;
+		smap_zone_insert(rmap, elem);
 		elem = NULL;
 	}
 	if (zoneaddr + zonecnt < fsoff + fslen) {
 		if (!elem)
 			elem = kmem_cache_alloc(
-				u64_to_u64_rb_cache, GFP_KERNEL);
+				smap_zone_cache, GFP_KERNEL);
 		if (!elem) {
 			msg = "chunk alloc failed";
 			err = merr(ENOMEM);
 			goto errout;
 		}
 
-		elem->utu_key = zoneaddr + zonecnt;
-		elem->utu_value = (fsoff + fslen) - (zoneaddr + zonecnt);
-		u64_to_u64_insert(rmap, elem);
+		elem->smz_key = zoneaddr + zonecnt;
+		elem->smz_value = (fsoff + fslen) - (zoneaddr + zonecnt);
+		smap_zone_insert(rmap, elem);
 		elem = NULL;
 	}
 
@@ -917,7 +915,7 @@ errout:
 	if (elem != NULL) {
 		/* Was an exact match */
 		assert((zoneaddr == fsoff) && (zonecnt == fslen));
-		kmem_cache_free(u64_to_u64_rb_cache, elem);
+		kmem_cache_free(smap_zone_cache, elem);
 	}
 
 	if (err)
@@ -945,8 +943,8 @@ merr_t
 smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u32 zonecnt)
 {
 	const char             *msg __maybe_unused;
-	struct u64_to_u64_rb   *left, *right;
-	struct u64_to_u64_rb   *new, *old;
+	struct smap_zone   *left, *right;
+	struct smap_zone   *new, *old;
 	struct rb_root         *rmap;
 	struct rb_node         *node;
 
@@ -965,14 +963,14 @@ smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u32 zonecnt)
 	 * of the range being freed.
 	 */
 	while (node) {
-		struct u64_to_u64_rb *this;
+		struct smap_zone *this;
 
-		this = rb_entry(node, struct u64_to_u64_rb, utu_node);
+		this = rb_entry(node, struct smap_zone, smz_node);
 
-		if (zoneaddr + zonecnt <= this->utu_key) {
+		if (zoneaddr + zonecnt <= this->smz_key) {
 			right = this;
 			node = node->rb_left;
-		} else if (zoneaddr >= this->utu_key + this->utu_value) {
+		} else if (zoneaddr >= this->smz_key + this->smz_value) {
 			left = this;
 			node = node->rb_right;
 		} else {
@@ -985,9 +983,9 @@ smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u32 zonecnt)
 	/* If the request abuts the chunk to the right then coalesce them.
 	 */
 	if (right) {
-		if (zoneaddr + zonecnt == right->utu_key) {
-			zonecnt += right->utu_value;
-			rb_erase(&right->utu_node, rmap);
+		if (zoneaddr + zonecnt == right->smz_key) {
+			zonecnt += right->smz_value;
+			rb_erase(&right->smz_node, rmap);
 
 			new = right;  /* re-use right node */
 		}
@@ -996,10 +994,10 @@ smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u32 zonecnt)
 	/* If the request abuts the chunk to the left then coalesce them.
 	 */
 	if (left) {
-		if (left->utu_key + left->utu_value == zoneaddr) {
-			zoneaddr = left->utu_key;
-			zonecnt += left->utu_value;
-			rb_erase(&left->utu_node, rmap);
+		if (left->smz_key + left->smz_value == zoneaddr) {
+			zoneaddr = left->smz_key;
+			zonecnt += left->smz_value;
+			rb_erase(&left->smz_node, rmap);
 
 			old = new;  /* free new/left outside the critsec */
 			new = left; /* re-use left node */
@@ -1016,7 +1014,7 @@ smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u32 zonecnt)
 	 * be recovered once the mpool is closed and re-opened.
 	 */
 	if (!new) {
-		new = kmem_cache_alloc(u64_to_u64_rb_cache, GFP_ATOMIC);
+		new = kmem_cache_alloc(smap_zone_cache, GFP_ATOMIC);
 		if (!new) {
 			msg = "chunk alloc failed";
 			err = merr(ENOMEM);
@@ -1024,11 +1022,11 @@ smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u32 zonecnt)
 		}
 	}
 
-	new->utu_key = zoneaddr;
-	new->utu_value = zonecnt;
+	new->smz_key = zoneaddr;
+	new->smz_value = zonecnt;
 
-	if (!u64_to_u64_insert(rmap, new)) {
-		kmem_cache_free(u64_to_u64_rb_cache, new);
+	if (!smap_zone_insert(rmap, new)) {
+		kmem_cache_free(smap_zone_cache, new);
 		msg = "chunk insert failed";
 		err = merr(EBUG);
 		goto unlock;
@@ -1056,7 +1054,7 @@ unlock:
 	mutex_unlock(&pd->pdi_rmbktv[rgn].pdi_rmlock);
 
 	if (old)
-		kmem_cache_free(u64_to_u64_rb_cache, old);
+		kmem_cache_free(smap_zone_cache, old);
 
 	if (err)
 		mp_pr_err("smap pd %s: %s, free byrgn failed, rgn %u zoneaddr %lu zonecnt %u",
