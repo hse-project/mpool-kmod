@@ -43,17 +43,17 @@ static struct ecio_layout_descriptor *
 ecio_layout_find(struct rb_root *root, u64 objid)
 {
 	struct rb_node *node = root->rb_node;
+	struct ecio_layout_descriptor *layout;
 
 	while (node) {
-		struct ecio_layout_descriptor *data =
-			rb_entry(node, struct ecio_layout_descriptor,
-				 eld_nodemdc);
-		if (objid < data->eld_objid)
+		layout = rb_entry(node, typeof(*layout), eld_nodemdc);
+
+		if (objid < layout->eld_objid)
 			node = node->rb_left;
-		else if (objid > data->eld_objid)
+		else if (objid > layout->eld_objid)
 			node = node->rb_right;
 		else
-			return data;
+			return layout;
 	}
 
 	return NULL;
@@ -62,35 +62,38 @@ ecio_layout_find(struct rb_root *root, u64 objid)
 static struct ecio_layout_descriptor *
 ecio_layout_insert(
 	struct rb_root                 *root,
-	struct ecio_layout_descriptor  *data)
+	struct ecio_layout_descriptor  *item)
 {
-	struct rb_node **new = &(root->rb_node), *parent = NULL;
+	struct rb_node **pos = &root->rb_node, *parent = NULL;
+	struct ecio_layout_descriptor *this;
 
 	/* Figure out where to insert given layout, or return the colliding
 	 * layout if there's already a layout in the tree with the given ID.
 	 */
-	while (*new) {
-		struct ecio_layout_descriptor *this =
-			rb_entry(*new, struct ecio_layout_descriptor,
-				     eld_nodemdc);
-		parent = *new;
-		if (data->eld_objid < this->eld_objid)
-			new = &((*new)->rb_left);
-		else if (data->eld_objid > this->eld_objid)
-			new = &((*new)->rb_right);
+	while (*pos) {
+		this = rb_entry(*pos, typeof(*this), eld_nodemdc);
+		parent = *pos;
+
+		if (item->eld_objid < this->eld_objid)
+			pos = &(*pos)->rb_left;
+		else if (item->eld_objid > this->eld_objid)
+			pos = &(*pos)->rb_right;
 		else
 			return this;
 	}
 
 	/* Add new node and rebalance tree. */
-	rb_link_node(&data->eld_nodemdc, parent, new);
-	rb_insert_color(&data->eld_nodemdc, root);
+	rb_link_node(&item->eld_nodemdc, parent, pos);
+	rb_insert_color(&item->eld_nodemdc, root);
 
 	return NULL;
 }
 
 /* Committed object tree operations...
  */
+#define pmd_co_foreach(_cinfo, _node) \
+	for ((_node) = rb_first(&(_cinfo)->mmi_co_root); (_node); (_node) = rb_next((_node)))
+
 static inline void pmd_co_rlock(struct pmd_mdc_info *cinfo, u8 slot)
 {
 	down_read_nested(&cinfo->mmi_co_lock,
@@ -680,10 +683,9 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 
 	pmd_co_rlock(cinfo, 0);
 
-	for (node = rb_first(&cinfo->mmi_co_root); node;
-	     node = rb_next(node)) {
-		layout = rb_entry(node, struct ecio_layout_descriptor,
-				  eld_nodemdc);
+	pmd_co_foreach(cinfo, node) {
+		layout = rb_entry(node, typeof(*layout), eld_nodemdc);
+
 		mdcn = objid_uniq(layout->eld_objid) >> 1;
 		if (mdcn < MDC_SLOTS) {
 			lcnt[mdcn] = lcnt[mdcn] + 1;
@@ -883,7 +885,6 @@ pmd_objs_load(
 	u64                         argv[2] = { 0 };
 	struct omf_mdcrec_data      cdr;
 	struct pmd_mdc_info        *cinfo;
-	struct rb_root             *croot;
 	struct rb_node             *node;
 	const char                 *msg;
 	merr_t                      err;
@@ -933,11 +934,9 @@ pmd_objs_load(
 	/* Cache these pointers to simplify the ensuing code.
 	 */
 	recbuf = cinfo->mmi_recbuf;
-	croot = &cinfo->mmi_co_root;
 
 	while (true) {
-		struct ecio_layout_descriptor  *layout;
-		struct ecio_layout_descriptor  *found;
+		struct ecio_layout_descriptor  *layout, *found;
 
 		size_t rlen = 0;
 		u64 objid;
@@ -1112,11 +1111,10 @@ pmd_objs_load(
 	 * Add all existing objects to space map.
 	 * Also add/update per-mpool space usage stats
 	 */
-	for (node = rb_first(croot); node; node = rb_next(node)) {
+	pmd_co_foreach(cinfo, node) {
 		struct ecio_layout_descriptor *layout;
 
-		layout = rb_entry(node, struct ecio_layout_descriptor,
-				  eld_nodemdc);
+		layout = rb_entry(node, typeof(*layout), eld_nodemdc);
 
 		/* Remember objid and gen in case of error...
 		 */
@@ -1465,9 +1463,9 @@ pmd_log_all_mdc_cobjs(
 	struct omf_mdcrec_data          cdr;
 	struct rb_node                 *node;
 
-	for (node = rb_first(&cinfo->mmi_co_root); node; node = rb_next(node)) {
-		layout = rb_entry(node, struct ecio_layout_descriptor,
-				  eld_nodemdc);
+	pmd_co_foreach(cinfo, node) {
+		layout = rb_entry(node, typeof(*layout), eld_nodemdc);
+
 		if (!objid_mdc0log(layout->eld_objid)) {
 			cdr.omd_rtype = OMF_MDR_OCREATE;
 			cdr.u.obj.omd_layout = layout;
@@ -2484,9 +2482,9 @@ pmd_mdc_cap(
 	pmd_mdc_lock(&cinfo->mmi_compactlock, 0);
 	pmd_co_rlock(cinfo, 0);
 
-	for (node = rb_first(&cinfo->mmi_co_root); node; node = rb_next(node)) {
-		layout = rb_entry(node, struct ecio_layout_descriptor,
-				  eld_nodemdc);
+	pmd_co_foreach(cinfo, node) {
+		layout = rb_entry(node, typeof(*layout), eld_nodemdc);
+
 		mdcn = objid_uniq(layout->eld_objid) >> 1;
 
 		if (mdcn > *mdcmax)
