@@ -69,28 +69,24 @@ struct mlog_stat;
 
 
 /*
- * enum ecio_layout_state - object state flags
+ * enum pmd_layout_state - object state flags
  *
- * PMD_LYT_NONE:      no flags set
  * PMD_LYT_COMMITTED: object is committed to media
  * PMD_LYT_REMOVED:   object logically removed (aborted or deleted)
  */
 enum pmd_layout_state {
-	PMD_LYT_NONE       = 0,
 	PMD_LYT_COMMITTED  = 0x01,
 	PMD_LYT_REMOVED    = 0x02,
 };
 
 /*
- * struct ecio_layout_mlo - information used only by mlog objects.
- * "mlo" = mlog only
+ * struct pmd_layout_mlo - "mlog only" data for pmd_layout
  * @mlo_lstat:   mlog status
- * @mlo_pcs:     Performance counter set instance, family "MLOG"
  * @mlo_layout:  back pointer to the layout
  * @mlo_nodeoml: links this mlog in the mpool open mlogs tree
  * @mlo_uuid:    unique ID per mlog
  */
-struct ecio_layout_mlo {
+struct pmd_layout_mlo {
 	struct mlog_stat   *mlo_lstat;
 	struct ecio_layout *mlo_layout;
 	struct rb_node      mlo_nodeoml;
@@ -129,7 +125,7 @@ struct ecio_layout {
 	u32                             eld_mblen;
 	u8                              eld_state;
 	u8                              eld_flags;
-	struct ecio_layout_mlo         *eld_mlo;
+	struct pmd_layout_mlo          *eld_mlo;
 	u64                             eld_gen;
 	struct omf_layout_descriptor    eld_ld;
 

@@ -92,7 +92,7 @@ pmd_layout_alloc(
  */
 void pmd_layout_release(struct kref *refp)
 {
-	struct ecio_layout_mlo *mlo;
+	struct pmd_layout_mlo  *mlo;
 	struct ecio_layout     *layout;
 
 	layout = container_of(refp, struct ecio_layout, eld_ref);

@@ -78,13 +78,13 @@ int mpool_mod_init(void)
 	 */
 	pmd_layout_mlo_cache = kmem_cache_create(
 		"mpool_pmd_layout_mlo",
-		sizeof(struct ecio_layout_mlo),
+		sizeof(struct pmd_layout_mlo),
 		0, SLAB_POISON, NULL);
 
 	if (!pmd_layout_mlo_cache) {
 		err = merr(ENOMEM);
 		mp_pr_err("kmem_cache_create(pmd mlo, %zu) failed",
-			  err, sizeof(struct ecio_layout_mlo));
+			  err, sizeof(struct pmd_layout_mlo));
 		mpool_mod_exit();
 		return -merr_errno(err);
 	}

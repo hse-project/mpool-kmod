@@ -21,7 +21,7 @@ static struct ecio_layout *
 objid_to_layout_search_oml(struct rb_root *root, u64 key)
 {
 	struct rb_node *node = root->rb_node;
-	struct ecio_layout_mlo *mlo;
+	struct pmd_layout_mlo *mlo;
 	struct ecio_layout *this;
 
 	while (node) {
@@ -45,7 +45,7 @@ objid_to_layout_insert_oml(
 	struct ecio_layout *item)
 {
 	struct rb_node **pos = &root->rb_node, *parent = NULL;
-	struct ecio_layout_mlo *mlo;
+	struct pmd_layout_mlo *mlo;
 	struct ecio_layout *this;
 
 	/* Figure out where to put new node */
@@ -3633,17 +3633,16 @@ mlog_append_dmax(
  */
 void mlogutil_closeall(struct mpool_descriptor *mp)
 {
-	struct ecio_layout *layout;
-	struct rb_node     *next_node;
+	struct pmd_layout_mlo  *mlo;
+	struct ecio_layout     *layout;
+	struct rb_node         *node;
 
 	/* mpool deactivation is single-threaded; don't need any locks */
-	next_node = rb_first(&mp->pds_oml);
-	while (next_node) {
-		struct ecio_layout_mlo *mlo =
-			rb_entry(next_node, struct ecio_layout_mlo,
-				 mlo_nodeoml);
+	node = rb_first(&mp->pds_oml);
+	while (node) {
+		mlo = rb_entry(node, typeof(*mlo), mlo_nodeoml);
 		layout = mlo->mlo_layout;
-		next_node = rb_next(&mlo->mlo_nodeoml);
+		node = rb_next(&mlo->mlo_nodeoml);
 
 		if (pmd_objid_type(layout->eld_objid) != OMF_OBJ_MLOG) {
 			/*
