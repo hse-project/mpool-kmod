@@ -165,7 +165,6 @@ mlog_alloc_cmn(
 	struct mlog_descriptor  **mlh)
 {
 	struct pmd_obj_capacity ocap;
-	struct ecio_err_report  erpt;
 	struct ecio_layout     *layout;
 	merr_t                  err;
 
@@ -199,7 +198,7 @@ mlog_alloc_cmn(
 	 * not needed to make atomic
 	 */
 	pmd_obj_wrlock(layout);
-	err = ecio_mlog_erase(mp, layout, 0, &erpt);
+	err = ecio_mlog_erase(mp, layout, 0);
 	if (!ev(err))
 		mlog_getprops_cmn(mp, layout, prop);
 	pmd_obj_wrunlock(layout);
@@ -800,9 +799,8 @@ mlog_rw_internal(
 	u64                      boff,
 	u8                       rw)
 {
-	struct ecio_err_report  erpt;
-	struct ecio_layout     *layout;
-	merr_t                  err;
+	struct ecio_layout *layout;
+	merr_t              err;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
@@ -810,12 +808,12 @@ mlog_rw_internal(
 
 	switch (rw) {
 	case MPOOL_OP_READ:
-		err = ecio_mlog_read(mp, layout, iov, iovcnt, boff, &erpt);
+		err = ecio_mlog_read(mp, layout, iov, iovcnt, boff);
 		ev(err);
 		break;
 
 	case MPOOL_OP_WRITE:
-		err = ecio_mlog_write(mp, layout, iov, iovcnt, boff, &erpt);
+		err = ecio_mlog_write(mp, layout, iov, iovcnt, boff);
 		ev(err);
 		break;
 
@@ -1338,14 +1336,12 @@ mlog_populate_rbuf(
  * @mp:     mpool descriptor
  * @layout: layout descriptor
  * @lempty: is the log empty? (output)
- * @erpt:
  */
 static merr_t
 mlog_read_and_validate(
 	struct mpool_descriptor    *mp,
 	struct ecio_layout         *layout,
-	bool                       *lempty,
-	struct ecio_err_report     *erpt)
+	bool                       *lempty)
 {
 	struct mlog_stat  *lstat;
 
@@ -1476,7 +1472,6 @@ mlog_open(
 	u8                       flags,
 	u64                     *gen)
 {
-	struct ecio_err_report  erpt;
 	struct ecio_layout     *layout;
 	struct mlog_stat       *lstat;
 
@@ -1556,7 +1551,7 @@ mlog_open(
 	lempty = true;
 	lstat = (struct mlog_stat *)layout->eld_lstat;
 
-	err = mlog_read_and_validate(mp, layout, &lempty, &erpt);
+	err = mlog_read_and_validate(mp, layout, &lempty);
 	if (err) {
 		mlog_stat_free(layout);
 		pmd_obj_wrunlock(layout);
@@ -2283,7 +2278,6 @@ mlog_erase(
 	struct mlog_descriptor     *mlh,
 	u64                         mingen)
 {
-	struct ecio_err_report  erpt;
 	struct ecio_layout     *layout = mlog2layout(mlh);
 	struct mlog_stat       *lstat = NULL;
 	u64                     newgen = 0;
@@ -2316,7 +2310,7 @@ mlog_erase(
 		return err;
 	}
 
-	err = ecio_mlog_erase(mp, layout, 0, &erpt);
+	err = ecio_mlog_erase(mp, layout, 0);
 	if (err) {
 		/*
 		 * Log the failure as a debugging message, but ignore the

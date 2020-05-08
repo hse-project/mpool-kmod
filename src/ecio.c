@@ -212,28 +212,6 @@ ecio_mbrw_argcheck(
 	return 0;
 }
 
-static void
-ecio_pd_status_update(
-	struct mpool_descriptor    *mp,
-	uint                        pdh,
-	struct ecio_err_report     *erpt)
-{
-	struct mpool_dev_info  *pd;
-
-	if (!erpt->eer_errs || !mp->pds_pdv)
-		return;
-
-	pd = &mp->pds_pdv[pdh];
-
-	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
-		return;
-
-	if (erpt_succeeded(erpt, 0))
-		mpool_pd_status_set(pd, PD_STAT_ONLINE);
-	else
-		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
-}
-
 /**
  * ecio_mblock_write()
  *
@@ -250,14 +228,11 @@ ecio_mblock_write(
 	struct ecio_layout         *layout,
 	struct iovec               *iov,
 	int                         iovcnt,
-	struct ecio_err_report     *erpt,
 	u64                        *nbytes)
 {
 	struct mpool_dev_info  *pd;
 	merr_t                  err;
 	loff_t                  mboff;
-
-	erpt_init(erpt);
 
 	/* After this call, *nbytes is valid */
 	err = ecio_mbrw_argcheck(mp, layout, iov, iovcnt, layout->eld_mblen,
@@ -282,8 +257,8 @@ ecio_mblock_write(
 			      mboff, REQ_FUA);
 	if (!err)
 		layout->eld_mblen += *nbytes;
-
-	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+	else
+		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
 
 	return err;
 }
@@ -302,14 +277,11 @@ ecio_mblock_read(
 	struct ecio_layout         *layout,
 	struct iovec               *iov,
 	int                         iovcnt,
-	u64                         boff,
-	struct ecio_err_report     *erpt)
+	u64                         boff)
 {
 	struct mpool_dev_info  *pd;
 	u64                     nbytes = 0;
 	merr_t                  err;
-
-	erpt_init(erpt);
 
 	err = ecio_mbrw_argcheck(mp, layout, iov, iovcnt, boff,
 				 MPOOL_OP_READ, &nbytes);
@@ -328,8 +300,8 @@ ecio_mblock_read(
 	pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
 
 	err = pd_zone_preadv(pd, iov, iovcnt, layout->eld_ld.ol_zaddr, boff);
-
-	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+	if (ev(err))
+		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
 
 	return err;
 }
@@ -342,13 +314,10 @@ ecio_mblock_read(
 merr_t
 ecio_mblock_erase(
 	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout,
-	struct ecio_err_report     *erpt)
+	struct ecio_layout         *layout)
 {
 	struct mpool_dev_info  *pd;
 	merr_t                  err;
-
-	erpt_init(erpt);
 
 	err = ecio_object_valid(mp, layout, OMF_OBJ_MBLOCK);
 	if (ev(err))
@@ -360,8 +329,8 @@ ecio_mblock_erase(
 
 	err = pd_bio_erase(pd, layout->eld_ld.ol_zaddr,
 			   layout->eld_ld.ol_zcnt, 0);
-
-	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+	if (ev(err))
+		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
 
 	return err;
 }
@@ -377,13 +346,10 @@ ecio_mlog_write(
 	struct ecio_layout         *layout,
 	struct iovec               *iov,
 	int                         iovcnt,
-	u64                         boff,
-	struct ecio_err_report     *erpt)
+	u64                         boff)
 {
 	struct mpool_dev_info  *pd;
 	merr_t                  err;
-
-	erpt_init(erpt);
 
 	err = ecio_object_valid(mp, layout, OMF_OBJ_MLOG);
 	if (ev(err))
@@ -393,8 +359,8 @@ ecio_mlog_write(
 
 	err = pd_zone_pwritev(pd, iov, iovcnt, layout->eld_ld.ol_zaddr,
 			      boff, REQ_FUA);
-
-	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+	if (ev(err))
+		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
 
 	return err;
 }
@@ -412,16 +378,13 @@ ecio_mlog_read(
 	struct ecio_layout         *layout,
 	struct iovec               *iov,
 	int                         iovcnt,
-	u64                         boff,
-	struct ecio_err_report     *erpt)
+	u64                         boff)
 {
 	struct mpool_dev_info  *pd;
 	merr_t                  err;
 
 	if (iovcnt == 0)
 		return 0;
-
-	erpt_init(erpt);
 
 	err = ecio_object_valid(mp, layout, OMF_OBJ_MLOG);
 	if (ev(err))
@@ -430,8 +393,8 @@ ecio_mlog_read(
 	pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
 
 	err = pd_zone_preadv(pd, iov, iovcnt, layout->eld_ld.ol_zaddr, boff);
-
-	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+	if (ev(err))
+		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
 
 	return err;
 }
@@ -445,13 +408,10 @@ merr_t
 ecio_mlog_erase(
 	struct mpool_descriptor    *mp,
 	struct ecio_layout         *layout,
-	enum pd_erase_flags         flags,
-	struct ecio_err_report     *erpt)
+	enum pd_erase_flags         flags)
 {
 	struct mpool_dev_info  *pd;
 	merr_t                  err;
-
-	erpt_init(erpt);
 
 	err = ecio_object_valid(mp, layout, OMF_OBJ_MLOG);
 	if (ev(err))
@@ -466,8 +426,8 @@ ecio_mlog_erase(
 
 	err = pd_bio_erase(pd, layout->eld_ld.ol_zaddr,
 			   layout->eld_ld.ol_zcnt, flags);
-
-	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
+	if (ev(err))
+		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
 
 	return err;
 }

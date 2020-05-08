@@ -18,29 +18,6 @@
 #include "mpcore_defs.h"
 
 /**
- *  struct mblock_write_async_cbobj - structure holding async IO callback
- *  @mp_pctx:
- *  @mp_iov:
- *  @mp_mpd:
- *  @mp_iovcnt:
- *  @mp_pagesv:
- *  @mp_pagesc:
- *  @mp_pagesvz:
- *  @mp_erpt:
- */
-struct mblock_write_async_cbobj {
-	struct mio_asyncctx         *mp_pctx;
-	struct iovec                *mp_iov;
-	struct mpool_descriptor     *mp_mpd;
-	int                          mp_iovcnt;
-	void                       **mp_pagesv;
-	int                          mp_pagesc;
-	int                          mp_pagesvz;
-	struct ecio_err_report       mp_erpt;
-};
-
-
-/**
  * mblock2layout() - convert opaque mblock handle to ecio_layout
  *
  * This function converts the opaque handle (mblock_descriptor) used by
@@ -308,7 +285,6 @@ mblock_write(
 	struct iovec               *iov,
 	int                         iovcnt)
 {
-	struct ecio_err_report  erpt;
 	struct ecio_layout     *layout;
 
 	merr_t err = 0;
@@ -324,7 +300,7 @@ mblock_write(
 	pmd_obj_wrlock(layout);
 	state = layout->eld_state;
 	if (!(state & ECIO_LYT_COMMITTED))
-		err = ecio_mblock_write(mp, layout, iov, iovcnt, &erpt, &tdata);
+		err = ecio_mblock_write(mp, layout, iov, iovcnt, &tdata);
 	pmd_obj_wrunlock(layout);
 
 	return (!(state & ECIO_LYT_COMMITTED)) ? err : merr(EALREADY);
@@ -338,7 +314,6 @@ mblock_read(
 	int                         iovcnt,
 	u64                         boff)
 {
-	struct ecio_err_report  erpt;
 	struct ecio_layout     *layout;
 
 	merr_t  err = 0;
@@ -361,7 +336,7 @@ mblock_read(
 	pmd_obj_rdlock(layout);
 	state = layout->eld_state;
 	if (state & ECIO_LYT_COMMITTED)
-		err = ecio_mblock_read(mp, layout, iov, iovcnt, boff, &erpt);
+		err = ecio_mblock_read(mp, layout, iov, iovcnt, boff);
 	pmd_obj_rdunlock(layout);
 
 	return (state & ECIO_LYT_COMMITTED) ? err : merr(EAGAIN);

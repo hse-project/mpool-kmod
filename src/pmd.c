@@ -1893,7 +1893,6 @@ static void pmd_obj_erase_cb(struct work_struct *work)
 {
 	struct pmd_obj_erase_work  *oef;
 	struct mpool_descriptor    *mp;
-	struct ecio_err_report      erpt;
 	struct ecio_layout         *layout;
 	enum obj_type_omf           otype;
 
@@ -1904,9 +1903,9 @@ static void pmd_obj_erase_cb(struct work_struct *work)
 	otype = pmd_objid_type(layout->eld_objid);
 	if (otype == OMF_OBJ_MLOG)
 		/* discard is advisory and no need to check the result */
-		ecio_mlog_erase(mp, layout, 0, &erpt);
+		ecio_mlog_erase(mp, layout, 0);
 	else if (otype == OMF_OBJ_MBLOCK)
-		ecio_mblock_erase(mp, layout, &erpt);
+		ecio_mblock_erase(mp, layout);
 
 	if (oef->oef_cache)
 		kmem_cache_free(oef->oef_cache, oef);
@@ -2217,7 +2216,6 @@ pmd_mdc_alloc(
 	u32                         iter)
 {
 	struct pmd_obj_capacity ocap;
-	struct ecio_err_report  erpt;
 	enum mp_media_classp    mclassp;
 	struct pmd_mdc_info    *cinfo, *cinew;
 	struct ecio_layout     *layout1, *layout2;
@@ -2337,14 +2335,14 @@ pmd_mdc_alloc(
 	 * not needed to make atomic.
 	 */
 	pmd_obj_wrlock(layout1);
-	err = ecio_mlog_erase(mp, layout1, 0, &erpt);
+	err = ecio_mlog_erase(mp, layout1, 0);
 	pmd_obj_wrunlock(layout1);
 
 	if (err) {
 		msg = "erase of first mlog failed";
 	} else {
 		pmd_obj_wrlock(layout2);
-		err = ecio_mlog_erase(mp, layout2, 0, &erpt);
+		err = ecio_mlog_erase(mp, layout2, 0);
 		pmd_obj_wrunlock(layout2);
 
 		if (err)

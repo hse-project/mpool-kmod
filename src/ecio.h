@@ -100,19 +100,6 @@ struct ecio_layout {
 #define eld_uuid    eld_mlo->mlo_uuid
 
 /*
- * struct ecio_err_report - ecio read/write error report
- *
- * @eer_errs:      total number of errors reading/writing object strips
- * @eer_rwsuc:     successfully read/wrote object strip
- * @eer_pdeio: pd module I/O error reading/writing object strip
- */
-struct ecio_err_report {
-	u8     eer_errs;
-	u32    eer_rwsuc;
-	u32    eer_pdeio;
-};
-
-/*
  * ecio API functions
  */
 
@@ -145,7 +132,6 @@ ecio_mblock_stripe_size(
  * @iov:    struct iovec *
  * @iovcnt: int
  * @afp_parent: struct afp_parent *
- * @erpt:   struct ecio_err_report *
  * @nbytes: u64 *
  *
  * Write complete mblock with erasure coding info.
@@ -165,7 +151,6 @@ ecio_mblock_write(
 	struct ecio_layout         *layout,
 	struct iovec               *iov,
 	int                         iovcnt,
-	struct ecio_err_report     *erpt,
 	u64                        *nbytes);
 
 /**
@@ -176,7 +161,6 @@ ecio_mblock_write(
  * @iov:    struct iovec *
  * @iovcnt: int
  * @boff:   u64, offset into the mblock
- * @erpt:   struct ecio_err_report *
  *
  * Read mblock starting at byte offset boff.
  * Transparently handles media failures if possible. boff and read length
@@ -193,15 +177,13 @@ ecio_mblock_read(
 	struct ecio_layout         *layout,
 	struct iovec               *iov,
 	int                         iovcnt,
-	u64                         boff,
-	struct ecio_err_report     *erpt);
+	u64                         boff);
 
 /**
  * ecio_mblock_erase() - erase an mblock
  *
  * @mp:     struct mpool_descriptor *
  * @layout: struct ecio_layout *
- * @erpt:   struct ecio_err_report *
  *
  * Erase mblock; caller MUST hold pmd_obj_wrlock() on layout.
  *
@@ -210,8 +192,7 @@ ecio_mblock_read(
 merr_t
 ecio_mblock_erase(
 	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout,
-	struct ecio_err_report     *erpt);
+	struct ecio_layout         *layout);
 
 /**
  * ecio_mlog_write() - write to an mlog
@@ -221,7 +202,6 @@ ecio_mblock_erase(
  * @iov:    iovec containing the data to write
  * @iovcnt: number of iovecs
  * @boff:   u64 offset to write at
- * @erpt:   struct ecio_err_report *erpt
  *
  * Write iovecs to byte offset boff, erasure coded
  * per layout; caller MUST hold pmd_obj_wrlock() on layout.
@@ -234,8 +214,7 @@ ecio_mlog_write(
 	struct ecio_layout         *layout,
 	struct iovec               *iov,
 	int                         iovcnt,
-	u64                         boff,
-	struct ecio_err_report     *erpt);
+	u64                         boff);
 
 /**
  * ecio_mlog_read() - read from an mlog
@@ -244,7 +223,6 @@ ecio_mlog_write(
  * @iov:    iovec to read into
  * @iovcnt: number of iovecs
  * @boff:   u64, offset from which to start read
- * @erpt:   struct ecio_err_report *
  *
  * Read from byte offset boff into the supplied iovecs
  * transparently handles media failures if possible; caller MUST hold
@@ -258,15 +236,13 @@ ecio_mlog_read(
 	struct ecio_layout         *layout,
 	struct iovec               *iov,
 	int                         iovcnt,
-	u64                         boff,
-	struct ecio_err_report     *erpt);
+	u64                         boff);
 
 /**
  * ecio_mlog_erase() - erase an mlog
  * @mp:     struct mpool_descriptor *
  * @layout: struct ecio_layout *
  * @flags:  OR of pd_erase_flags bits
- * @erpt:   struct ecio_err_report *
  *
  * Erase mlog; caller MUST hold pmd_obj_wrlock() on layout.
  *
@@ -276,8 +252,7 @@ merr_t
 ecio_mlog_erase(
 	struct mpool_descriptor    *mp,
 	struct ecio_layout         *layout,
-	enum pd_erase_flags         flags,
-	struct ecio_err_report     *erpt);
+	enum pd_erase_flags         flags);
 
 /**
  * ecio_layout_alloc() - allocate an ecio_layout
@@ -347,45 +322,5 @@ u64
 ecio_obj_get_cap_from_layout(
 	struct mpool_descriptor    *mp,
 	struct ecio_layout         *layout);
-
-static inline void erpt_init(struct ecio_err_report *erpt)
-{
-	erpt->eer_errs = 0;
-	erpt->eer_rwsuc = 0;
-	erpt->eer_pdeio = 0;
-}
-
-/*
- * Combine the IO errors from the PDs used by the layout.
- *
- * @combiarg: ecio_err_report
- * @a:        positive errno
- * @b:        sidx
- */
-static inline
-void erpt_result_set(void *combiarg, s32 *combires, uintptr_t a, uintptr_t b)
-{
-	struct ecio_err_report *erpt = (struct ecio_err_report *)combiarg;
-	int rval		     = -(int)a;
-	u8 idx                       = (u8)b;
-
-	if (rval)
-		erpt->eer_errs = erpt->eer_errs + 1;
-
-	if (!rval)
-		erpt->eer_rwsuc = erpt->eer_rwsuc | (1 << idx);
-	else if (rval == -EIO)
-		erpt->eer_pdeio = erpt->eer_pdeio | (1 << idx);
-};
-
-static inline bool erpt_succeeded(struct ecio_err_report *erpt, u8 idx)
-{
-	return (erpt->eer_rwsuc & (1 << idx));
-}
-
-static inline bool erpt_eio(struct ecio_err_report *erpt, u8 idx)
-{
-	return (erpt->eer_pdeio & (1 << idx));
-}
 
 #endif
