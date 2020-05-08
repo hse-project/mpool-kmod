@@ -14,7 +14,7 @@
 #include "pd.h"
 
 struct mlog_stat;
-struct ecio_layout_descriptor;
+struct ecio_layout;
 
 /*
  * Common defs
@@ -43,10 +43,10 @@ enum ecio_layout_state {
  * @mlo_uuid:    unique ID per mlog
  */
 struct ecio_layout_mlo {
-	struct mlog_stat              *mlo_lstat;
-	struct ecio_layout_descriptor *mlo_layout;
-	struct rb_node                 mlo_nodeoml;
-	struct mpool_uuid              mlo_uuid;
+	struct mlog_stat   *mlo_lstat;
+	struct ecio_layout *mlo_layout;
+	struct rb_node      mlo_nodeoml;
+	struct mpool_uuid   mlo_uuid;
 };
 
 /*
@@ -59,7 +59,7 @@ struct ecio_layout_mlo {
  */
 
 /**
- * struct ecio_layout_descriptor -
+ * struct ecio_layout -
  *
  * NOTE:
  * + committed object fields (other): to update hold pmd_obj_wrlock()
@@ -79,7 +79,7 @@ struct ecio_layout_mlo {
  * @eld_ref:     user ref count from alloc/get/put
  * @eld_rwlock:  implements pmd_obj_*lock() for this layout
  */
-struct ecio_layout_descriptor {
+struct ecio_layout {
 	struct rb_node                  eld_nodemdc;
 	u64                             eld_objid;
 	u32                             eld_mblen;
@@ -130,18 +130,18 @@ struct ecio_err_report {
  * Needed for incremental write, which must be full-stripe(s) except
  * for the last write.
  *
- * @layout: struct ecio_layout_descriptor *
+ * @layout: struct ecio_layout *
  */
 u32
 ecio_mblock_stripe_size(
-		struct mpool_descriptor       *mp,
-		struct ecio_layout_descriptor *layout);
+		struct mpool_descriptor    *mp,
+		struct ecio_layout         *layout);
 
 /**
  * ecio_mblock_write() - write complete mblock (incl. EC and cksum)
  *
  * @mp:     struct mpool_descriptor *
- * @layout: struct ecio_layout_descriptor *
+ * @layout: struct ecio_layout *
  * @iov:    struct iovec *
  * @iovcnt: int
  * @afp_parent: struct afp_parent *
@@ -161,18 +161,18 @@ ecio_mblock_stripe_size(
  */
 merr_t
 ecio_mblock_write(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	struct iovec                   *iov,
-	int                             iovcnt,
-	struct ecio_err_report         *erpt,
-	u64                            *nbytes);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct iovec               *iov,
+	int                         iovcnt,
+	struct ecio_err_report     *erpt,
+	u64                        *nbytes);
 
 /**
  * ecio_mblock_read() - read mblock
  *
  * @mp:     struct mpool_descriptor *
- * @layout: struct ecio_layout_descriptor *
+ * @layout: struct ecio_layout *
  * @iov:    struct iovec *
  * @iovcnt: int
  * @boff:   u64, offset into the mblock
@@ -189,18 +189,18 @@ ecio_mblock_write(
  */
 merr_t
 ecio_mblock_read(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	struct iovec                   *iov,
-	int                             iovcnt,
-	u64                             boff,
-	struct ecio_err_report         *erpt);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct iovec               *iov,
+	int                         iovcnt,
+	u64                         boff,
+	struct ecio_err_report     *erpt);
 
 /**
  * ecio_mblock_erase() - erase an mblock
  *
  * @mp:     struct mpool_descriptor *
- * @layout: struct ecio_layout_descriptor *
+ * @layout: struct ecio_layout *
  * @erpt:   struct ecio_err_report *
  *
  * Erase mblock; caller MUST hold pmd_obj_wrlock() on layout.
@@ -209,15 +209,15 @@ ecio_mblock_read(
  */
 merr_t
 ecio_mblock_erase(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	struct ecio_err_report         *erpt);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct ecio_err_report     *erpt);
 
 /**
  * ecio_mlog_write() - write to an mlog
  *
  * @mp:     struct mpool_descriptor *
- * @layout: struct ecio_layout_descriptor *
+ * @layout: struct ecio_layout *
  * @iov:    iovec containing the data to write
  * @iovcnt: number of iovecs
  * @boff:   u64 offset to write at
@@ -230,17 +230,17 @@ ecio_mblock_erase(
  */
 merr_t
 ecio_mlog_write(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout,
-	struct iovec                  *iov,
-	int                            iovcnt,
-	u64                            boff,
-	struct ecio_err_report        *erpt);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct iovec               *iov,
+	int                         iovcnt,
+	u64                         boff,
+	struct ecio_err_report     *erpt);
 
 /**
  * ecio_mlog_read() - read from an mlog
  * @mp:     struct mpool_descriptor *
- * @layout: struct ecio_layout_descriptor *
+ * @layout: struct ecio_layout *
  * @iov:    iovec to read into
  * @iovcnt: number of iovecs
  * @boff:   u64, offset from which to start read
@@ -254,17 +254,17 @@ ecio_mlog_write(
  */
 merr_t
 ecio_mlog_read(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	struct iovec                   *iov,
-	int                             iovcnt,
-	u64                             boff,
-	struct ecio_err_report         *erpt);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct iovec               *iov,
+	int                         iovcnt,
+	u64                         boff,
+	struct ecio_err_report     *erpt);
 
 /**
  * ecio_mlog_erase() - erase an mlog
  * @mp:     struct mpool_descriptor *
- * @layout: struct ecio_layout_descriptor *
+ * @layout: struct ecio_layout *
  * @flags:  OR of pd_erase_flags bits
  * @erpt:   struct ecio_err_report *
  *
@@ -274,13 +274,13 @@ ecio_mlog_read(
  */
 merr_t
 ecio_mlog_erase(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	enum pd_erase_flags             flags,
-	struct ecio_err_report         *erpt);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	enum pd_erase_flags         flags,
+	struct ecio_err_report     *erpt);
 
 /**
- * ecio_layout_alloc() - allocate an ecio_layout_descriptor
+ * ecio_layout_alloc() - allocate an ecio_layout
  * @mp:        To get the mpool uuid necessary to hook up performance counters
  *             of the family "MLOG" in preformance counters tree. If passed,
  *             no performance counter will be associated to that layout.
@@ -294,7 +294,7 @@ ecio_mlog_erase(
  *
  * Return: NULL if allocation fails.
  */
-struct ecio_layout_descriptor *
+struct ecio_layout *
 ecio_layout_alloc(
 	struct mpool_descriptor    *mp,
 	struct mpool_uuid          *uuid,
@@ -304,7 +304,7 @@ ecio_layout_alloc(
 	u32                         zcnt);
 
 /**
- * ecio_layout_release() - free ecio_layout_descriptor and internal elements
+ * ecio_layout_release() - free ecio_layout and internal elements
  * @layout:
  *
  * Deallocate all memory associated with object layout.
@@ -324,13 +324,13 @@ extern struct shash_desc *mpool_shash_desc_sha256;
 
 u32
 ecio_zonepg(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout);
 
 u32
 ecio_sectorsz(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout);
 
 /**
  * ecio_obj_get_cap_from_layout()
@@ -345,14 +345,15 @@ ecio_sectorsz(
  */
 u64
 ecio_obj_get_cap_from_layout(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout);
+
 static inline void erpt_init(struct ecio_err_report *erpt)
 {
 	erpt->eer_errs = 0;
 	erpt->eer_rwsuc = 0;
 	erpt->eer_pdeio = 0;
-};
+}
 
 /*
  * Combine the IO errors from the PDs used by the layout.

@@ -438,13 +438,13 @@ omf_layout_unpack_letoh(
 }
 
 /*
- * ecio_layout_descriptor
+ * ecio_layout
  */
 int
 omf_ecio_layout_pack_htole(
 	const struct mpool_descriptor  *mp,
 	u8                              rtype,
-	struct ecio_layout_descriptor  *ecl,
+	struct ecio_layout             *ecl,
 	char                           *outbuf)
 {
 	struct mdcrec_data_ocreate_omf *ocre_omf;
@@ -555,7 +555,7 @@ omf_ecio_layout_unpack_letoh(
 	struct omf_mdcrec_data     *cdr,
 	const char                 *inbuf)
 {
-	struct ecio_layout_descriptor  *ecl;
+	struct ecio_layout *ecl;
 
 	merr_t err;
 	int    i;
@@ -849,7 +849,7 @@ omf_mdcrec_objcmn_pack_htole(
 	struct omf_mdcrec_data     *cdr,
 	char                       *outbuf)
 {
-	struct ecio_layout_descriptor  *layout = cdr->u.obj.omd_layout;
+	struct ecio_layout *layout = cdr->u.obj.omd_layout;
 	struct mdcrec_data_odelete_omf *odel_omf;
 	struct mdcrec_data_oerase_omf  *oera_omf;
 

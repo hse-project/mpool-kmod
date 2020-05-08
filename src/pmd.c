@@ -39,11 +39,11 @@ pmd_write_meta_to_latest_version(
  */
 static DEFINE_MUTEX(pmd_s_lock);
 
-static struct ecio_layout_descriptor *
+static struct ecio_layout *
 ecio_layout_find(struct rb_root *root, u64 key)
 {
 	struct rb_node *node = root->rb_node;
-	struct ecio_layout_descriptor *this;
+	struct ecio_layout *this;
 
 	while (node) {
 		this = rb_entry(node, typeof(*this), eld_nodemdc);
@@ -59,13 +59,13 @@ ecio_layout_find(struct rb_root *root, u64 key)
 	return NULL;
 }
 
-static struct ecio_layout_descriptor *
+static struct ecio_layout *
 ecio_layout_insert(
-	struct rb_root                 *root,
-	struct ecio_layout_descriptor  *item)
+	struct rb_root     *root,
+	struct ecio_layout *item)
 {
 	struct rb_node **pos = &root->rb_node, *parent = NULL;
-	struct ecio_layout_descriptor *this;
+	struct ecio_layout *this;
 
 	/* Figure out where to insert given layout, or return the colliding
 	 * layout if there's already a layout in the tree with the given ID.
@@ -116,26 +116,26 @@ static inline void pmd_co_wunlock(struct pmd_mdc_info *cinfo)
 	up_write(&cinfo->mmi_co_lock);
 }
 
-static inline struct ecio_layout_descriptor *
+static inline struct ecio_layout *
 pmd_co_find(struct pmd_mdc_info *cinfo, u64 objid)
 {
 	return ecio_layout_find(&cinfo->mmi_co_root, objid);
 }
 
-static inline struct ecio_layout_descriptor *
+static inline struct ecio_layout *
 pmd_co_insert(
-	struct pmd_mdc_info            *cinfo,
-	struct ecio_layout_descriptor  *layout)
+	struct pmd_mdc_info    *cinfo,
+	struct ecio_layout     *layout)
 {
 	return ecio_layout_insert(&cinfo->mmi_co_root, layout);
 }
 
-static inline struct ecio_layout_descriptor *
+static inline struct ecio_layout *
 pmd_co_remove(
-	struct pmd_mdc_info            *cinfo,
-	struct ecio_layout_descriptor  *layout)
+	struct pmd_mdc_info    *cinfo,
+	struct ecio_layout     *layout)
 {
-	struct ecio_layout_descriptor *found;
+	struct ecio_layout *found;
 
 	found = pmd_co_find(cinfo, layout->eld_objid);
 	if (found)
@@ -157,26 +157,26 @@ static inline void pmd_uc_unlock(struct pmd_mdc_info *cinfo)
 	mutex_unlock(&cinfo->mmi_uc_lock);
 }
 
-static inline struct ecio_layout_descriptor *
+static inline struct ecio_layout *
 pmd_uc_find(struct pmd_mdc_info *cinfo, u64 objid)
 {
 	return ecio_layout_find(&cinfo->mmi_uc_root, objid);
 }
 
-static inline struct ecio_layout_descriptor *
+static inline struct ecio_layout *
 pmd_uc_insert(
-	struct pmd_mdc_info            *cinfo,
-	struct ecio_layout_descriptor  *layout)
+	struct pmd_mdc_info    *cinfo,
+	struct ecio_layout     *layout)
 {
 	return ecio_layout_insert(&cinfo->mmi_uc_root, layout);
 }
 
-static inline struct ecio_layout_descriptor *
+static inline struct ecio_layout *
 pmd_uc_remove(
-	struct pmd_mdc_info            *cinfo,
-	struct ecio_layout_descriptor  *layout)
+	struct pmd_mdc_info    *cinfo,
+	struct ecio_layout     *layout)
 {
-	struct ecio_layout_descriptor *found;
+	struct ecio_layout *found;
 
 	found = pmd_uc_find(cinfo, layout->eld_objid);
 	if (found)
@@ -185,15 +185,15 @@ pmd_uc_remove(
 	return found;
 }
 
-struct ecio_layout_descriptor *
+struct ecio_layout *
 pmd_obj_find_get(
 	struct mpool_descriptor    *mp,
 	u64                         objid,
 	int                         which)
 {
-	struct ecio_layout_descriptor  *found;
-	struct pmd_mdc_info            *cinfo;
-	u8                              cslot;
+	struct ecio_layout     *found;
+	struct pmd_mdc_info    *cinfo;
+	u8                      cslot;
 
 	if (!objtype_user(objid_type(objid)))
 		return NULL;
@@ -227,8 +227,8 @@ pmd_obj_find_get(
 
 void
 pmd_obj_put(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
 	kref_put(&layout->eld_ref, ecio_layout_release);
 }
@@ -285,9 +285,9 @@ static void pmd_mda_init(struct mpool_descriptor *mp)
 
 static merr_t
 pmd_mdc0_init(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *mdc01,
-	struct ecio_layout_descriptor  *mdc02)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *mdc01,
+	struct ecio_layout         *mdc02)
 {
 	struct pmd_mdc_info    *cinfo = &mp->pds_mda.mdi_slotv[0];
 	merr_t                  err;
@@ -621,8 +621,8 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 
 static merr_t
 pmd_smap_insert(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
 	merr_t  err;
 	u16     pdh;
@@ -643,15 +643,15 @@ pmd_smap_insert(
 
 static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 {
-	struct pmd_mdc_info            *cinfo;
-	struct ecio_layout_descriptor  *layout;
-	struct rb_node                 *node;
-	merr_t                          err = 0, err1, err2;
-	u64                             mdcn, mdcmax = 0;
-	u64                             logid1, logid2;
-	u32                             lcnt[MDC_SLOTS];
-	u16                             slotvcnt;
-	int                             i;
+	struct pmd_mdc_info    *cinfo;
+	struct ecio_layout     *layout;
+	struct rb_node         *node;
+	merr_t                  err = 0, err1, err2;
+	u64                     mdcn, mdcmax = 0;
+	u64                     logid1, logid2;
+	u32                     lcnt[MDC_SLOTS];
+	u16                     slotvcnt;
+	int                     i;
 
 	/* initialize lcnt */
 	for (i = 0; i < MDC_SLOTS; i++)
@@ -817,10 +817,10 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
  */
 static merr_t
 pmd_update_mdc_stats(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	struct pmd_mdc_info            *cinfo,
-	enum pmd_obj_op                 op)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct pmd_mdc_info        *cinfo,
+	enum pmd_obj_op             op)
 {
 	struct pmd_mdc_stats   *pms;
 	enum obj_type_omf       otype;
@@ -936,7 +936,7 @@ pmd_objs_load(
 	recbuf = cinfo->mmi_recbuf;
 
 	while (true) {
-		struct ecio_layout_descriptor  *layout, *found;
+		struct ecio_layout *layout, *found;
 
 		size_t rlen = 0;
 		u64 objid;
@@ -1112,7 +1112,7 @@ pmd_objs_load(
 	 * Also add/update per-mpool space usage stats
 	 */
 	pmd_co_foreach(cinfo, node) {
-		struct ecio_layout_descriptor *layout;
+		struct ecio_layout *layout;
 
 		layout = rb_entry(node, typeof(*layout), eld_nodemdc);
 
@@ -1200,8 +1200,8 @@ void pmd_mda_free(struct mpool_descriptor *mp)
 	 * mdc0 updates
 	 */
 	for (sidx = mp->pds_mda.mdi_slotvcnt - 1; sidx > -1; sidx--) {
-		struct ecio_layout_descriptor  *layout, *tmp;
-		struct pmd_mdc_info            *cinfo;
+		struct ecio_layout     *layout, *tmp;
+		struct pmd_mdc_info    *cinfo;
 
 		cinfo = &mp->pds_mda.mdi_slotv[sidx];
 
@@ -1322,12 +1322,12 @@ pmd_objs_load_parallel(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 
 merr_t
 pmd_mpool_activate(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *mdc01,
-	struct ecio_layout_descriptor  *mdc02,
-	int                             create,
-	struct mpool_devrpt            *devrpt,
-	u32                             flags)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *mdc01,
+	struct ecio_layout         *mdc02,
+	int                         create,
+	struct mpool_devrpt        *devrpt,
+	u32                         flags)
 {
 	merr_t  err;
 
@@ -1457,16 +1457,20 @@ pmd_log_all_mdc_cobjs(
 	u32                        *compacted,
 	u32                        *total)
 {
-	merr_t                          err = 0;
-	struct pmd_mdc_info            *cinfo = &mp->pds_mda.mdi_slotv[cslot];
-	struct ecio_layout_descriptor  *layout;
-	struct omf_mdcrec_data          cdr;
-	struct rb_node                 *node;
+	struct pmd_mdc_info    *cinfo;
+	struct ecio_layout     *layout;
+	struct rb_node         *node;
+	merr_t                  err;
+
+	cinfo = &mp->pds_mda.mdi_slotv[cslot];
+	err = 0;
 
 	pmd_co_foreach(cinfo, node) {
 		layout = rb_entry(node, typeof(*layout), eld_nodemdc);
 
 		if (!objid_mdc0log(layout->eld_objid)) {
+			struct omf_mdcrec_data cdr;
+
 			cdr.omd_rtype = OMF_MDR_OCREATE;
 			cdr.u.obj.omd_layout = layout;
 			err = pmd_mdc_append(mp, cslot, &cdr, 0);
@@ -1621,9 +1625,9 @@ static merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 
 		mp_pr_debug("mpool %s, MDC%u start: mlog1 gen %lu mlog2 gen %lu",
 			    err, mp->pds_name, cslot,
-			    (ulong)((struct ecio_layout_descriptor *)
+			    (ulong)((struct ecio_layout *)
 				    cinfo->mmi_mdc->mdc_logh1)->eld_gen,
-			    (ulong)((struct ecio_layout_descriptor *)
+			    (ulong)((struct ecio_layout *)
 				    cinfo->mmi_mdc->mdc_logh2)->eld_gen);
 
 		err = mp_mdc_cstart(cinfo->mmi_mdc);
@@ -1669,12 +1673,10 @@ static merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 
 			mp_pr_debug("mpool %s, MDC%u end: mlog1 gen %lu mlog2 gen %lu",
 				    err, mp->pds_name, cslot,
-				    (ulong)
-				    ((struct ecio_layout_descriptor *)
-				     cinfo->mmi_mdc->mdc_logh1)->eld_gen,
-				    (ulong)
-				    ((struct ecio_layout_descriptor *)
-				     cinfo->mmi_mdc->mdc_logh2)->eld_gen);
+				    (ulong)((struct ecio_layout *)
+					    cinfo->mmi_mdc->mdc_logh1)->eld_gen,
+				    (ulong)((struct ecio_layout *)
+					    cinfo->mmi_mdc->mdc_logh2)->eld_gen);
 			break;
 		}
 	}
@@ -1725,8 +1727,8 @@ pmd_log_delete(
 
 static merr_t
 pmd_log_create(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
 	struct omf_mdcrec_data  cdr;
 
@@ -1739,7 +1741,7 @@ pmd_log_create(
  *
  * See pmd.h for the various nesting levels for a locking class.
  */
-void pmd_obj_rdlock(struct ecio_layout_descriptor *layout)
+void pmd_obj_rdlock(struct ecio_layout *layout)
 {
 	enum pmd_lock_class lc __maybe_unused = PMD_MDC_NORMAL;
 
@@ -1753,12 +1755,12 @@ void pmd_obj_rdlock(struct ecio_layout_descriptor *layout)
 	down_read_nested(&layout->eld_rwlock, lc);
 }
 
-void pmd_obj_rdunlock(struct ecio_layout_descriptor *layout)
+void pmd_obj_rdunlock(struct ecio_layout *layout)
 {
 	up_read(&layout->eld_rwlock);
 }
 
-void pmd_obj_wrlock(struct ecio_layout_descriptor *layout)
+void pmd_obj_wrlock(struct ecio_layout *layout)
 {
 	enum pmd_lock_class lc __maybe_unused = PMD_MDC_NORMAL;
 
@@ -1772,29 +1774,29 @@ void pmd_obj_wrlock(struct ecio_layout_descriptor *layout)
 	down_write_nested(&layout->eld_rwlock, lc);
 }
 
-void pmd_obj_wrunlock(struct ecio_layout_descriptor *layout)
+void pmd_obj_wrunlock(struct ecio_layout *layout)
 {
 	up_write(&layout->eld_rwlock);
 }
 
 merr_t
 pmd_obj_alloc(
-	struct mpool_descriptor        *mp,
-	enum obj_type_omf               otype,
-	struct pmd_obj_capacity        *ocap,
-	enum mp_media_classp            mclassp,
-	struct ecio_layout_descriptor **olayout)
+	struct mpool_descriptor    *mp,
+	enum obj_type_omf           otype,
+	struct pmd_obj_capacity    *ocap,
+	enum mp_media_classp        mclassp,
+	struct ecio_layout        **olayout)
 {
 	return pmd_obj_alloc_cmn(mp, 0, otype, ocap, mclassp, 0, true, olayout);
 }
 
 merr_t
 pmd_obj_realloc(
-	struct mpool_descriptor        *mp,
-	u64                             objid,
-	struct pmd_obj_capacity        *ocap,
-	enum mp_media_classp            mclassp,
-	struct ecio_layout_descriptor **olayout)
+	struct mpool_descriptor    *mp,
+	u64                         objid,
+	struct pmd_obj_capacity    *ocap,
+	enum mp_media_classp        mclassp,
+	struct ecio_layout        **olayout)
 {
 	if (!pmd_objid_isuser(objid)) {
 		*olayout = NULL;
@@ -1807,13 +1809,13 @@ pmd_obj_realloc(
 
 merr_t
 pmd_obj_commit(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
-	struct pmd_mdc_info           *cinfo;
-	merr_t                         err;
-	u8                             cslot;
-	struct ecio_layout_descriptor *found;
+	struct pmd_mdc_info    *cinfo;
+	struct ecio_layout     *found;
+	merr_t                  err;
+	u8                      cslot;
 
 	if (!objtype_user(objid_type(layout->eld_objid)))
 		return merr(EINVAL);
@@ -1889,11 +1891,11 @@ pmd_obj_commit(
 
 static void pmd_obj_erase_cb(struct work_struct *work)
 {
-	struct mpool_descriptor        *mp;
-	struct ecio_layout_descriptor  *layout;
-	struct ecio_err_report          erpt;
-	enum obj_type_omf               otype;
-	struct pmd_obj_erase_work      *oef;
+	struct pmd_obj_erase_work  *oef;
+	struct mpool_descriptor    *mp;
+	struct ecio_err_report      erpt;
+	struct ecio_layout         *layout;
+	enum obj_type_omf           otype;
 
 	oef = container_of(work, struct pmd_obj_erase_work, oef_wqstruct);
 	mp = oef->oef_mp;
@@ -1914,8 +1916,8 @@ static void pmd_obj_erase_cb(struct work_struct *work)
 
 static void
 pmd_obj_erase_start(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
 	struct pmd_obj_erase_work   oefbuf, *oef;
 	bool                        async = true;
@@ -1940,13 +1942,13 @@ pmd_obj_erase_start(
 
 merr_t
 pmd_obj_abort(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
-	struct ecio_layout_descriptor  *found;
-	struct pmd_mdc_info            *cinfo;
-	long                            refcnt;
-	u8                              cslot;
+	struct pmd_mdc_info    *cinfo;
+	struct ecio_layout     *found;
+	long                    refcnt;
+	u8                      cslot;
 
 	if (!objtype_user(objid_type(layout->eld_objid)))
 		return merr(EINVAL);
@@ -1980,11 +1982,11 @@ pmd_obj_abort(
 
 merr_t
 pmd_obj_delete(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
-	struct ecio_layout_descriptor  *found;
-	struct pmd_mdc_info            *cinfo;
+	struct pmd_mdc_info    *cinfo;
+	struct ecio_layout     *found;
 
 	long    refcnt;
 	u64     objid;
@@ -2079,12 +2081,12 @@ merr_t pmd_log_erase(struct mpool_descriptor *mp, u64 objid, u64 gen)
  */
 static merr_t
 pmd_mdc0_meta_update(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
 	struct omf_sb_descriptor   *sb;
-	struct mc_parms             mc_parms;
 	struct mpool_dev_info      *pd;
+	struct mc_parms             mc_parms;
 	merr_t                      err;
 
 	pd = &(mp->pds_pdv[layout->eld_ld.ol_pdh]);
@@ -2134,9 +2136,9 @@ pmd_mdc0_meta_update(
 
 merr_t
 pmd_obj_erase(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout,
-	u64                            gen)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	u64                         gen)
 {
 	merr_t err;
 	u64    objid = layout->eld_objid;
@@ -2214,12 +2216,12 @@ pmd_mdc_alloc(
 	u64                         mincap,
 	u32                         iter)
 {
-	struct ecio_err_report	        erpt;
-	enum mp_media_classp	        mclassp;
-	struct pmd_obj_capacity         ocap;
-	struct pmd_mdc_info            *cinfo, *cinew;
-	struct ecio_layout_descriptor  *layout1, *layout2;
-	const char                     *msg = "(no detail)";
+	struct pmd_obj_capacity ocap;
+	struct ecio_err_report  erpt;
+	enum mp_media_classp    mclassp;
+	struct pmd_mdc_info    *cinfo, *cinew;
+	struct ecio_layout     *layout1, *layout2;
+	const char             *msg = "(no detail)";
 
 	merr_t err;
 	u64    mdcslot, logid1, logid2;
@@ -2455,12 +2457,12 @@ pmd_mdc_cap(
 	u64                        *mdccap,
 	u64                        *mdc0cap)
 {
-	struct pmd_mdc_info            *cinfo = NULL;
-	struct ecio_layout_descriptor  *layout = NULL;
-	struct rb_node                 *node = NULL;
-	u64                             mlogsz;
-	u32                             zonepg = 0;
-	u16                             mdcn = 0;
+	struct pmd_mdc_info    *cinfo = NULL;
+	struct ecio_layout     *layout = NULL;
+	struct rb_node         *node = NULL;
+	u64                     mlogsz;
+	u32                     zonepg = 0;
+	u16                     mdcn = 0;
 
 	if (!mdcmax || !mdccap || !mdc0cap)
 		return;
@@ -2590,8 +2592,8 @@ pmd_prop_mpconfig(
 
 void
 pmd_layout_free(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
 	merr_t  err;
 	u16     pdh;
@@ -2650,15 +2652,15 @@ pmd_layout_calculate(
  */
 static merr_t
 pmd_layout_alloc(
-	struct mpool_descriptor         *mp,
-	struct pmd_obj_capacity         *ocap,
-	struct ecio_layout_descriptor  **layoutp,
-	struct media_class              *mc,
-	u64                              zcnt)
+	struct mpool_descriptor    *mp,
+	struct pmd_obj_capacity    *ocap,
+	struct ecio_layout        **layoutp,
+	struct media_class         *mc,
+	u64                         zcnt)
 {
-	struct ecio_layout_descriptor  *layout = *layoutp;
-	enum smap_space_type            spctype;
-	struct mc_smap_parms            mcsp;
+	struct ecio_layout     *layout = *layoutp;
+	enum smap_space_type    spctype;
+	struct mc_smap_parms    mcsp;
 
 	u64     zoneaddr, align;
 	u8      pdh;
@@ -2855,14 +2857,14 @@ pmd_alloc_argcheck(
 
 merr_t
 pmd_obj_alloc_cmn(
-	struct mpool_descriptor        *mp,
-	u64                             objid,
-	enum obj_type_omf               otype,
-	struct pmd_obj_capacity        *ocap,
-	enum mp_media_classp            mclassp,
-	int                             realloc,
-	bool                            needref,
-	struct ecio_layout_descriptor **layout)
+	struct mpool_descriptor    *mp,
+	u64                         objid,
+	enum obj_type_omf           otype,
+	struct pmd_obj_capacity    *ocap,
+	enum mp_media_classp        mclassp,
+	int                         realloc,
+	bool                        needref,
+	struct ecio_layout        **layout)
 {
 	u64                     zcnt = 0;
 	struct pmd_mdc_info    *cinfo = NULL;
@@ -3013,7 +3015,7 @@ retry:
 	 * objid can collide, but a generated objid should never collide.
 	 */
 	if (!err) {
-		struct ecio_layout_descriptor *dup;
+		struct ecio_layout *dup;
 
 		dup = pmd_uc_insert(cinfo, *layout);
 		if (dup)

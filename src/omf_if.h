@@ -189,7 +189,7 @@ struct omf_mdcrec_data {
 		struct object {
 			u64                             omd_objid;
 			u64                             omd_gen;
-			struct ecio_layout_descriptor  *omd_layout;
+			struct ecio_layout             *omd_layout;
 			u64                             omd_mblen;
 			struct omf_layout_descriptor    omd_old;
 			struct mpool_uuid               omd_uuid;
@@ -381,7 +381,7 @@ omf_mdcrec_unpack_letoh(
 /**
  * omf_logblock_header_cksum_le() - add checksum to log block buffer
  * @mp: struct mpool_descriptor *
- * @layout: struct ecio_layout_descriptor *
+ * @layout: struct ecio_layout *
  * @sidx: u8
  * @lpoff: u64
  * @lbuf: char *
@@ -392,16 +392,16 @@ omf_mdcrec_unpack_letoh(
  */
 merr_t
 omf_logblock_header_cksum_le(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	u8                              sidx,
-	u64                             lpoff,
-	char                           *lbuf);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	u8                          sidx,
+	u64                         lpoff,
+	char                       *lbuf);
 
 /**
  * omf_logblock_header_validate_le() - validate cksum on log block buffer
  * @mp: struct mpool_descriptor *
- * @layout: struct ecio_layout_descriptor *
+ * @layout: struct ecio_layout *
  * @sidx: u8
  * @lpoff: u64
  * @lbuf: char *
@@ -412,11 +412,11 @@ omf_logblock_header_cksum_le(
  */
 merr_t
 omf_logblock_header_validate_le(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	u8                              sidx,
-	u64                             lpoff,
-	char                           *lbuf);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	u8                          sidx,
+	u64                         lpoff,
+	char                       *lbuf);
 
 /**
  * omf_mdcrec_isobj_le() - determine if mdc recordis object-related

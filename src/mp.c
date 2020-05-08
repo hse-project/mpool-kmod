@@ -42,10 +42,10 @@ merr_t mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
 
 static merr_t
 mpool_mdc0_sb2obj(
-	struct mpool_descriptor        *mp,
-	struct omf_sb_descriptor       *sb,
-	struct ecio_layout_descriptor **l1,
-	struct ecio_layout_descriptor **l2)
+	struct mpool_descriptor    *mp,
+	struct omf_sb_descriptor   *sb,
+	struct ecio_layout        **l1,
+	struct ecio_layout        **l2)
 {
 	merr_t err;
 	int    i;
@@ -605,9 +605,9 @@ mpool_create(
 	u64                     mlog_cap,
 	struct mpool_devrpt    *devrpt)
 {
-	struct ecio_layout_descriptor  *mdc01, *mdc02;
-	struct omf_sb_descriptor       *sbmdc0;
-	struct mpool_descriptor        *mp;
+	struct ecio_layout         *mdc01, *mdc02;
+	struct omf_sb_descriptor   *sbmdc0;
+	struct mpool_descriptor    *mp;
 
 	bool    active, sbvalid;
 	u16     sidx;
@@ -1116,12 +1116,12 @@ mpool_activate(
 	struct mpool_descriptor   **mpp,
 	struct mpool_devrpt        *devrpt)
 {
-	struct ecio_layout_descriptor  *mdc01 = NULL;
-	struct ecio_layout_descriptor  *mdc02 = NULL;
-	struct omf_sb_descriptor       *sbmdc0;
-	struct mpool_descriptor        *mp;
-	struct media_class	       *mcmeta;
-	merr_t                          err;
+	struct omf_sb_descriptor   *sbmdc0;
+	struct mpool_descriptor    *mp;
+	struct ecio_layout         *mdc01 = NULL;
+	struct ecio_layout         *mdc02 = NULL;
+	struct media_class         *mcmeta;
+	merr_t                      err;
 
 	u64     mdcmax, mdcnum, mdcncap, mdc0cap;
 	bool    active, uafound;

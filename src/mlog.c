@@ -17,12 +17,12 @@
  */
 bool mlog_force_4ka = true;
 
-static struct ecio_layout_descriptor *
+static struct ecio_layout *
 objid_to_layout_search_oml(struct rb_root *root, u64 key)
 {
 	struct rb_node *node = root->rb_node;
-	struct ecio_layout_descriptor *this;
 	struct ecio_layout_mlo *mlo;
+	struct ecio_layout *this;
 
 	while (node) {
 		mlo = rb_entry(node, typeof(*mlo), mlo_nodeoml);
@@ -41,12 +41,12 @@ objid_to_layout_search_oml(struct rb_root *root, u64 key)
 
 static int
 objid_to_layout_insert_oml(
-	struct rb_root                 *root,
-	struct ecio_layout_descriptor  *item)
+	struct rb_root     *root,
+	struct ecio_layout *item)
 {
 	struct rb_node **pos = &root->rb_node, *parent = NULL;
-	struct ecio_layout_descriptor *this;
 	struct ecio_layout_mlo *mlo;
+	struct ecio_layout *this;
 
 	/* Figure out where to put new node */
 	while (*pos) {
@@ -70,36 +70,29 @@ objid_to_layout_insert_oml(
 }
 
 /**
- * mlog2layout() - convert opaque mlog handle to ecio_layout_descriptor
+ * mlog2layout() - convert opaque mlog handle to ecio_layout
  *
  * This function converts the opaque handle (mlog_descriptor) used by
- * clients to the internal representation (ecio_layout_descriptor).  The
+ * clients to the internal representation (ecio_layout).  The
  * conversion is a simple cast, followed by a sanity check to verify the
  * layout object is an mlog object.  If the validation fails, a NULL
  * pointer is returned.
  */
-static struct ecio_layout_descriptor *mlog2layout(struct mlog_descriptor *mlh)
+static struct ecio_layout *mlog2layout(struct mlog_descriptor *mlh)
 {
-	bool                            ret;
-	struct ecio_layout_descriptor  *layout =
-	       (struct ecio_layout_descriptor *)mlh;
+	struct ecio_layout *layout = (void *)mlh;
 
-	ret = mlog_objid(layout->eld_objid);
-	if (!ret)
-		/* Do not log an error message, the caller will do it. */
-		ev(1);
-
-	return ret ? layout : NULL;
+	return mlog_objid(layout->eld_objid) ? layout : NULL;
 }
 
 /**
- * layout2mlog() - convert ecio_layout_descriptor to opaque mlog_descriptor
+ * layout2mlog() - convert ecio_layout to opaque mlog_descriptor
  *
- * This function converts the internally used ecio_layout_descriptor to
+ * This function converts the internally used ecio_layout to
  * the externally used opaque mlog_descriptor.
  */
 static struct mlog_descriptor *
-layout2mlog(struct ecio_layout_descriptor *layout)
+layout2mlog(struct ecio_layout *layout)
 {
 	return (struct mlog_descriptor *)layout;
 }
@@ -143,9 +136,9 @@ bool mlog_objid(u64 objid)
  */
 static void
 mlog_getprops_cmn(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout,
-	struct mlog_props             *prop)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct mlog_props          *prop)
 {
 	memcpy(prop->lpr_uuid.b, layout->eld_uuid.uuid, MPOOL_UUID_SIZE);
 	prop->lpr_objid       = layout->eld_objid;
@@ -171,11 +164,12 @@ mlog_alloc_cmn(
 	struct mlog_props       *prop,
 	struct mlog_descriptor  **mlh)
 {
-	struct ecio_layout_descriptor *layout = NULL;
-	struct pmd_obj_capacity        ocap;
-	struct ecio_err_report         erpt;
-	merr_t                         err;
+	struct pmd_obj_capacity ocap;
+	struct ecio_err_report  erpt;
+	struct ecio_layout     *layout;
+	merr_t                  err;
 
+	layout = NULL;
 	*mlh = NULL;
 
 	ocap.moc_captgt = capreq->lcp_captgt;
@@ -289,7 +283,7 @@ mlog_find_get(
 	struct mlog_props          *prop,
 	struct mlog_descriptor    **mlh)
 {
-	struct ecio_layout_descriptor *layout;
+	struct ecio_layout *layout;
 
 	*mlh = NULL;
 
@@ -318,13 +312,11 @@ mlog_find_get(
  */
 void mlog_put(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
-	struct ecio_layout_descriptor *layout;
+	struct ecio_layout *layout;
 
 	layout = mlog2layout(mlh);
-	if (!layout)
-		return;
-
-	return pmd_obj_put(mp, layout);
+	if (layout)
+		pmd_obj_put(mp, layout);
 }
 
 /**
@@ -354,7 +346,7 @@ void mlog_lookup_rootids(u64 *id1, u64 *id2)
  */
 merr_t mlog_commit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
-	struct ecio_layout_descriptor *layout;
+	struct ecio_layout *layout;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
@@ -372,7 +364,7 @@ merr_t mlog_commit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
  */
 merr_t mlog_abort(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
-	struct ecio_layout_descriptor *layout;
+	struct ecio_layout *layout;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
@@ -433,7 +425,7 @@ mlog_init_fsetparms(
 	struct mlog_descriptor     *mlh,
 	struct mlog_fsetparms      *mfp)
 {
-	struct ecio_layout_descriptor  *layout;
+	struct ecio_layout *layout;
 	u8     secshift;
 	u16    sectsz;
 
@@ -486,7 +478,7 @@ mlog_extract_fsetparms(
  *
  * Deallocate log stat struct for mlog layout (if any).
  */
-static void mlog_stat_free(struct ecio_layout_descriptor *layout)
+static void mlog_stat_free(struct ecio_layout *layout)
 {
 	struct mlog_stat *lstat;
 
@@ -514,7 +506,7 @@ static void mlog_stat_free(struct ecio_layout_descriptor *layout)
  */
 merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
-	struct ecio_layout_descriptor *layout;
+	struct ecio_layout *layout;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
@@ -523,13 +515,13 @@ merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	/* remove from open list and discard buffered log data */
 	pmd_obj_wrlock(layout);
 	if (layout->eld_lstat) {
-		struct ecio_layout_descriptor *found_l;
+		struct ecio_layout *found;
 
 		mutex_lock(&mp->pds_omlock);
-		found_l = objid_to_layout_search_oml(&mp->pds_oml,
-						     layout->eld_objid);
-		if (found_l)
-			rb_erase(&found_l->eld_nodeoml, &mp->pds_oml);
+		found = objid_to_layout_search_oml(&mp->pds_oml,
+						   layout->eld_objid);
+		if (found)
+			rb_erase(&found->eld_nodeoml, &mp->pds_oml);
 		mutex_unlock(&mp->pds_omlock);
 
 		mlog_stat_free(layout);
@@ -701,9 +693,9 @@ mlog_logrecs_validate(
  */
 static void
 mlog_read_iter_init(
-	struct ecio_layout_descriptor  *layout,
-	struct mlog_stat               *lstat,
-	struct mlog_read_iter          *lri)
+	struct ecio_layout     *layout,
+	struct mlog_stat       *lstat,
+	struct mlog_read_iter  *lri)
 {
 	lri->lri_layout = layout;
 	lri->lri_gen    = layout->eld_gen;
@@ -724,8 +716,8 @@ mlog_read_iter_init(
  */
 static void
 mlog_stat_init_common(
-	struct ecio_layout_descriptor  *layout,
-	struct mlog_stat               *lstat)
+	struct ecio_layout *layout,
+	struct mlog_stat   *lstat)
 {
 	struct mlog_read_iter  *lri;
 
@@ -754,8 +746,8 @@ mlog_stat_init_common(
 merr_t
 mlog_stat_reinit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
-	struct ecio_layout_descriptor  *layout;
-	struct mlog_stat               *lstat;
+	struct ecio_layout *layout;
+	struct mlog_stat   *lstat;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
@@ -808,9 +800,9 @@ mlog_rw_internal(
 	u64                      boff,
 	u8                       rw)
 {
-	struct ecio_err_report          erpt;
-	struct ecio_layout_descriptor  *layout;
-	merr_t err;
+	struct ecio_err_report  erpt;
+	struct ecio_layout     *layout;
+	merr_t                  err;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
@@ -857,7 +849,7 @@ mlog_rw_raw(
 	u64                         boff,
 	u8                          rw)
 {
-	struct ecio_layout_descriptor  *layout;
+	struct ecio_layout *layout;
 	merr_t err;
 
 	layout = mlog2layout(mlh);
@@ -895,7 +887,7 @@ mlog_rw(
 	u8                       rw,
 	bool                     skip_ser)
 {
-	struct ecio_layout_descriptor *layout;
+	struct ecio_layout *layout;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
@@ -920,11 +912,11 @@ mlog_stat_init(
 	struct mlog_descriptor     *mlh,
 	bool                        csem)
 {
-	struct ecio_layout_descriptor  *layout;
-	struct mlog_stat               *lstat;
-	struct mlog_fsetparms           mfp;
-	u32                             bufsz;
-	merr_t                          err;
+	struct ecio_layout     *layout;
+	struct mlog_stat       *lstat;
+	struct mlog_fsetparms   mfp;
+	u32                     bufsz;
+	merr_t                  err;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
@@ -1062,9 +1054,9 @@ mlog_setup_buf(
 
 static inline void
 max_cfsetid(
-	struct omf_logblock_header    *lbh,
-	struct ecio_layout_descriptor *layout,
-	u32                           *fsetid)
+	struct omf_logblock_header *lbh,
+	struct ecio_layout         *layout,
+	u32                        *fsetid)
 {
 	if (!mpool_uuid_compare(&lbh->olh_magic, &layout->eld_uuid) &&
 	    (lbh->olh_gen == layout->eld_gen))
@@ -1095,11 +1087,11 @@ mlog_logpage_validate(
 	u32                       *fsetidmax,
 	u32                       *pfsetid)
 {
-	merr_t                         err = 0;
-	char                          *rbuf;
-	u8                             lbidx;
-	u16                            sectsz;
-	struct ecio_layout_descriptor *layout = mlog2layout(mlh);
+	struct ecio_layout *layout = mlog2layout(mlh);
+	merr_t              err = 0;
+	char               *rbuf;
+	u8                  lbidx;
+	u16                 sectsz;
 
 	sectsz = MLOG_SECSZ(lstat);
 	rbuf   = lstat->lst_rbuf[rbidx];
@@ -1186,11 +1178,11 @@ mlog_logpage_validate(
  */
 static merr_t
 mlog_populate_abuf(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout,
-	off_t                         *soff,
-	char                          *buf,
-	bool                           skip_ser)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	off_t                      *soff,
+	char                       *buf,
+	bool                        skip_ser)
 {
 	struct mlog_stat       *lstat;
 	struct iovec            iov;
@@ -1254,11 +1246,11 @@ mlog_populate_abuf(
  */
 static merr_t
 mlog_populate_rbuf(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout,
-	u16                           *nsec,
-	off_t                         *soff,
-	bool                           skip_ser)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	u16                        *nsec,
+	off_t                      *soff,
+	bool                        skip_ser)
 {
 	struct iovec           *iov = NULL;
 	struct mlog_stat       *lstat;
@@ -1350,10 +1342,10 @@ mlog_populate_rbuf(
  */
 static merr_t
 mlog_read_and_validate(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout,
-	bool                          *lempty,
-	struct ecio_err_report        *erpt)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	bool                       *lempty,
+	struct ecio_err_report     *erpt)
 {
 	struct mlog_stat  *lstat;
 
@@ -1484,20 +1476,21 @@ mlog_open(
 	u8                       flags,
 	u64                     *gen)
 {
-	struct ecio_err_report         erpt;
-	struct mlog_stat              *lstat = NULL;
-	struct ecio_layout_descriptor *layout;
+	struct ecio_err_report  erpt;
+	struct ecio_layout     *layout;
+	struct mlog_stat       *lstat;
 
-	merr_t err    = 0;
-	bool   lempty = false;
-	bool   csem   = false;
-	bool   skip_ser   = false;
+	merr_t  err    = 0;
+	bool    lempty = false;
+	bool    csem   = false;
+	bool    skip_ser = false;
+
+	lstat = NULL;
+	*gen = 0;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
 		return merr(EINVAL);
-
-	*gen = 0;
 
 	pmd_obj_wrlock(layout);
 
@@ -1614,10 +1607,10 @@ mlog_open(
  */
 static merr_t
 mlog_alloc_abufpg(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout,
-	u16                            abidx,
-	bool                           skip_ser)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	u16                         abidx,
+	bool                        skip_ser)
 {
 	struct mlog_stat  *lstat;
 	char  *abuf;
@@ -1686,7 +1679,7 @@ mlog_alloc_abufpg(
  *
  * @layout: object layout
  */
-static merr_t mlog_logblocks_hdrpack(struct ecio_layout_descriptor *layout)
+static merr_t mlog_logblocks_hdrpack(struct ecio_layout *layout)
 {
 	struct omf_logblock_header lbh;
 	struct mlog_stat          *lstat;
@@ -1758,9 +1751,9 @@ static merr_t mlog_logblocks_hdrpack(struct ecio_layout_descriptor *layout)
  */
 static merr_t
 mlog_flush_abuf(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	bool                            skip_ser)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	bool                        skip_ser)
 {
 	struct iovec           *iov = NULL;
 	struct mlog_stat       *lstat;
@@ -1829,9 +1822,9 @@ mlog_flush_abuf(
  */
 static void
 mlog_flush_posthdlr_4ka(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	bool                            fsucc)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	bool                        fsucc)
 {
 	struct mlog_stat   *lstat;
 
@@ -1923,9 +1916,9 @@ exit2:
  */
 static void
 mlog_flush_posthdlr(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	bool                            fsucc)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	bool                        fsucc)
 {
 	struct mlog_stat          *lstat;
 
@@ -2014,9 +2007,9 @@ exit2:
  */
 static merr_t
 mlog_logblocks_flush(
-	struct mpool_descriptor       *mp,
-	struct ecio_layout_descriptor *layout,
-	bool                           skip_ser)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	bool                        skip_ser)
 {
 	struct mlog_stat          *lstat;
 
@@ -2079,9 +2072,9 @@ mlog_logblocks_flush(
  */
 merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
-	struct ecio_layout_descriptor *layout = mlog2layout(mlh);
-	struct ecio_layout_descriptor *found_l = NULL;
-	struct mlog_stat              *lstat = NULL;
+	struct ecio_layout *layout = mlog2layout(mlh);
+	struct ecio_layout *found = NULL;
+	struct mlog_stat   *lstat = NULL;
 
 	merr_t err  = 0;
 	bool   skip_ser = false;
@@ -2119,10 +2112,10 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	}
 
 	mutex_lock(&mp->pds_omlock);
-	found_l = objid_to_layout_search_oml(&mp->pds_oml,
-					     layout->eld_objid);
-	if (found_l)
-		rb_erase(&found_l->eld_nodeoml, &mp->pds_oml);
+	found = objid_to_layout_search_oml(&mp->pds_oml,
+					   layout->eld_objid);
+	if (found)
+		rb_erase(&found->eld_nodeoml, &mp->pds_oml);
 
 	mutex_unlock(&mp->pds_omlock);
 	mlog_stat_free(layout);
@@ -2144,8 +2137,9 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
  */
 merr_t mlog_flush(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
-	struct ecio_layout_descriptor *layout = mlog2layout(mlh);
-	struct mlog_stat              *lstat = NULL;
+	struct ecio_layout *layout = mlog2layout(mlh);
+	struct mlog_stat   *lstat = NULL;
+
 	merr_t err  = 0;
 	bool   skip_ser = false;
 
@@ -2182,7 +2176,7 @@ merr_t mlog_flush(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 merr_t
 mlog_gen(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *gen)
 {
-	struct ecio_layout_descriptor *layout = mlog2layout(mlh);
+	struct ecio_layout *layout = mlog2layout(mlh);
 
 	*gen = 0;
 
@@ -2209,9 +2203,9 @@ mlog_empty(
 	struct mlog_descriptor  *mlh,
 	bool                    *empty)
 {
-	merr_t                         err = 0;
-	struct ecio_layout_descriptor *layout = mlog2layout(mlh);
-	struct mlog_stat              *lstat = NULL;
+	struct ecio_layout *layout = mlog2layout(mlh);
+	struct mlog_stat   *lstat = NULL;
+	merr_t              err = 0;
 
 	*empty = false;
 
@@ -2248,12 +2242,11 @@ mlog_empty(
 merr_t
 mlog_len(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *len)
 {
-	struct ecio_layout_descriptor *layout;
-	struct mlog_stat              *lstat;
-	merr_t                         err = 0;
+	struct ecio_layout *layout;
+	struct mlog_stat   *lstat;
+	merr_t              err = 0;
 
 	layout = mlog2layout(mlh);
-
 	if (!layout)
 		return merr(EINVAL);
 
@@ -2290,11 +2283,11 @@ mlog_erase(
 	struct mlog_descriptor     *mlh,
 	u64                         mingen)
 {
-	merr_t                         err = 0;
-	struct ecio_err_report         erpt;
-	struct ecio_layout_descriptor *layout = mlog2layout(mlh);
-	u64                            newgen = 0;
-	struct mlog_stat              *lstat = NULL;
+	struct ecio_err_report  erpt;
+	struct ecio_layout     *layout = mlog2layout(mlh);
+	struct mlog_stat       *lstat = NULL;
+	u64                     newgen = 0;
+	merr_t                  err = 0;
 
 	if (!layout)
 		return merr(EINVAL);
@@ -2360,9 +2353,9 @@ mlog_erase(
  */
 static merr_t
 mlog_update_append_idx(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	bool                            skip_ser)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	bool                        skip_ser)
 {
 	struct mlog_stat  *lstat;
 
@@ -2412,9 +2405,9 @@ mlog_update_append_idx(
  */
 static merr_t
 mlog_append_marker(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	enum logrec_type_omf            mtype)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	enum logrec_type_omf        mtype)
 {
 	struct mlog_stat            *lstat;
 	struct omf_logrec_descriptor lrd;
@@ -2486,9 +2479,9 @@ mlog_append_marker(
 merr_t
 mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
-	struct ecio_layout_descriptor *layout = mlog2layout(mlh);
-	struct mlog_stat              *lstat = NULL;
-	merr_t err = 0;
+	struct ecio_layout *layout = mlog2layout(mlh);
+	struct mlog_stat   *lstat = NULL;
+	merr_t              err = 0;
 
 	if (!layout)
 		return merr(EINVAL);
@@ -2542,9 +2535,9 @@ mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 merr_t
 mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
-	merr_t                         err = 0;
-	struct ecio_layout_descriptor *layout = mlog2layout(mlh);
-	struct mlog_stat              *lstat = NULL;
+	struct ecio_layout *layout = mlog2layout(mlh);
+	struct mlog_stat   *lstat = NULL;
+	merr_t              err = 0;
 
 	if (!layout)
 		return merr(EINVAL);
@@ -2653,9 +2646,9 @@ mlog_append_data_internal(
 	int                      sync,
 	bool                     skip_ser)
 {
-	struct ecio_layout_descriptor *layout = mlog2layout(mlh);
-	struct mlog_stat              *lstat = NULL;
-	struct omf_logrec_descriptor   lrd;
+	struct ecio_layout             *layout = mlog2layout(mlh);
+	struct mlog_stat               *lstat = NULL;
+	struct omf_logrec_descriptor    lrd;
 
 	merr_t     err = 0;
 	char      *abuf;
@@ -2782,8 +2775,8 @@ mlog_append_datav(
 	u64                      buflen,
 	int                      sync)
 {
-	struct ecio_layout_descriptor *layout = mlog2layout(mlh);
-	struct mlog_stat              *lstat = NULL;
+	struct ecio_layout *layout = mlog2layout(mlh);
+	struct mlog_stat   *lstat = NULL;
 
 	merr_t err   = 0;
 	s64    dmax  = 0;
@@ -2880,10 +2873,10 @@ mlog_append_data(
 merr_t
 mlog_read_data_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
-	merr_t                         err = 0;
-	struct ecio_layout_descriptor *layout = mlog2layout(mlh);
-	struct mlog_stat              *lstat;
-	struct mlog_read_iter         *lri;
+	struct ecio_layout     *layout = mlog2layout(mlh);
+	struct mlog_stat       *lstat;
+	struct mlog_read_iter  *lri;
+	merr_t                  err = 0;
 
 	if (!layout)
 		return merr(EINVAL);
@@ -2919,14 +2912,12 @@ mlog_logblocks_load_media(
 	struct mlog_read_iter     *lri,
 	char                     **inbuf)
 {
-	struct ecio_layout_descriptor  *layout;
-	struct mlog_stat               *lstat;
+	struct ecio_layout *layout;
+	struct mlog_stat   *lstat;
 
 	off_t  rsoff;
 	int    remsec;
-	u16    maxsec;
-	u16    nsecs;
-	u16    sectsz;
+	u16    maxsec, nsecs, sectsz;
 	merr_t err;
 	bool   skip_ser = false;
 
@@ -3224,17 +3215,17 @@ mlog_read_data_next_impl(
 	u64                      buflen,
 	u64                     *rdlen)
 {
-	merr_t                         err = 0;
-	struct ecio_layout_descriptor *layout;
-	struct mlog_stat              *lstat;
-	u64                            bufoff  = 0;
-	u64                            midrec = 0;
-	struct omf_logrec_descriptor   lrd;
-	bool                           recfirst = false;
-	char                          *inbuf = NULL;
-	u32                            sectsz = 0;
-	struct mlog_read_iter         *lri = NULL;
-	bool                           skip_ser = false;
+	struct ecio_layout             *layout;
+	struct mlog_stat               *lstat;
+	u64                             bufoff  = 0;
+	u64                             midrec = 0;
+	struct omf_logrec_descriptor    lrd;
+	bool                            recfirst = false;
+	char                           *inbuf = NULL;
+	u32                             sectsz = 0;
+	struct mlog_read_iter          *lri = NULL;
+	bool                            skip_ser = false;
+	merr_t                          err = 0;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
@@ -3549,7 +3540,7 @@ mlog_get_props(
 	struct mlog_descriptor  *mlh,
 	struct mlog_props       *prop)
 {
-	struct ecio_layout_descriptor *layout = mlog2layout(mlh);
+	struct ecio_layout *layout = mlog2layout(mlh);
 
 	if (!layout)
 		return merr(EINVAL);
@@ -3574,7 +3565,7 @@ mlog_get_props_ex(
 	struct mlog_descriptor  *mlh,
 	struct mlog_props_ex    *prop)
 {
-	struct ecio_layout_descriptor *layout;
+	struct ecio_layout *layout;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
@@ -3602,8 +3593,8 @@ mlog_get_props_ex(
  */
 s64
 mlog_append_dmax(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
 	struct mlog_stat      *lstat;
 
@@ -3648,8 +3639,8 @@ mlog_append_dmax(
  */
 void mlogutil_closeall(struct mpool_descriptor *mp)
 {
-	struct rb_node                *next_node;
-	struct ecio_layout_descriptor *layout;
+	struct ecio_layout *layout;
+	struct rb_node     *next_node;
 
 	/* mpool deactivation is single-threaded; don't need any locks */
 	next_node = rb_first(&mp->pds_oml);

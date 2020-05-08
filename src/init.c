@@ -59,14 +59,14 @@ int mpool_mod_init(void)
 
 	/* Initialize the slab caches. */
 	ecio_layout_desc_cache = kmem_cache_create(
-		"mpool_ecio_layout_desc",
-		sizeof(struct ecio_layout_descriptor),
+		"mpool_ecio_layout",
+		sizeof(struct ecio_layout),
 		0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 
 	if (!ecio_layout_desc_cache) {
 		err = merr(ENOMEM);
-		mp_pr_err("kmem_cache_create(ecio desc, %zu) failed",
-			  err, sizeof(struct ecio_layout_descriptor));
+		mp_pr_err("kmem_cache_create(ecio_layout, %zu) failed",
+			  err, sizeof(struct ecio_layout));
 		mpool_mod_exit();
 		return -merr_errno(err);
 	}

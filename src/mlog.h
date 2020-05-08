@@ -44,7 +44,7 @@ struct mlog_fsetparms {
  * @lri_valid:  1 if iterator is valid; 0 otherwise
  */
 struct mlog_read_iter {
-	struct ecio_layout_descriptor *lri_layout;
+	struct ecio_layout *lri_layout;
 	off_t lri_soff;
 	u64   lri_gen;
 	u16   lri_roff;
@@ -55,7 +55,7 @@ struct mlog_read_iter {
 
 /**
  * struct mlog_stat - mlog open status (referenced by associated
- * struct ecio_layout_descriptor)
+ * struct ecio_layout)
  *
  * @lst_citr:    Current mlog read iterator
  * @lst_mfp:     Mlog flush set parameters
@@ -107,8 +107,8 @@ struct mlog_stat {
 
 s64
 mlog_append_dmax(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout);
 
 void mlogutil_closeall(struct mpool_descriptor *mp);
 

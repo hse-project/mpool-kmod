@@ -63,9 +63,9 @@ static u64 iov_len_and_alignment(struct iovec *iov, int iovcnt, int *alignment)
  */
 static merr_t
 ecio_object_valid(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	enum obj_type_omf               type)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	enum obj_type_omf           type)
 {
 	merr_t err;
 
@@ -87,8 +87,8 @@ ecio_object_valid(
 
 u32
 ecio_mblock_stripe_size(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
 	struct mpool_dev_info          *pd;
 
@@ -121,13 +121,13 @@ ecio_mblock_stripe_size(
  */
 static merr_t
 ecio_mbrw_argcheck(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	struct iovec                   *iov,
-	int                             iovcnt,
-	loff_t                          boff,
-	int                             rw,
-	u64                            *nbytes)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct iovec               *iov,
+	int                         iovcnt,
+	loff_t                      boff,
+	int                         rw,
+	u64                        *nbytes)
 {
 	u64    data_len = 0;
 	u64    stripe_bytes;
@@ -246,12 +246,12 @@ ecio_pd_status_update(
  */
 merr_t
 ecio_mblock_write(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	struct iovec                   *iov,
-	int                             iovcnt,
-	struct ecio_err_report         *erpt,
-	u64                            *nbytes)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct iovec               *iov,
+	int                         iovcnt,
+	struct ecio_err_report     *erpt,
+	u64                        *nbytes)
 {
 	struct mpool_dev_info  *pd;
 	merr_t                  err;
@@ -298,12 +298,12 @@ ecio_mblock_write(
  */
 merr_t
 ecio_mblock_read(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	struct iovec                   *iov,
-	int                             iovcnt,
-	u64                             boff,
-	struct ecio_err_report         *erpt)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct iovec               *iov,
+	int                         iovcnt,
+	u64                         boff,
+	struct ecio_err_report     *erpt)
 {
 	struct mpool_dev_info  *pd;
 	u64                     nbytes = 0;
@@ -341,9 +341,9 @@ ecio_mblock_read(
  */
 merr_t
 ecio_mblock_erase(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	struct ecio_err_report         *erpt)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct ecio_err_report     *erpt)
 {
 	struct mpool_dev_info  *pd;
 	merr_t                  err;
@@ -373,12 +373,12 @@ ecio_mblock_erase(
  */
 merr_t
 ecio_mlog_write(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	struct iovec                   *iov,
-	int                             iovcnt,
-	u64                             boff,
-	struct ecio_err_report         *erpt)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct iovec               *iov,
+	int                         iovcnt,
+	u64                         boff,
+	struct ecio_err_report     *erpt)
 {
 	struct mpool_dev_info  *pd;
 	merr_t                  err;
@@ -408,12 +408,12 @@ ecio_mlog_write(
  */
 merr_t
 ecio_mlog_read(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	struct iovec                   *iov,
-	int                             iovcnt,
-	u64                             boff,
-	struct ecio_err_report         *erpt)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	struct iovec               *iov,
+	int                         iovcnt,
+	u64                         boff,
+	struct ecio_err_report     *erpt)
 {
 	struct mpool_dev_info  *pd;
 	merr_t                  err;
@@ -443,10 +443,10 @@ ecio_mlog_read(
  */
 merr_t
 ecio_mlog_erase(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	enum pd_erase_flags             flags,
-	struct ecio_err_report         *erpt)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	enum pd_erase_flags         flags,
+	struct ecio_err_report     *erpt)
 {
 	struct mpool_dev_info  *pd;
 	merr_t                  err;
@@ -478,7 +478,7 @@ ecio_mlog_erase(
  *
  * Returns NULL if allocation fails.
  */
-struct ecio_layout_descriptor *
+struct ecio_layout *
 ecio_layout_alloc(
 	struct mpool_descriptor    *mp,
 	struct mpool_uuid          *uuid,
@@ -487,7 +487,7 @@ ecio_layout_alloc(
 	u64                         mblen,
 	u32                         zcnt)
 {
-	struct ecio_layout_descriptor  *layout;
+	struct ecio_layout *layout;
 
 	layout = kmem_cache_zalloc(ecio_layout_desc_cache, GFP_KERNEL);
 	if (ev(!layout))
@@ -528,10 +528,10 @@ ecio_layout_alloc(
  */
 void ecio_layout_release(struct kref *refp)
 {
-	struct ecio_layout_descriptor *layout;
-	struct ecio_layout_mlo        *mlo;
+	struct ecio_layout_mlo *mlo;
+	struct ecio_layout     *layout;
 
-	layout = container_of(refp, struct ecio_layout_descriptor, eld_ref);
+	layout = container_of(refp, struct ecio_layout, eld_ref);
 
 	WARN_ONCE(layout->eld_objid == 0 ||
 		  kref_read(&layout->eld_ref),
@@ -559,16 +559,16 @@ void ecio_layout_release(struct kref *refp)
 
 inline u32
 ecio_zonepg(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
 	return mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_parm.dpr_zonepg;
 }
 
 inline u32
 ecio_sectorsz(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
 	struct pd_prop *prop;
 
@@ -579,8 +579,8 @@ ecio_sectorsz(
 
 u64
 ecio_obj_get_cap_from_layout(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout)
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout)
 {
 	enum obj_type_omf otype = pmd_objid_type(layout->eld_objid);
 

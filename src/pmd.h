@@ -254,7 +254,7 @@ struct pmd_mdc_stats {
  *    are serialized, but even without mdc compaction this would be
  *    the case because all such metadata updates must be logged to
  *    the object's mdc and mdc logging is inherently serial
- *  + see struct ecio_layout_descriptor comments for specifics on how
+ *  + see struct ecio_layout comments for specifics on how
  *    compactlock is used to freeze metdata for committed objects
  *  + mmi_bgoplock protects the rec count in every committed object
  *    layout in the mdc; it is rarely used so is not a performance
@@ -339,10 +339,10 @@ struct pmd_mda_info {
  * @oef_wqstruct:	workq struct
  */
 struct pmd_obj_erase_work {
-	struct mpool_descriptor        *oef_mp;
-	struct ecio_layout_descriptor  *oef_layout;
-	struct kmem_cache              *oef_cache;
-	struct work_struct              oef_wqstruct;
+	struct mpool_descriptor    *oef_mp;
+	struct ecio_layout         *oef_layout;
+	struct kmem_cache          *oef_cache;
+	struct work_struct          oef_wqstruct;
 };
 
 /**
@@ -435,12 +435,12 @@ static inline bool pmd_objid_isuser(u64 objid)
  */
 merr_t
 pmd_mpool_activate(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *mdc01,
-	struct ecio_layout_descriptor  *mdc02,
-	int                             create,
-	struct mpool_devrpt            *devrpt,
-	u32				flags);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *mdc01,
+	struct ecio_layout         *mdc02,
+	int                         create,
+	struct mpool_devrpt        *devrpt,
+	u32                         flags);
 
 /**
  * pmd_mpool_deactivate() - Deactivate mpool mp.
@@ -470,11 +470,11 @@ void pmd_mpool_deactivate(struct mpool_descriptor *mp);
  */
 merr_t
 pmd_obj_alloc(
-	struct mpool_descriptor        *mp,
-	enum obj_type_omf               otype,
-	struct pmd_obj_capacity        *ocap,
-	enum mp_media_classp            mclassp,
-	struct ecio_layout_descriptor **olayout);
+	struct mpool_descriptor    *mp,
+	enum obj_type_omf           otype,
+	struct pmd_obj_capacity    *ocap,
+	enum mp_media_classp        mclassp,
+	struct ecio_layout        **olayout);
 
 
 /**
@@ -495,11 +495,11 @@ pmd_obj_alloc(
  */
 merr_t
 pmd_obj_realloc(
-	struct mpool_descriptor        *mp,
-	u64                             objid,
-	struct pmd_obj_capacity        *ocap,
-	enum mp_media_classp            mclassp,
-	struct ecio_layout_descriptor **olayout);
+	struct mpool_descriptor    *mp,
+	u64                         objid,
+	struct pmd_obj_capacity    *ocap,
+	enum mp_media_classp        mclassp,
+	struct ecio_layout        **olayout);
 
 
 /**
@@ -515,8 +515,8 @@ pmd_obj_realloc(
  */
 merr_t
 pmd_obj_commit(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout);
 
 /**
  * pmd_obj_abort() - Discard un-committed object.
@@ -530,8 +530,8 @@ pmd_obj_commit(
  */
 merr_t
 pmd_obj_abort(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout);
 
 /**
  * pmd_obj_delete() - Delete committed object.
@@ -545,8 +545,8 @@ pmd_obj_abort(
  */
 merr_t
 pmd_obj_delete(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout);
 
 /**
  * pmd_obj_erase() -
@@ -562,9 +562,9 @@ pmd_obj_delete(
  */
 merr_t
 pmd_obj_erase(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout,
-	u64                             gen);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout,
+	u64                         gen);
 
 /**
  * pmd_obj_erase_done() -
@@ -578,8 +578,8 @@ pmd_obj_erase(
  */
 merr_t
 pmd_obj_erase_done(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout);
 
 /**
  * pmd_obj_get() - Get a reference on a known layout.
@@ -590,8 +590,8 @@ pmd_obj_erase_done(
  */
 merr_t
 pmd_obj_get(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout);
 
 /**
  * pmd_obj_find_get() - Get a reference for a layout for objid.
@@ -604,7 +604,7 @@ pmd_obj_get(
  *
  * Return: pointer to layout if successful, NULL otherwise
  */
-struct ecio_layout_descriptor *
+struct ecio_layout *
 pmd_obj_find_get(struct mpool_descriptor *mp, u64 objid, int which);
 
 /**
@@ -618,40 +618,32 @@ pmd_obj_find_get(struct mpool_descriptor *mp, u64 objid, int which);
  */
 void
 pmd_obj_put(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout);
 
 /**
  * pmd_obj_rdlock() - Read-lock object layout with appropriate nesting level.
  * @layout:
  */
-void
-pmd_obj_rdlock(
-	struct ecio_layout_descriptor  *layout);
+void pmd_obj_rdlock(struct ecio_layout *layout);
 
 /**
  * pmd_obj_rdunlock() - Release read lock on object layout.
  * @layout:
  */
-void
-pmd_obj_rdunlock(
-	struct ecio_layout_descriptor  *layout);
+void pmd_obj_rdunlock(struct ecio_layout *layout);
 
 /**
  * pmd_obj_wrlock() - Write-lock object layout with appropriate nesting level.
  * @layout:
  */
-void
-pmd_obj_wrlock(
-	struct ecio_layout_descriptor   *layout);
+void pmd_obj_wrlock(struct ecio_layout *layout);
 
 /**
  * pmd_obj_wrunlock() - Release write lock on object layout.
  * @layout:
  */
-void
-pmd_obj_wrunlock(
-	struct ecio_layout_descriptor  *layout);
+void pmd_obj_wrunlock(struct ecio_layout *layout);
 
 /**
  * pmd_objid_to_uhandle()
@@ -779,8 +771,8 @@ pmd_prop_mpconfig(
  */
 void
 pmd_layout_free(
-	struct mpool_descriptor        *mp,
-	struct ecio_layout_descriptor  *layout);
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout);
 
 /**
  * pmd_obj_alloc_cmn() -
@@ -802,14 +794,14 @@ pmd_layout_free(
  */
 merr_t
 pmd_obj_alloc_cmn(
-	struct mpool_descriptor        *mp,
-	u64                             objid,
-	enum obj_type_omf               otype,
-	struct pmd_obj_capacity        *ocap,
-	enum mp_media_classp            mclassp,
-	int                             realloc,
-	bool                            needref,
-	struct ecio_layout_descriptor **layout);
+	struct mpool_descriptor    *mp,
+	u64                         objid,
+	enum obj_type_omf           otype,
+	struct pmd_obj_capacity    *ocap,
+	enum mp_media_classp        mclassp,
+	int                         realloc,
+	bool                        needref,
+	struct ecio_layout        **layout);
 
 /*
  * pmd_layout_shuffle_pds() -

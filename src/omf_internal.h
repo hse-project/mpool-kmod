@@ -42,7 +42,7 @@ int
 omf_ecio_layout_pack_htole(
 	const struct mpool_descriptor  *mp,
 	u8                              rtype,
-	struct ecio_layout_descriptor  *ecl,
+	struct ecio_layout             *ecl,
 	char                           *outbuf);
 
 /**
