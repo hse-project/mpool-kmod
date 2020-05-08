@@ -14,7 +14,7 @@
 #include "pd.h"
 
 struct mlog_stat;
-struct ecio_layout;
+struct pmd_layout;
 
 /*
  * ecio API functions
@@ -34,12 +34,12 @@ struct ecio_layout;
  * Needed for incremental write, which must be full-stripe(s) except
  * for the last write.
  *
- * @layout: struct ecio_layout *
+ * @layout: struct pmd_layout *
  */
 u32
 ecio_mblock_stripe_size(
 		struct mpool_descriptor    *mp,
-		struct ecio_layout         *layout);
+		struct pmd_layout          *layout);
 
 /**
  * ecio_mblock_write() - write complete mblock (incl. EC and cksum)
@@ -65,7 +65,7 @@ ecio_mblock_stripe_size(
 merr_t
 ecio_mblock_write(
 	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout,
+	struct pmd_layout          *layout,
 	struct iovec               *iov,
 	int                         iovcnt,
 	u64                        *nbytes);
@@ -74,7 +74,7 @@ ecio_mblock_write(
  * ecio_mblock_read() - read mblock
  *
  * @mp:     struct mpool_descriptor *
- * @layout: struct ecio_layout *
+ * @layout: struct pmd_layout *
  * @iov:    struct iovec *
  * @iovcnt: int
  * @boff:   u64, offset into the mblock
@@ -91,7 +91,7 @@ ecio_mblock_write(
 merr_t
 ecio_mblock_read(
 	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout,
+	struct pmd_layout          *layout,
 	struct iovec               *iov,
 	int                         iovcnt,
 	u64                         boff);
@@ -100,7 +100,7 @@ ecio_mblock_read(
  * ecio_mblock_erase() - erase an mblock
  *
  * @mp:     struct mpool_descriptor *
- * @layout: struct ecio_layout *
+ * @layout: struct pmd_layout *
  *
  * Erase mblock; caller MUST hold pmd_obj_wrlock() on layout.
  *
@@ -109,13 +109,13 @@ ecio_mblock_read(
 merr_t
 ecio_mblock_erase(
 	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout);
+	struct pmd_layout          *layout);
 
 /**
  * ecio_mlog_write() - write to an mlog
  *
  * @mp:     struct mpool_descriptor *
- * @layout: struct ecio_layout *
+ * @layout: struct pmd_layout *
  * @iov:    iovec containing the data to write
  * @iovcnt: number of iovecs
  * @boff:   u64 offset to write at
@@ -128,7 +128,7 @@ ecio_mblock_erase(
 merr_t
 ecio_mlog_write(
 	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout,
+	struct pmd_layout          *layout,
 	struct iovec               *iov,
 	int                         iovcnt,
 	u64                         boff);
@@ -136,7 +136,7 @@ ecio_mlog_write(
 /**
  * ecio_mlog_read() - read from an mlog
  * @mp:     struct mpool_descriptor *
- * @layout: struct ecio_layout *
+ * @layout: struct pmd_layout *
  * @iov:    iovec to read into
  * @iovcnt: number of iovecs
  * @boff:   u64, offset from which to start read
@@ -150,7 +150,7 @@ ecio_mlog_write(
 merr_t
 ecio_mlog_read(
 	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout,
+	struct pmd_layout          *layout,
 	struct iovec               *iov,
 	int                         iovcnt,
 	u64                         boff);
@@ -158,7 +158,7 @@ ecio_mlog_read(
 /**
  * ecio_mlog_erase() - erase an mlog
  * @mp:     struct mpool_descriptor *
- * @layout: struct ecio_layout *
+ * @layout: struct pmd_layout *
  * @flags:  OR of pd_erase_flags bits
  *
  * Erase mlog; caller MUST hold pmd_obj_wrlock() on layout.
@@ -168,7 +168,7 @@ ecio_mlog_read(
 merr_t
 ecio_mlog_erase(
 	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout,
+	struct pmd_layout          *layout,
 	enum pd_erase_flags         flags);
 
 /*
@@ -183,12 +183,12 @@ extern struct shash_desc *mpool_shash_desc_sha256;
 u32
 ecio_zonepg(
 	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout);
+	struct pmd_layout          *layout);
 
 u32
 ecio_sectorsz(
 	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout);
+	struct pmd_layout          *layout);
 
 /**
  * ecio_obj_get_cap_from_layout()
@@ -204,6 +204,6 @@ ecio_sectorsz(
 u64
 ecio_obj_get_cap_from_layout(
 	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout);
+	struct pmd_layout          *layout);
 
 #endif

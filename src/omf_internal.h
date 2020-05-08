@@ -27,8 +27,7 @@ merr_t omf_sb_unpack_letoh_v1(void *out, const char *inbuf);
 merr_t omf_layout_unpack_letoh_v1(void *out, const char *inbuf);
 
 /**
- * omf_ecio_layout_pack_htole() - Pack ecio_layout desc into outbuf
- *	little-endian.
+ * omf_ecio_layout_pack_htole() - Pack pmd_layout into outbuf little-endian.
  * @mp:
  * @rtype:
  * @ecl:
@@ -42,7 +41,7 @@ int
 omf_ecio_layout_pack_htole(
 	const struct mpool_descriptor  *mp,
 	u8                              rtype,
-	struct ecio_layout             *ecl,
+	struct pmd_layout              *ecl,
 	char                           *outbuf);
 
 /**

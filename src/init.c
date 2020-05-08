@@ -60,13 +60,13 @@ int mpool_mod_init(void)
 	/* Initialize the slab caches. */
 	pmd_layout_cache = kmem_cache_create(
 		"mpool_pmd_layout",
-		sizeof(struct ecio_layout),
+		sizeof(struct pmd_layout),
 		0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 
 	if (!pmd_layout_cache) {
 		err = merr(ENOMEM);
 		mp_pr_err("kmem_cache_create(pmd_layout, %zu) failed",
-			  err, sizeof(struct ecio_layout));
+			  err, sizeof(struct pmd_layout));
 		mpool_mod_exit();
 		return -merr_errno(err);
 	}

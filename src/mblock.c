@@ -18,18 +18,18 @@
 #include "mpcore_defs.h"
 
 /**
- * mblock2layout() - convert opaque mblock handle to ecio_layout
+ * mblock2layout() - convert opaque mblock handle to pmd_layout
  *
  * This function converts the opaque handle (mblock_descriptor) used by
- * clients to the internal representation (ecio_layout).  The
+ * clients to the internal representation (pmd_layout).  The
  * conversion is a simple cast, followed by a sanity check to verify the
  * layout object is an mblock object.  If the validation fails, a NULL
  * pointer is returned.
  */
-static struct ecio_layout *
+static struct pmd_layout *
 mblock2layout(struct mblock_descriptor *mbh)
 {
-	struct ecio_layout *layout = (void *)mbh;
+	struct pmd_layout *layout = (void *)mbh;
 
 	if (ev(!layout))
 		return NULL;
@@ -44,13 +44,13 @@ mblock2layout(struct mblock_descriptor *mbh)
 }
 
 /**
- * layout2mblock() - convert ecio_layout to opaque mblock_descriptor
+ * layout2mblock() - convert pmd_layout to opaque mblock_descriptor
  *
- * This function converts the internally used ecio_layout to
+ * This function converts the internally used pmd_layout to
  * the externally used opaque mblock_descriptor.
  */
 static struct mblock_descriptor *
-layout2mblock(struct ecio_layout *layout)
+layout2mblock(struct pmd_layout *layout)
 {
 	return (struct mblock_descriptor *)layout;
 }
@@ -58,7 +58,7 @@ layout2mblock(struct ecio_layout *layout)
 static void
 mblock_getprops_cmn(
 	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout,
+	struct pmd_layout          *layout,
 	struct mblock_props        *prop)
 {
 	assert(layout);
@@ -81,7 +81,7 @@ mblock_alloc_cmn(
 	struct mblock_props         *prop,
 	struct mblock_descriptor   **mbh)
 {
-	struct ecio_layout     *layout = NULL;
+	struct pmd_layout      *layout = NULL;
 	struct pmd_obj_capacity ocap;
 	merr_t                  err;
 
@@ -156,7 +156,7 @@ mblock_find_get(
 	struct mblock_props        *prop,
 	struct mblock_descriptor  **mbh)
 {
-	struct ecio_layout *layout;
+	struct pmd_layout *layout;
 
 	*mbh = NULL;
 
@@ -180,7 +180,7 @@ mblock_find_get(
 
 void mblock_put(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 {
-	struct ecio_layout *layout;
+	struct pmd_layout *layout;
 
 	layout = mblock2layout(mbh);
 	if (layout)
@@ -204,7 +204,7 @@ do {									\
 
 merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 {
-	struct ecio_layout *layout;
+	struct pmd_layout  *layout;
 	merr_t              err;
 
 	layout = mblock2layout(mbh);
@@ -227,7 +227,7 @@ merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 
 merr_t mblock_abort(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 {
-	struct ecio_layout *layout;
+	struct pmd_layout  *layout;
 	merr_t              err;
 
 	layout = mblock2layout(mbh);
@@ -248,7 +248,7 @@ merr_t mblock_abort(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 
 merr_t mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 {
-	struct ecio_layout *layout;
+	struct pmd_layout *layout;
 
 	layout = mblock2layout(mbh);
 	if (ev(!layout)) {
@@ -266,7 +266,7 @@ mblock_write(
 	struct iovec               *iov,
 	int                         iovcnt)
 {
-	struct ecio_layout     *layout;
+	struct pmd_layout *layout;
 
 	merr_t err = 0;
 	u64    tdata = 0;
@@ -295,7 +295,7 @@ mblock_read(
 	int                         iovcnt,
 	u64                         boff)
 {
-	struct ecio_layout     *layout;
+	struct pmd_layout *layout;
 
 	merr_t  err = 0;
 	u8      state;
@@ -329,7 +329,7 @@ mblock_get_props(
 	struct mblock_descriptor   *mbh,
 	struct mblock_props        *prop)
 {
-	struct ecio_layout *layout;
+	struct pmd_layout *layout;
 
 	layout = mblock2layout(mbh);
 	if (ev(!layout)) {
@@ -350,7 +350,7 @@ mblock_get_props_ex(
 	struct mblock_descriptor   *mbh,
 	struct mblock_props_ex     *prop)
 {
-	struct ecio_layout *layout;
+	struct pmd_layout *layout;
 
 	layout = mblock2layout(mbh);
 	if (ev(!layout)) {
