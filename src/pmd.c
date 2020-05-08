@@ -905,7 +905,7 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
  * @cinfo:
  * @op: object opcode
  */
-static merr_t
+static void
 pmd_update_mdc_stats(
 	struct mpool_descriptor    *mp,
 	struct ecio_layout         *layout,
@@ -914,9 +914,7 @@ pmd_update_mdc_stats(
 {
 	struct pmd_mdc_stats   *pms;
 	enum obj_type_omf       otype;
-
-	merr_t err = 0;
-	u64    cap;
+	u64                     cap;
 
 	otype = pmd_objid_type(layout->eld_objid);
 
@@ -929,6 +927,7 @@ pmd_update_mdc_stats(
 		if (otype == OMF_OBJ_MBLOCK)
 			pms->pms_mblock_wlen += layout->eld_mblen;
 		/* fall through */
+
 	case PMD_OBJ_ALLOC:
 		cap = ecio_obj_get_cap_from_layout(mp, layout);
 		if (otype == OMF_OBJ_MLOG) {
@@ -939,14 +938,17 @@ pmd_update_mdc_stats(
 			pms->pms_mblock_alen += cap;
 		}
 		break;
+
 	case PMD_OBJ_COMMIT:
 		if (otype == OMF_OBJ_MBLOCK)
 			pms->pms_mblock_wlen += layout->eld_mblen;
 		break;
+
 	case PMD_OBJ_DELETE:
 		if (otype == OMF_OBJ_MBLOCK)
 			pms->pms_mblock_wlen -= layout->eld_mblen;
 		/* fall through */
+
 	case PMD_OBJ_ABORT:
 		cap = ecio_obj_get_cap_from_layout(mp, layout);
 		if (otype == OMF_OBJ_MLOG) {
@@ -957,13 +959,13 @@ pmd_update_mdc_stats(
 			pms->pms_mblock_alen -= cap;
 		}
 		break;
+
 	default:
 		assert(0);
+		break;
 	}
 
 	mutex_unlock(&cinfo->mmi_stats_lock);
-
-	return err;
 }
 
 static merr_t
@@ -1223,12 +1225,7 @@ pmd_objs_load(
 			break;
 		}
 
-		err = pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_LOAD);
-		if (err) {
-			msg = "alloc per-mdc space usage stats failed";
-			err = merr(ENOMEM);
-			break;
-		}
+		pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_LOAD);
 
 		/* For mdc0 track last logical mdc created.
 		 */
@@ -3070,20 +3067,7 @@ retry:
 	cslot = objid_slot(objid);
 	cinfo = &mp->pds_mda.mdi_slotv[cslot];
 
-	/*
-	 * We will try to update the per-mdc stats. if it fails,
-	 * we don't need to insert the object to the uncommitted tree.
-	 * However, if later we fail to add the object to the uncommitted tree,
-	 * we need to call pmd_update_mdc_stats() again with opcode
-	 * PMD_OBJ_ABORT to undo this step.
-	 */
-	err = pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_ALLOC);
-	if (err) {
-		mp_pr_err("mpool %s, object 0x%lx failed to allocate per-mdc stats",
-			  err, mp->pds_name, (ulong)objid);
-		pmd_layout_unprovision(mp, layout);
-		return err;
-	}
+	pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_ALLOC);
 
 	/* If realloc, we MUST confirm (while holding the uncommited obj
 	 * tree lock) that objid is not in the committed obj tree in order
