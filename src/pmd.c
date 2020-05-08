@@ -2742,11 +2742,10 @@ static merr_t
 pmd_layout_provision(
 	struct mpool_descriptor    *mp,
 	struct pmd_obj_capacity    *ocap,
-	struct ecio_layout        **layoutp,
+	struct ecio_layout         *layout,
 	struct media_class         *mc,
 	u64                         zcnt)
 {
-	struct ecio_layout     *layout = *layoutp;
 	enum smap_space_type    spctype;
 	struct mc_smap_parms    mcsp;
 
@@ -3032,7 +3031,7 @@ retry:
 		}
 
 		/* Try to allocate zones from drives in media class */
-		err = pmd_layout_provision(mp, ocap, &layout, mc, zcnt);
+		err = pmd_layout_provision(mp, ocap, layout, mc, zcnt);
 		if (!err)
 			break;
 
@@ -3096,26 +3095,24 @@ retry:
 		if (pmd_co_find(cinfo, objid))
 			err = merr(EEXIST);
 		pmd_co_runlock(cinfo);
-
-		if (err)
-			goto errout;
 	}
 
 	/* For both alloc and realloc, confirm that objid is not in the
 	 * uncommitted obj tree and insert it.  Note that a reallocated
 	 * objid can collide, but a generated objid should never collide.
 	 */
-	if (needref)
-		kref_get(&layout->eld_ref);
-
-	if (pmd_uc_insert(cinfo, layout)) {
+	if (!err) {
 		if (needref)
-			kref_put(&layout->eld_ref, ecio_layout_release);
-		err = merr(EEXIST);
+			kref_get(&layout->eld_ref);
+
+		if (pmd_uc_insert(cinfo, layout)) {
+			if (needref)
+				kref_put(&layout->eld_ref, ecio_layout_release);
+			err = merr(EEXIST);
+		}
 	}
 	pmd_uc_unlock(cinfo);
 
-errout:
 	if (err) {
 		mp_pr_err("mpool %s, %sallocated object 0x%lx should not be in the %scommitted tree",
 			  err, mp->pds_name, realloc ? "re-" : "",
