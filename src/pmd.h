@@ -838,20 +838,6 @@ pmd_prop_mpconfig(
 	bool                        compacting);
 
 /**
- * pmd_layout_free() -
- * @mp:
- * @layout:
- *
- * Free space map entries for layout and dealloc its memory; Handles
- * layouts where some strip descriptors have stype==UNDEF to deal with
- * failure cases where not every strip has an smap allocation.
- */
-void
-pmd_layout_free(
-	struct mpool_descriptor    *mp,
-	struct ecio_layout         *layout);
-
-/**
  * pmd_obj_alloc_cmn() -
  * @mp:
  * @objid:

@@ -32,6 +32,11 @@ pmd_write_meta_to_latest_version(
 	bool                        permitted,
 	struct mpool_devrpt        *devrpt);
 
+static void
+pmd_layout_unprovision(
+	struct mpool_descriptor    *mp,
+	struct ecio_layout         *layout);
+
 /*
  * lock for serializing certain pmd ops where required/desirable; could be per
  * mpool but no meaningful performance benefit in doing so for these rare ops
@@ -80,7 +85,7 @@ ecio_layout_alloc(
 	init_rwsem(&layout->eld_rwlock);
 
 	/*
-	 * must set stype=UNDEF in all strips; pmd_layout_free()
+	 * must set stype=UNDEF in all strips; pmd_layout_unprovision()
 	 * assumes this to deal with failure cases where not every strip
 	 * has an smap allocation
 	 */
@@ -1995,7 +2000,7 @@ static void pmd_obj_erase_cb(struct work_struct *work)
 	if (oef->oef_cache)
 		kmem_cache_free(oef->oef_cache, oef);
 
-	pmd_layout_free(mp, layout);
+	pmd_layout_unprovision(mp, layout);
 }
 
 static void
@@ -2673,8 +2678,8 @@ pmd_prop_mpconfig(
 	return ev(err);
 }
 
-void
-pmd_layout_free(
+static void
+pmd_layout_unprovision(
 	struct mpool_descriptor    *mp,
 	struct ecio_layout         *layout)
 {
@@ -2725,7 +2730,7 @@ pmd_layout_calculate(
 }
 
 /**
- * pmd_layout_provision() -
+ * pmd_layout_provision() - provision storage for the given layout
  * @mp:
  * @ocap:
  * @otype:
@@ -2947,18 +2952,19 @@ pmd_obj_alloc_cmn(
 	enum mp_media_classp        mclassp,
 	int                         realloc,
 	bool                        needref,
-	struct ecio_layout        **layout)
+	struct ecio_layout        **layoutp)
 {
-	u64                     zcnt = 0;
-	struct pmd_mdc_info    *cinfo = NULL;
-	merr_t                  err;
-	int                     retries, flush;
-	bool                    beffort, fallback;
-	u8                      cslot;
-	struct media_class     *mc;
 	struct mpool_uuid       uuid;
+	struct pmd_mdc_info    *cinfo;
+	struct ecio_layout     *layout;
+	struct media_class     *mc;
 
-	*layout = NULL;
+	int     retries, flush;
+	bool    beffort, fallback;
+	u8      cslot;
+	merr_t  err;
+
+	*layoutp = NULL;
 
 	err = pmd_alloc_argcheck(mp, objid, otype, ocap, mclassp);
 	if (ev(err))
@@ -3012,27 +3018,27 @@ retry:
 		mpool_generate_uuid(&uuid);
 
 	while (true) {
+		u64 zcnt = 0;
+
 		/*
 		 * Calculate the height (zcnt) of layout.
 		 */
 		pmd_layout_calculate(mp, ocap, mc, &zcnt, otype);
 
-		*layout = ecio_layout_alloc(mp, &uuid, objid, 0, 0, zcnt);
-		if (!*layout) {
+		layout = ecio_layout_alloc(mp, &uuid, objid, 0, 0, zcnt);
+		if (!layout) {
 			up_read(&mp->pds_pdvlock);
-			*layout = NULL;
 			return merr(ENOMEM);
 		}
 
 		/* Try to allocate zones from drives in media class */
-		err = pmd_layout_provision(mp, ocap, layout, mc, zcnt);
+		err = pmd_layout_provision(mp, ocap, &layout, mc, zcnt);
 		if (!err)
 			break;
 
 		up_read(&mp->pds_pdvlock);
 
-		kref_put(&(*layout)->eld_ref, ecio_layout_release);
-		*layout = NULL;
+		kref_put(&layout->eld_ref, ecio_layout_release);
 
 		/* TODO: Retry only if mperasewq is busy... */
 		if (retries-- > 0) {
@@ -3072,12 +3078,11 @@ retry:
 	 * we need to call pmd_update_mdc_stats() again with opcode
 	 * PMD_OBJ_ABORT to undo this step.
 	 */
-	err = pmd_update_mdc_stats(mp, *layout, cinfo, PMD_OBJ_ALLOC);
+	err = pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_ALLOC);
 	if (err) {
 		mp_pr_err("mpool %s, object 0x%lx failed to allocate per-mdc stats",
 			  err, mp->pds_name, (ulong)objid);
-		pmd_layout_free(mp, *layout);
-		*layout = NULL;
+		pmd_layout_unprovision(mp, layout);
 		return err;
 	}
 
@@ -3091,23 +3096,26 @@ retry:
 		if (pmd_co_find(cinfo, objid))
 			err = merr(EEXIST);
 		pmd_co_runlock(cinfo);
+
+		if (err)
+			goto errout;
 	}
 
 	/* For both alloc and realloc, confirm that objid is not in the
 	 * uncommitted obj tree and insert it.  Note that a reallocated
 	 * objid can collide, but a generated objid should never collide.
 	 */
-	if (!err) {
-		struct ecio_layout *dup;
+	if (needref)
+		kref_get(&layout->eld_ref);
 
-		dup = pmd_uc_insert(cinfo, *layout);
-		if (dup)
-			err = merr(EEXIST);
-		else if (needref)
-			kref_get(&(*layout)->eld_ref);
+	if (pmd_uc_insert(cinfo, layout)) {
+		if (needref)
+			kref_put(&layout->eld_ref, ecio_layout_release);
+		err = merr(EEXIST);
 	}
 	pmd_uc_unlock(cinfo);
 
+errout:
 	if (err) {
 		mp_pr_err("mpool %s, %sallocated object 0x%lx should not be in the %scommitted tree",
 			  err, mp->pds_name, realloc ? "re-" : "",
@@ -3117,10 +3125,12 @@ retry:
 		 * Since object insertion failed, we need to undo the
 		 * per-mdc stats update we did earlier in this routine
 		 */
-		pmd_update_mdc_stats(mp, *layout, cinfo, PMD_OBJ_ABORT);
-		pmd_layout_free(mp, *layout);
-		*layout = NULL;
+		pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_ABORT);
+		pmd_layout_unprovision(mp, layout);
+		layout = NULL;
 	}
+
+	*layoutp = layout;
 
 	return err;
 }
