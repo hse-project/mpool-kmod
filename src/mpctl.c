@@ -2587,7 +2587,8 @@ mp_deactivate_impl(
 		"mpool %s deactivated, %d units",
 		mp->mp_params.mp_name, unitc);
 
-	mpc_params_unregister(mpunit);
+	if (!err)
+		mpc_params_unregister(mpunit);
 
 	kref_put(&mpunit->un_ref, mpc_unit_destroy);
 
