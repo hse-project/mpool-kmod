@@ -2255,8 +2255,8 @@ struct mpool_descriptor *mpool_desc_alloc(void)
 
 	init_rwsem(&mp->pds_pdvlock);
 
-	mutex_init(&mp->pds_omlock);
-	mp->pds_oml = RB_ROOT;
+	mutex_init(&mp->pds_oml_lock);
+	mp->pds_oml_root = RB_ROOT;
 
 	mp->pds_mdparm.md_mclass = MP_MED_INVALID;
 

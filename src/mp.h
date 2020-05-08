@@ -192,8 +192,8 @@ struct mpool_descriptor {
 	struct mpool_dev_info       pds_pdv[MPOOL_DRIVES_MAX];
 
 	____cacheline_aligned
-	struct mutex                pds_omlock;
-	struct rb_root              pds_oml;
+	struct mutex                pds_oml_lock;
+	struct rb_root              pds_oml_root;
 
 	/* Read-mostly fields...
 	 */

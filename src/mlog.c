@@ -517,12 +517,12 @@ merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	if (layout->eld_lstat) {
 		struct pmd_layout *found;
 
-		mutex_lock(&mp->pds_omlock);
-		found = objid_to_layout_search_oml(&mp->pds_oml,
+		mutex_lock(&mp->pds_oml_lock);
+		found = objid_to_layout_search_oml(&mp->pds_oml_root,
 						   layout->eld_objid);
 		if (found)
-			rb_erase(&found->eld_nodeoml, &mp->pds_oml);
-		mutex_unlock(&mp->pds_omlock);
+			rb_erase(&found->eld_nodeoml, &mp->pds_oml_root);
+		mutex_unlock(&mp->pds_oml_lock);
 
 		mlog_stat_free(layout);
 	}
@@ -1577,9 +1577,9 @@ mlog_open(
 	}
 
 	*gen = layout->eld_gen;
-	mutex_lock(&mp->pds_omlock);
-	objid_to_layout_insert_oml(&mp->pds_oml, layout);
-	mutex_unlock(&mp->pds_omlock);
+	mutex_lock(&mp->pds_oml_lock);
+	objid_to_layout_insert_oml(&mp->pds_oml_root, layout);
+	mutex_unlock(&mp->pds_oml_lock);
 
 	pmd_obj_wrunlock(layout);
 
@@ -2102,13 +2102,13 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 				  err, mp->pds_name, (ulong)layout->eld_objid);
 	}
 
-	mutex_lock(&mp->pds_omlock);
-	found = objid_to_layout_search_oml(&mp->pds_oml,
+	mutex_lock(&mp->pds_oml_lock);
+	found = objid_to_layout_search_oml(&mp->pds_oml_root,
 					   layout->eld_objid);
 	if (found)
-		rb_erase(&found->eld_nodeoml, &mp->pds_oml);
+		rb_erase(&found->eld_nodeoml, &mp->pds_oml_root);
+	mutex_unlock(&mp->pds_oml_lock);
 
-	mutex_unlock(&mp->pds_omlock);
 	mlog_stat_free(layout);
 
 	/* Reset Mlog flags */
@@ -3623,39 +3623,36 @@ mlog_append_dmax(
 }
 
 /**
- * mlogutil_closeall()
+ * mlogutil_closeall() -
  *
  * Close all open user (non-mdc) mlogs in mpool and release resources;
  * this is an mpool deactivation utility and not part of the mlog user API.
  */
 void mlogutil_closeall(struct mpool_descriptor *mp)
 {
-	struct pmd_layout_mlo  *mlo;
+	struct pmd_layout_mlo  *mlo, *tmp;
 	struct pmd_layout      *layout;
-	struct rb_node         *node;
 
 	/* mpool deactivation is single-threaded; don't need any locks */
-	node = rb_first(&mp->pds_oml);
-	while (node) {
-		mlo = rb_entry(node, typeof(*mlo), mlo_nodeoml);
+
+	rbtree_postorder_for_each_entry_safe(
+		mlo, tmp, &mp->pds_oml_root, mlo_nodeoml) {
+
 		layout = mlo->mlo_layout;
-		node = rb_next(&mlo->mlo_nodeoml);
 
 		if (pmd_objid_type(layout->eld_objid) != OMF_OBJ_MLOG) {
-			/*
-			 * This should never happen.
-			 * TODO: Fix infinite loop...
-			 */
-			mp_pr_warn("mpool %s, closing all user mlogs, non-mlog object 0x%lx in open mlog layout tree",
+			mp_pr_warn("mpool %s, non-mlog object 0x%lx in open mlog layout tree",
 				   mp->pds_name, (ulong)layout->eld_objid);
-		} else if (pmd_objid_isuser(layout->eld_objid)) {
-			/*
-			 * remove layout from open list and discard
-			 * buffered log data
-			 */
-			rb_erase(&mlo->mlo_nodeoml, &mp->pds_oml);
-			mlog_stat_free(layout);
+			continue;
 		}
+
+		if (!pmd_objid_isuser(layout->eld_objid))
+			continue;
+
+		/* Remove layout from open list and discard log data.
+		 */
+		rb_erase(&mlo->mlo_nodeoml, &mp->pds_oml_root);
+		mlog_stat_free(layout);
 	}
 }
 
