@@ -3069,6 +3069,9 @@ retry:
 
 	pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_ALLOC);
 
+	if (needref)
+		kref_get(&layout->eld_ref);
+
 	/* If realloc, we MUST confirm (while holding the uncommited obj
 	 * tree lock) that objid is not in the committed obj tree in order
 	 * to protect against an invalid *_realloc() call.
@@ -3085,22 +3088,17 @@ retry:
 	 * uncommitted obj tree and insert it.  Note that a reallocated
 	 * objid can collide, but a generated objid should never collide.
 	 */
-	if (!err) {
-		if (needref)
-			kref_get(&layout->eld_ref);
-
-		if (pmd_uc_insert(cinfo, layout)) {
-			if (needref)
-				kref_put(&layout->eld_ref, ecio_layout_release);
-			err = merr(EEXIST);
-		}
-	}
+	if (!err && pmd_uc_insert(cinfo, layout))
+		err = merr(EEXIST);
 	pmd_uc_unlock(cinfo);
 
 	if (err) {
 		mp_pr_err("mpool %s, %sallocated object 0x%lx should not be in the %scommitted tree",
 			  err, mp->pds_name, realloc ? "re-" : "",
 			  (ulong)objid, realloc ? "" : "un");
+
+		if (needref)
+			kref_put(&layout->eld_ref, ecio_layout_release);
 
 		/*
 		 * Since object insertion failed, we need to undo the
