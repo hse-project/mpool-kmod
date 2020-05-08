@@ -924,7 +924,7 @@ bool pmd_mdc_needed(struct mpool_descriptor *mp);
 void pmd_mdc_alloc_set(struct mpool_descriptor *mp);
 
 /**
- * ecio_layout_alloc() - create and initialize an ecio_layout
+ * pmd_layout_alloc() - create and initialize an ecio_layout
  * @mp:     to get the mpool uuid
  * @objid:  mblock/mlog object ID
  * @gen:    generation number
@@ -937,7 +937,7 @@ void pmd_mdc_alloc_set(struct mpool_descriptor *mp);
  * Return: NULL if allocation fails.
  */
 struct ecio_layout *
-ecio_layout_alloc(
+pmd_layout_alloc(
 	struct mpool_descriptor    *mp,
 	struct mpool_uuid          *uuid,
 	u64                         objid,
@@ -946,13 +946,13 @@ ecio_layout_alloc(
 	u32                         zcnt);
 
 /**
- * ecio_layout_release() - free ecio_layout and internal elements
+ * pmd_layout_release() - free ecio_layout and internal elements
  * @layout:
  *
  * Deallocate all memory associated with object layout.
  *
  * Return: void
  */
-void ecio_layout_release(struct kref *refp);
+void pmd_layout_release(struct kref *refp);
 
 #endif

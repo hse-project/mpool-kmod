@@ -23,8 +23,8 @@ struct omf_sb_descriptor SBCLEAR;
  * high-count objects.
  */
 struct kmem_cache  *pmd_obj_erase_work_cache __read_mostly;
-struct kmem_cache  *ecio_layout_desc_cache __read_mostly;
-struct kmem_cache  *ecio_layout_mlo_cache __read_mostly;
+struct kmem_cache  *pmd_layout_mlo_cache __read_mostly;
+struct kmem_cache  *pmd_layout_cache __read_mostly;
 struct kmem_cache  *smap_zone_cache __read_mostly;
 
 unsigned int mpc_rsvd_bios_max __read_mostly = 16;
@@ -58,32 +58,32 @@ int mpool_mod_init(void)
 	sbutil_mdc0_clear(&SBCLEAR);
 
 	/* Initialize the slab caches. */
-	ecio_layout_desc_cache = kmem_cache_create(
-		"mpool_ecio_layout",
+	pmd_layout_cache = kmem_cache_create(
+		"mpool_pmd_layout",
 		sizeof(struct ecio_layout),
 		0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 
-	if (!ecio_layout_desc_cache) {
+	if (!pmd_layout_cache) {
 		err = merr(ENOMEM);
-		mp_pr_err("kmem_cache_create(ecio_layout, %zu) failed",
+		mp_pr_err("kmem_cache_create(pmd_layout, %zu) failed",
 			  err, sizeof(struct ecio_layout));
 		mpool_mod_exit();
 		return -merr_errno(err);
 	}
 
 	/*
-	 * mlog only part of the ecio object layout.
+	 * mlog only part of the pmd object layout.
 	 * Elements can share a cache line because an element is not changed
 	 * after the mlog layout is allocated. And an mlog is long lived.
 	 */
-	ecio_layout_mlo_cache = kmem_cache_create(
-		"mpool_ecio_layout_mlo",
+	pmd_layout_mlo_cache = kmem_cache_create(
+		"mpool_pmd_layout_mlo",
 		sizeof(struct ecio_layout_mlo),
 		0, SLAB_POISON, NULL);
 
-	if (!ecio_layout_mlo_cache) {
+	if (!pmd_layout_mlo_cache) {
 		err = merr(ENOMEM);
-		mp_pr_err("kmem_cache_create(ecio mlo, %zu) failed",
+		mp_pr_err("kmem_cache_create(pmd mlo, %zu) failed",
 			  err, sizeof(struct ecio_layout_mlo));
 		mpool_mod_exit();
 		return -merr_errno(err);
@@ -148,13 +148,13 @@ void mpool_mod_exit(void)
 
 	/* Destroy the slab caches. */
 	kmem_cache_destroy(pmd_obj_erase_work_cache);
-	kmem_cache_destroy(ecio_layout_desc_cache);
-	kmem_cache_destroy(ecio_layout_mlo_cache);
+	kmem_cache_destroy(pmd_layout_mlo_cache);
+	kmem_cache_destroy(pmd_layout_cache);
 	kmem_cache_destroy(smap_zone_cache);
 
 	pmd_obj_erase_work_cache = NULL;
-	ecio_layout_desc_cache = NULL;
-	ecio_layout_mlo_cache = NULL;
+	pmd_layout_mlo_cache = NULL;
+	pmd_layout_cache = NULL;
 	smap_zone_cache = NULL;
 
 	if (mpool_tfm)

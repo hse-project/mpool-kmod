@@ -51,7 +51,7 @@ static DEFINE_MUTEX(pmd_s_lock);
  * Returns NULL if allocation fails.
  */
 struct ecio_layout *
-ecio_layout_alloc(
+pmd_layout_alloc(
 	struct mpool_descriptor    *mp,
 	struct mpool_uuid          *uuid,
 	u64                         objid,
@@ -61,19 +61,20 @@ ecio_layout_alloc(
 {
 	struct ecio_layout *layout;
 
-	layout = kmem_cache_zalloc(ecio_layout_desc_cache, GFP_KERNEL);
+	layout = kmem_cache_zalloc(pmd_layout_cache, GFP_KERNEL);
 	if (ev(!layout))
 		return NULL;
 
 	if (pmd_objid_type(objid) == OMF_OBJ_MLOG) {
 		layout->eld_mlo =
-			kmem_cache_zalloc(ecio_layout_mlo_cache, GFP_KERNEL);
+			kmem_cache_zalloc(pmd_layout_mlo_cache, GFP_KERNEL);
 		if (ev(!layout->eld_mlo)) {
-			kmem_cache_free(ecio_layout_desc_cache, layout);
+			kmem_cache_free(pmd_layout_cache, layout);
 			return NULL;
 		}
-		layout->eld_mlo->mlo_layout = layout;
+
 		mpool_uuid_copy(&layout->eld_uuid, uuid);
+		layout->eld_mlo->mlo_layout = layout;
 	}
 
 	layout->eld_objid     = objid;
@@ -98,7 +99,7 @@ ecio_layout_alloc(
 /*
  * Deallocate all memory associated with object layout.
  */
-void ecio_layout_release(struct kref *refp)
+void pmd_layout_release(struct kref *refp)
 {
 	struct ecio_layout_mlo *mlo;
 	struct ecio_layout     *layout;
@@ -121,16 +122,16 @@ void ecio_layout_release(struct kref *refp)
 	 */
 	if (pmd_objid_type(layout->eld_objid) == OMF_OBJ_MLOG) {
 		assert(mlo != NULL);
-		kmem_cache_free(ecio_layout_mlo_cache, mlo);
+		kmem_cache_free(pmd_layout_mlo_cache, mlo);
 	}
 
 	layout->eld_objid = 0;
 
-	kmem_cache_free(ecio_layout_desc_cache, layout);
+	kmem_cache_free(pmd_layout_cache, layout);
 }
 
 static struct ecio_layout *
-ecio_layout_find(struct rb_root *root, u64 key)
+pmd_layout_find(struct rb_root *root, u64 key)
 {
 	struct rb_node *node = root->rb_node;
 	struct ecio_layout *this;
@@ -150,7 +151,7 @@ ecio_layout_find(struct rb_root *root, u64 key)
 }
 
 static struct ecio_layout *
-ecio_layout_insert(
+pmd_layout_insert(
 	struct rb_root     *root,
 	struct ecio_layout *item)
 {
@@ -209,7 +210,7 @@ static inline void pmd_co_wunlock(struct pmd_mdc_info *cinfo)
 static inline struct ecio_layout *
 pmd_co_find(struct pmd_mdc_info *cinfo, u64 objid)
 {
-	return ecio_layout_find(&cinfo->mmi_co_root, objid);
+	return pmd_layout_find(&cinfo->mmi_co_root, objid);
 }
 
 static inline struct ecio_layout *
@@ -217,7 +218,7 @@ pmd_co_insert(
 	struct pmd_mdc_info    *cinfo,
 	struct ecio_layout     *layout)
 {
-	return ecio_layout_insert(&cinfo->mmi_co_root, layout);
+	return pmd_layout_insert(&cinfo->mmi_co_root, layout);
 }
 
 static inline struct ecio_layout *
@@ -250,7 +251,7 @@ static inline void pmd_uc_unlock(struct pmd_mdc_info *cinfo)
 static inline struct ecio_layout *
 pmd_uc_find(struct pmd_mdc_info *cinfo, u64 objid)
 {
-	return ecio_layout_find(&cinfo->mmi_uc_root, objid);
+	return pmd_layout_find(&cinfo->mmi_uc_root, objid);
 }
 
 static inline struct ecio_layout *
@@ -258,7 +259,7 @@ pmd_uc_insert(
 	struct pmd_mdc_info    *cinfo,
 	struct ecio_layout     *layout)
 {
-	return ecio_layout_insert(&cinfo->mmi_uc_root, layout);
+	return pmd_layout_insert(&cinfo->mmi_uc_root, layout);
 }
 
 static inline struct ecio_layout *
@@ -320,7 +321,7 @@ pmd_obj_put(
 	struct mpool_descriptor    *mp,
 	struct ecio_layout         *layout)
 {
-	kref_put(&layout->eld_ref, ecio_layout_release);
+	kref_put(&layout->eld_ref, pmd_layout_release);
 }
 
 /* General mdc locking (has external callers...)
@@ -1100,7 +1101,7 @@ pmd_objs_load(
 			found = pmd_co_insert(cinfo, layout);
 			if (found) {
 				msg = "OCREATE duplicate object ID";
-				kref_put(&layout->eld_ref, ecio_layout_release);
+				kref_put(&layout->eld_ref, pmd_layout_release);
 				err = merr(EEXIST);
 				break;
 			}
@@ -1120,7 +1121,7 @@ pmd_objs_load(
 			}
 
 			pmd_co_remove(cinfo, found);
-			kref_put(&found->eld_ref, ecio_layout_release);
+			kref_put(&found->eld_ref, pmd_layout_release);
 
 			atomic_inc(&cinfo->mmi_pco_cnt.pcc_del);
 			atomic_dec(&cinfo->mmi_pco_cnt.pcc_cobj);
@@ -1179,13 +1180,13 @@ pmd_objs_load(
 			found = pmd_co_find(cinfo, objid);
 			if (!found) {
 				msg = "OUPDATE object not found";
-				kref_put(&layout->eld_ref, ecio_layout_release);
+				kref_put(&layout->eld_ref, pmd_layout_release);
 				err = merr(ENOENT);
 				break;
 			}
 
 			pmd_co_remove(cinfo, found);
-			kref_put(&found->eld_ref, ecio_layout_release);
+			kref_put(&found->eld_ref, pmd_layout_release);
 
 			layout->eld_state = ECIO_LYT_COMMITTED;
 			pmd_co_insert(cinfo, layout);
@@ -1301,7 +1302,7 @@ void pmd_mda_free(struct mpool_descriptor *mp)
 		rbtree_postorder_for_each_entry_safe(
 			layout, tmp, &cinfo->mmi_co_root, eld_nodemdc) {
 
-			kref_put(&layout->eld_ref, ecio_layout_release);
+			kref_put(&layout->eld_ref, pmd_layout_release);
 		}
 
 		/* Release uncommitted objects...
@@ -1309,7 +1310,7 @@ void pmd_mda_free(struct mpool_descriptor *mp)
 		rbtree_postorder_for_each_entry_safe(
 			layout, tmp, &cinfo->mmi_uc_root, eld_nodemdc) {
 
-			kref_put(&layout->eld_ref, ecio_layout_release);
+			kref_put(&layout->eld_ref, pmd_layout_release);
 		}
 	}
 }
@@ -1435,8 +1436,8 @@ pmd_mpool_activate(
 		 * pmd_mda_free() will dealloc mdc01/2 on subsequent
 		 * activation failures
 		 */
-		kref_put(&mdc01->eld_ref, ecio_layout_release);
-		kref_put(&mdc02->eld_ref, ecio_layout_release);
+		kref_put(&mdc01->eld_ref, pmd_layout_release);
+		kref_put(&mdc02->eld_ref, pmd_layout_release);
 		goto exit;
 	}
 
@@ -2061,7 +2062,10 @@ pmd_obj_abort(
 
 	pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_ABORT);
 	pmd_obj_erase_start(mp, layout);
-	kref_put(&layout->eld_ref, ecio_layout_release);
+
+	/* Drop caller's reference...
+	 */
+	kref_put(&layout->eld_ref, pmd_layout_release);
 
 	return 0;
 }
@@ -2134,7 +2138,10 @@ pmd_obj_delete(
 	atomic_dec(&cinfo->mmi_pco_cnt.pcc_cobj);
 	pmd_update_mdc_stats(mp, layout, cinfo, PMD_OBJ_DELETE);
 	pmd_obj_erase_start(mp, layout);
-	kref_put(&layout->eld_ref, ecio_layout_release);
+
+	/* Drop caller's reference...
+	 */
+	kref_put(&layout->eld_ref, pmd_layout_release);
 
 	return 0;
 }
@@ -2694,7 +2701,9 @@ pmd_layout_unprovision(
 			  (ulong)layout->eld_objid);
 	}
 
-	kref_put(&layout->eld_ref, ecio_layout_release);
+	/* Drop birth reference...
+	 */
+	kref_put(&layout->eld_ref, pmd_layout_release);
 }
 
 /**
@@ -3021,7 +3030,7 @@ retry:
 		 */
 		pmd_layout_calculate(mp, ocap, mc, &zcnt, otype);
 
-		layout = ecio_layout_alloc(mp, &uuid, objid, 0, 0, zcnt);
+		layout = pmd_layout_alloc(mp, &uuid, objid, 0, 0, zcnt);
 		if (!layout) {
 			up_read(&mp->pds_pdvlock);
 			return merr(ENOMEM);
@@ -3034,7 +3043,7 @@ retry:
 
 		up_read(&mp->pds_pdvlock);
 
-		kref_put(&layout->eld_ref, ecio_layout_release);
+		kref_put(&layout->eld_ref, pmd_layout_release);
 
 		/* TODO: Retry only if mperasewq is busy... */
 		if (retries-- > 0) {
@@ -3098,7 +3107,7 @@ retry:
 			  (ulong)objid, realloc ? "" : "un");
 
 		if (needref)
-			kref_put(&layout->eld_ref, ecio_layout_release);
+			kref_put(&layout->eld_ref, pmd_layout_release);
 
 		/*
 		 * Since object insertion failed, we need to undo the

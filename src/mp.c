@@ -52,9 +52,9 @@ mpool_mdc0_sb2obj(
 	int    i;
 
 	/* mdc0 mlog1 layout */
-	*l1 = ecio_layout_alloc(mp, &sb->osb_mdc01uuid, MDC0_OBJID_LOG1,
-				sb->osb_mdc01gen, 0,
-				sb->osb_mdc01desc.ol_zcnt);
+	*l1 = pmd_layout_alloc(mp, &sb->osb_mdc01uuid, MDC0_OBJID_LOG1,
+			       sb->osb_mdc01gen, 0,
+			       sb->osb_mdc01desc.ol_zcnt);
 	if (!*l1) {
 		*l1 = *l2 = NULL;
 
@@ -79,7 +79,7 @@ mpool_mdc0_sb2obj(
 		char uuid_str[40];
 
 		/* should never happen */
-		kref_put(&(*l1)->eld_ref, ecio_layout_release);
+		kref_put(&(*l1)->eld_ref, pmd_layout_release);
 		*l1 = *l2 = NULL;
 
 		mpool_unparse_uuid(&sb->osb_mdc01devid, uuid_str);
@@ -91,11 +91,11 @@ mpool_mdc0_sb2obj(
 	}
 
 	/* mdc0 mlog2 layout */
-	*l2 = ecio_layout_alloc(mp, &sb->osb_mdc02uuid, MDC0_OBJID_LOG2,
-				sb->osb_mdc02gen, 0,
-				sb->osb_mdc02desc.ol_zcnt);
+	*l2 = pmd_layout_alloc(mp, &sb->osb_mdc02uuid, MDC0_OBJID_LOG2,
+			       sb->osb_mdc02gen, 0,
+			       sb->osb_mdc02desc.ol_zcnt);
 	if (!*l2) {
-		kref_put(&(*l1)->eld_ref, ecio_layout_release);
+		kref_put(&(*l1)->eld_ref, pmd_layout_release);
 		*l1 = *l2 = NULL;
 
 		err = merr(ENOMEM);
@@ -119,8 +119,8 @@ mpool_mdc0_sb2obj(
 		char uuid_str[40];
 
 		/* should never happen */
-		kref_put(&(*l1)->eld_ref, ecio_layout_release);
-		kref_put(&(*l2)->eld_ref, ecio_layout_release);
+		kref_put(&(*l1)->eld_ref, pmd_layout_release);
+		kref_put(&(*l2)->eld_ref, pmd_layout_release);
 		*l1 = *l2 = NULL;
 
 		mpool_unparse_uuid(&sb->osb_mdc02devid, uuid_str);

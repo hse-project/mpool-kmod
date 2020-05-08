@@ -19,8 +19,8 @@
 extern struct crypto_shash *mpool_tfm;
 
 extern struct kmem_cache *pmd_obj_erase_work_cache;
-extern struct kmem_cache *ecio_layout_desc_cache;
-extern struct kmem_cache *ecio_layout_mlo_cache; /* mlog only */
+extern struct kmem_cache *pmd_layout_mlo_cache;
+extern struct kmem_cache *pmd_layout_cache;
 extern struct kmem_cache *smap_zone_cache;
 
 extern unsigned int mpc_rsvd_bios_max;

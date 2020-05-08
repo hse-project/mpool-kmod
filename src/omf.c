@@ -573,10 +573,10 @@ omf_ecio_layout_unpack_letoh(
 		return err;
 	}
 
-	ecl = ecio_layout_alloc(mp, &cdr->u.obj.omd_uuid,
-				cdr->u.obj.omd_objid, cdr->u.obj.omd_gen,
-				cdr->u.obj.omd_mblen,
-				cdr->u.obj.omd_old.ol_zcnt);
+	ecl = pmd_layout_alloc(mp, &cdr->u.obj.omd_uuid,
+			       cdr->u.obj.omd_objid, cdr->u.obj.omd_gen,
+			       cdr->u.obj.omd_mblen,
+			       cdr->u.obj.omd_old.ol_zcnt);
 	if (!ecl) {
 		err = merr(ENOMEM);
 		mp_pr_err("mpool %s, unpacking layout failed, could not allocate layout structure",
@@ -594,7 +594,7 @@ omf_ecio_layout_unpack_letoh(
 	}
 
 	if (i >= mp->pds_pdvcnt) {
-		kref_put(&ecl->eld_ref, ecio_layout_release);
+		kref_put(&ecl->eld_ref, pmd_layout_release);
 
 		err = merr(ENOENT);
 		mp_pr_err("mpool %s, unpacking layout failed, mclass %u not in mpool",
