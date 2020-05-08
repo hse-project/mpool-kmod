@@ -104,7 +104,9 @@ struct mpool_dev_info {
 #define pdi_sectorsz  pdi_parm.dpr_prop.pdp_sectorsz
 #define pdi_prop      pdi_parm.dpr_prop
 
+enum pd_status mpool_pd_status_get(struct mpool_dev_info *pd);
 
+void mpool_pd_status_set(struct mpool_dev_info *pd, enum pd_status status);
 
 /**
  * struct uuid_to_mpdesc_rb -
