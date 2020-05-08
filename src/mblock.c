@@ -69,7 +69,7 @@ mblock_getprops_cmn(
 	prop->mpr_write_len   = layout->eld_mblen;
 	prop->mpr_stripe_len  = ecio_mblock_stripe_size(mp, layout);
 	prop->mpr_mclassp = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_mclass;
-	prop->mpr_iscommitted = layout->eld_state & ECIO_LYT_COMMITTED;
+	prop->mpr_iscommitted = layout->eld_state & PMD_LYT_COMMITTED;
 }
 
 static merr_t
@@ -225,25 +225,6 @@ merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 	return 0;
 }
 
-int
-mblock_is_committed(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
-{
-	struct ecio_layout *layout;
-	int                 answer = 0;
-
-	layout = mblock2layout(mbh);
-	if (!layout)
-		return 0;
-
-	pmd_obj_rdlock(layout);
-	if (layout->eld_state & ECIO_LYT_COMMITTED)
-		answer = 1;
-
-	pmd_obj_rdunlock(layout);
-
-	return answer;
-}
-
 merr_t mblock_abort(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 {
 	struct ecio_layout *layout;
@@ -299,11 +280,11 @@ mblock_write(
 
 	pmd_obj_wrlock(layout);
 	state = layout->eld_state;
-	if (!(state & ECIO_LYT_COMMITTED))
+	if (!(state & PMD_LYT_COMMITTED))
 		err = ecio_mblock_write(mp, layout, iov, iovcnt, &tdata);
 	pmd_obj_wrunlock(layout);
 
-	return (!(state & ECIO_LYT_COMMITTED)) ? err : merr(EALREADY);
+	return (!(state & PMD_LYT_COMMITTED)) ? err : merr(EALREADY);
 }
 
 merr_t
@@ -335,11 +316,11 @@ mblock_read(
 	 */
 	pmd_obj_rdlock(layout);
 	state = layout->eld_state;
-	if (state & ECIO_LYT_COMMITTED)
+	if (state & PMD_LYT_COMMITTED)
 		err = ecio_mblock_read(mp, layout, iov, iovcnt, boff);
 	pmd_obj_rdunlock(layout);
 
-	return (state & ECIO_LYT_COMMITTED) ? err : merr(EAGAIN);
+	return (state & PMD_LYT_COMMITTED) ? err : merr(EAGAIN);
 }
 
 merr_t

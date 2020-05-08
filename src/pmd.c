@@ -80,18 +80,9 @@ pmd_layout_alloc(
 	layout->eld_objid     = objid;
 	layout->eld_gen       = gen;
 	layout->eld_mblen     = mblen;
-	layout->eld_state     = ECIO_LYT_NONE;
 	layout->eld_ld.ol_zcnt = zcnt;
 	kref_init(&layout->eld_ref);
 	init_rwsem(&layout->eld_rwlock);
-
-	/*
-	 * must set stype=UNDEF in all strips; pmd_layout_unprovision()
-	 * assumes this to deal with failure cases where not every strip
-	 * has an smap allocation
-	 */
-	layout->eld_ld.ol_pdh = 0;
-	layout->eld_ld.ol_zaddr = 0;
 
 	return layout;
 }
@@ -1096,7 +1087,7 @@ pmd_objs_load(
 
 		if (cdr.omd_rtype == OMF_MDR_OCREATE) {
 			layout = cdr.u.obj.omd_layout;
-			layout->eld_state = ECIO_LYT_COMMITTED;
+			layout->eld_state = PMD_LYT_COMMITTED;
 
 			found = pmd_co_insert(cinfo, layout);
 			if (found) {
@@ -1188,7 +1179,7 @@ pmd_objs_load(
 			pmd_co_remove(cinfo, found);
 			kref_put(&found->eld_ref, pmd_layout_release);
 
-			layout->eld_state = ECIO_LYT_COMMITTED;
+			layout->eld_state = PMD_LYT_COMMITTED;
 			pmd_co_insert(cinfo, layout);
 
 			atomic_inc(&cinfo->mmi_pco_cnt.pcc_up);
@@ -1909,7 +1900,7 @@ pmd_obj_commit(
 		return merr(EINVAL);
 
 	pmd_obj_wrlock(layout);
-	if (layout->eld_state & ECIO_LYT_COMMITTED) {
+	if (layout->eld_state & PMD_LYT_COMMITTED) {
 		pmd_obj_wrunlock(layout);
 		return 0;
 	}
@@ -1934,7 +1925,7 @@ pmd_obj_commit(
 		pmd_co_wlock(cinfo, cslot);
 		found = pmd_co_insert(cinfo, layout);
 		if (!found)
-			layout->eld_state |= ECIO_LYT_COMMITTED;
+			layout->eld_state |= PMD_LYT_COMMITTED;
 		pmd_co_wunlock(cinfo);
 
 		if (found) {
@@ -2051,7 +2042,7 @@ pmd_obj_abort(
 	if (refcnt == 2) {
 		found = pmd_uc_remove(cinfo, layout);
 		if (found)
-			found->eld_state |= ECIO_LYT_REMOVED;
+			found->eld_state |= PMD_LYT_REMOVED;
 	}
 	pmd_uc_unlock(cinfo);
 
@@ -2105,7 +2096,7 @@ pmd_obj_delete(
 	if (refcnt == 2) {
 		found = pmd_co_remove(cinfo, layout);
 		if (found)
-			found->eld_state |= ECIO_LYT_REMOVED;
+			found->eld_state |= PMD_LYT_REMOVED;
 	}
 	pmd_co_wunlock(cinfo);
 
@@ -2120,7 +2111,7 @@ pmd_obj_delete(
 	if (err) {
 		pmd_co_wlock(cinfo, cslot);
 		pmd_co_insert(cinfo, found);
-		found->eld_state &= ~ECIO_LYT_REMOVED;
+		found->eld_state &= ~PMD_LYT_REMOVED;
 		found = NULL;
 		pmd_co_wunlock(cinfo);
 	}
@@ -2237,8 +2228,8 @@ pmd_obj_erase(
 	u64    objid = layout->eld_objid;
 
 	if ((pmd_objid_type(objid) != OMF_OBJ_MLOG) ||
-	     (!(layout->eld_state & ECIO_LYT_COMMITTED)) ||
-	     (layout->eld_state & ECIO_LYT_REMOVED) ||
+	     (!(layout->eld_state & PMD_LYT_COMMITTED)) ||
+	     (layout->eld_state & PMD_LYT_REMOVED) ||
 	     (gen <= layout->eld_gen)) {
 		mp_pr_warn("mpool %s, object erase failed to start, objid 0x%lx state 0x%x gen %lu",
 			   mp->pds_name,

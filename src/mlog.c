@@ -144,7 +144,7 @@ mlog_getprops_cmn(
 	prop->lpr_objid       = layout->eld_objid;
 	prop->lpr_alloc_cap   = ecio_obj_get_cap_from_layout(mp, layout);
 	prop->lpr_gen         = layout->eld_gen;
-	prop->lpr_iscommitted = layout->eld_state & ECIO_LYT_COMMITTED;
+	prop->lpr_iscommitted = layout->eld_state & PMD_LYT_COMMITTED;
 	prop->lpr_mclassp    = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_mclass;
 }
 
@@ -1525,7 +1525,7 @@ mlog_open(
 		return err;
 	}
 
-	if (!(layout->eld_state & ECIO_LYT_COMMITTED)) {
+	if (!(layout->eld_state & PMD_LYT_COMMITTED)) {
 		*gen = 0;
 		pmd_obj_wrunlock(layout);
 
@@ -2289,7 +2289,7 @@ mlog_erase(
 	pmd_obj_wrlock(layout);
 
 	/* must be committed to log erase start/end markers */
-	if (!(layout->eld_state & ECIO_LYT_COMMITTED)) {
+	if (!(layout->eld_state & PMD_LYT_COMMITTED)) {
 		pmd_obj_wrunlock(layout);
 
 		err = merr(EINVAL);

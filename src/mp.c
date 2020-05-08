@@ -64,7 +64,7 @@ mpool_mdc0_sb2obj(
 		return err;
 	}
 
-	(*l1)->eld_state = ECIO_LYT_COMMITTED;
+	(*l1)->eld_state = PMD_LYT_COMMITTED;
 
 	for (i = 0; i < mp->pds_pdvcnt; i++) {
 		if (mpool_uuid_compare(&mp->pds_pdv[i].pdi_devid,
@@ -104,7 +104,7 @@ mpool_mdc0_sb2obj(
 		return err;
 	}
 
-	(*l2)->eld_state = ECIO_LYT_COMMITTED;
+	(*l2)->eld_state = PMD_LYT_COMMITTED;
 
 	for (i = 0; i < mp->pds_pdvcnt; i++) {
 		if (mpool_uuid_compare(&mp->pds_pdv[i].pdi_devid,

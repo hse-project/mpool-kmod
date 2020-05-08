@@ -135,16 +135,6 @@ mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
 merr_t mblock_abort(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
 
 /**
- * mblock_is_committed() -
- * @mp:
- * @mbh:
- *
- * Return true if the mblock is committed, and false if not (or if invalid)
- */
-int
-mblock_is_committed(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
-
-/**
  * mblock_delete() -
  * @mp:
  * @mbh:

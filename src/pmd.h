@@ -71,14 +71,14 @@ struct mlog_stat;
 /*
  * enum ecio_layout_state - object state flags
  *
- * ECIO_LYT_NONE:      no flags set
- * ECIO_LYT_COMMITTED: object is committed to media
- * ECIO_LYT_REMOVED:   object logically removed (aborted or deleted)
+ * PMD_LYT_NONE:      no flags set
+ * PMD_LYT_COMMITTED: object is committed to media
+ * PMD_LYT_REMOVED:   object logically removed (aborted or deleted)
  */
-enum ecio_layout_state {
-	ECIO_LYT_NONE       = 0,
-	ECIO_LYT_COMMITTED  = 1,
-	ECIO_LYT_REMOVED    = 2,
+enum pmd_layout_state {
+	PMD_LYT_NONE       = 0,
+	PMD_LYT_COMMITTED  = 0x01,
+	PMD_LYT_REMOVED    = 0x02,
 };
 
 /*
