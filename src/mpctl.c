@@ -356,7 +356,6 @@ static void mpc_mpool_release(struct kref *refp)
 		if (err)
 			mp_pr_err("mpool %s deactivate failed",
 				  err, mpool->mp_name);
-
 	}
 
 	kfree(mpool->mp_dpathv);
@@ -578,7 +577,6 @@ mpc_mpool_open(
  * @path:         device path under "/dev/" to create
  * @mpool:        mpool ptr
  * @unitp:        unit ptr
- * @needs_refmap: is refmap relevant for this unit type
  *
  * Create a unit object and install a ptr to it in the units table, thereby
  * reserving a minor number.  The unit cannot be found by any of the lookup
@@ -598,8 +596,7 @@ mpc_unit_create(
 	struct mpc_softstate   *ss,
 	const char             *name,
 	struct mpc_mpool       *mpool,
-	struct mpc_unit       **unitp,
-	bool                    needs_refmap)
+	struct mpc_unit       **unitp)
 {
 	struct mpc_unit    *unit;
 	size_t              unitsz;
@@ -882,8 +879,7 @@ mpc_unit_setup(
 	 * handling beyond this point must route through the errout label
 	 * to ensure the unit is fully destroyed.
 	 */
-	err = mpc_unit_create(ss, name, mpool, &unit,
-			      (uinfo == &mpc_uinfo_mpool));
+	err = mpc_unit_create(ss, name, mpool, &unit);
 	if (err)
 		return err;
 
@@ -910,10 +906,6 @@ mpc_unit_setup(
 
 	unit->un_device = device;
 	unit->un_uinfo = uinfo;
-
-	mutex_lock(&ss->ss_lock);
-	unit->un_transient = false;
-	mutex_unlock(&ss->ss_lock);
 
 	dev_info(unit->un_device,
 		 "minor %u, uid %u, gid %u, mode 0%02o",
@@ -2326,7 +2318,7 @@ mpioc_mp_create(
 				    mp->mp_params.mp_name);
 		mpool_destroy(mp->mp_dpathc, *dpathv, pd_prop, mp->mp_flags,
 			      devrpt);
-		goto errout;
+		return err;
 	}
 
 	*dpathv = NULL;
@@ -2372,16 +2364,30 @@ mpioc_mp_create(
 	mp->mp_params.mp_oidv[1] = cfg.mc_oid2;
 
 	err = mpc_params_register(mpool_unit);
-	if (ev(err))
+	if (ev(err)) {
+		/* Drop the birth ref. on mpool unit. */
+		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
 		goto errout;
+	}
+
+	mutex_lock(&ctl->un_ss->ss_lock);
+	mpool_unit->un_transient = false;
+	mutex_unlock(&ctl->un_ss->ss_lock);
 
 	mpool = NULL;
 
 errout:
+	if (mpool) {
+		mpool_deactivate(mpool->mp_desc);
+		mpool->mp_desc = NULL;
+		mpool_destroy(mp->mp_dpathc, mpool->mp_dpathv, pd_prop,
+			      mp->mp_flags, devrpt);
+	}
+
+	/* Drop the caller's reference on mpool unit. */
 	if (mpool_unit)
 		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
-
-	if (mpool)
+	else if (mpool)
 		kref_put(&mpool->mp_ref, mpc_mpool_release);
 
 	return err;
@@ -2437,7 +2443,7 @@ mpioc_mp_activate(
 		if (mp->mp_devrpt.mdr_off == -1)
 			mpc_errinfo(&mp->mp_cmn, MPOOL_RC_STAT,
 				    mp->mp_params.mp_name);
-		goto errout;
+		return err;
 	}
 
 	*dpathv = NULL; /* Was adopted by successful mpc_mpool_open() */
@@ -2476,16 +2482,23 @@ mpioc_mp_activate(
 		sizeof(mp->mp_params.mp_label));
 
 	err = mpc_params_register(mpool_unit);
-	if (ev(err))
+	if (ev(err)) {
+		/* Drop the birth ref. on mpool unit. */
+		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
 		goto errout;
+	}
+
+	mutex_lock(&ctl->un_ss->ss_lock);
+	mpool_unit->un_transient = false;
+	mutex_unlock(&ctl->un_ss->ss_lock);
 
 	mpool = NULL;
 
 errout:
+	/* Drop the caller's reference on mpool_unit. */
 	if (mpool_unit)
 		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
-
-	if (mpool)
+	else if (mpool)
 		kref_put(&mpool->mp_ref, mpc_mpool_release);
 
 	return err;
@@ -2579,6 +2592,7 @@ mp_deactivate_impl(
 			break;
 		}
 
+		un->un_transient = true;
 		unitv[unitc++] = un;
 	}
 
@@ -2597,6 +2611,7 @@ mp_deactivate_impl(
 	if (!err)
 		mpc_params_unregister(mpunit);
 
+	/* Release lookup ref. */
 	kref_put(&mpunit->un_ref, mpc_unit_destroy);
 
 err_exit:
@@ -4319,6 +4334,10 @@ static __init int mpc_init(void)
 	dev_info(unit->un_device, "%s", mpool_version);
 
 	mpc_softstate = ss;
+
+	mutex_lock(&ss->ss_lock);
+	unit->un_transient = false;
+	mutex_unlock(&ss->ss_lock);
 
 	kref_put(&unit->un_ref, mpc_unit_destroy);
 
