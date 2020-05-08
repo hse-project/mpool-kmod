@@ -39,6 +39,91 @@ pmd_write_meta_to_latest_version(
  */
 static DEFINE_MUTEX(pmd_s_lock);
 
+/*
+ * Alloc and init object layout; non-arg fields and all strip descriptor
+ * fields are set to 0/UNDEF/NONE; no auxiliary object info is allocated.
+ *
+ * Returns NULL if allocation fails.
+ */
+struct ecio_layout *
+ecio_layout_alloc(
+	struct mpool_descriptor    *mp,
+	struct mpool_uuid          *uuid,
+	u64                         objid,
+	u64                         gen,
+	u64                         mblen,
+	u32                         zcnt)
+{
+	struct ecio_layout *layout;
+
+	layout = kmem_cache_zalloc(ecio_layout_desc_cache, GFP_KERNEL);
+	if (ev(!layout))
+		return NULL;
+
+	if (pmd_objid_type(objid) == OMF_OBJ_MLOG) {
+		layout->eld_mlo =
+			kmem_cache_zalloc(ecio_layout_mlo_cache, GFP_KERNEL);
+		if (ev(!layout->eld_mlo)) {
+			kmem_cache_free(ecio_layout_desc_cache, layout);
+			return NULL;
+		}
+		layout->eld_mlo->mlo_layout = layout;
+		mpool_uuid_copy(&layout->eld_uuid, uuid);
+	}
+
+	layout->eld_objid     = objid;
+	layout->eld_gen       = gen;
+	layout->eld_mblen     = mblen;
+	layout->eld_state     = ECIO_LYT_NONE;
+	layout->eld_ld.ol_zcnt = zcnt;
+	kref_init(&layout->eld_ref);
+	init_rwsem(&layout->eld_rwlock);
+
+	/*
+	 * must set stype=UNDEF in all strips; pmd_layout_free()
+	 * assumes this to deal with failure cases where not every strip
+	 * has an smap allocation
+	 */
+	layout->eld_ld.ol_pdh = 0;
+	layout->eld_ld.ol_zaddr = 0;
+
+	return layout;
+}
+
+/*
+ * Deallocate all memory associated with object layout.
+ */
+void ecio_layout_release(struct kref *refp)
+{
+	struct ecio_layout_mlo *mlo;
+	struct ecio_layout     *layout;
+
+	layout = container_of(refp, struct ecio_layout, eld_ref);
+
+	WARN_ONCE(layout->eld_objid == 0 ||
+		  kref_read(&layout->eld_ref),
+		  "%s: %px, objid %lx, state %x, refcnt %ld",
+		  __func__, layout, (ulong)layout->eld_objid,
+		  layout->eld_state, (long)kref_read(&layout->eld_ref));
+
+	mlo = layout->eld_mlo;
+	if (mlo && mlo->mlo_lstat)
+		mp_pr_warn("eld_lstat object %p not freed properly", mlo);
+
+	/*
+	 * Free the performance counter set instance associated to the mlog.
+	 * There is no perf counters associated to an mblock.
+	 */
+	if (pmd_objid_type(layout->eld_objid) == OMF_OBJ_MLOG) {
+		assert(mlo != NULL);
+		kmem_cache_free(ecio_layout_mlo_cache, mlo);
+	}
+
+	layout->eld_objid = 0;
+
+	kmem_cache_free(ecio_layout_desc_cache, layout);
+}
+
 static struct ecio_layout *
 ecio_layout_find(struct rb_root *root, u64 key)
 {
@@ -2640,7 +2725,7 @@ pmd_layout_calculate(
 }
 
 /**
- * pmd_layout_alloc() -
+ * pmd_layout_provision() -
  * @mp:
  * @ocap:
  * @otype:
@@ -2649,7 +2734,7 @@ pmd_layout_calculate(
  * @zcnt:
  */
 static merr_t
-pmd_layout_alloc(
+pmd_layout_provision(
 	struct mpool_descriptor    *mp,
 	struct pmd_obj_capacity    *ocap,
 	struct ecio_layout        **layoutp,
@@ -2940,7 +3025,7 @@ retry:
 		}
 
 		/* Try to allocate zones from drives in media class */
-		err = pmd_layout_alloc(mp, ocap, layout, mc, zcnt);
+		err = pmd_layout_provision(mp, ocap, layout, mc, zcnt);
 		if (!err)
 			break;
 

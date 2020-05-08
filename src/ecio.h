@@ -17,89 +17,6 @@ struct mlog_stat;
 struct ecio_layout;
 
 /*
- * Common defs
- */
-
-/*
- * enum ecio_layout_state - object state flags
- *
- * ECIO_LYT_NONE:      no flags set
- * ECIO_LYT_COMMITTED: object is committed to media
- * ECIO_LYT_REMOVED:   object logically removed (aborted or deleted)
- */
-enum ecio_layout_state {
-	ECIO_LYT_NONE       = 0,
-	ECIO_LYT_COMMITTED  = 1,
-	ECIO_LYT_REMOVED    = 2,
-};
-
-/*
- * struct ecio_layout_mlo - information used only by mlog objects.
- * "mlo" = mlog only
- * @mlo_lstat:   mlog status
- * @mlo_pcs:     Performance counter set instance, family "MLOG"
- * @mlo_layout:  back pointer to the layout
- * @mlo_nodeoml: links this mlog in the mpool open mlogs tree
- * @mlo_uuid:    unique ID per mlog
- */
-struct ecio_layout_mlo {
-	struct mlog_stat   *mlo_lstat;
-	struct ecio_layout *mlo_layout;
-	struct rb_node      mlo_nodeoml;
-	struct mpool_uuid   mlo_uuid;
-};
-
-/*
- * Object layout descriptor (in-memory version)
- *
- * LOCKING:
- * + objid: constant; no locking required
- * + lstat: lstat and *lstat are protected by pmd_obj_*lock()
- * + all other fields: see notes
- */
-
-/**
- * struct ecio_layout -
- *
- * NOTE:
- * + committed object fields (other): to update hold pmd_obj_wrlock()
- *   AND
- *   compactlock for object's mdc; to read hold pmd_obj_*lock()
- *   See the comments associated with struct pmd_mdc_info for
- *   further details.
- *
- * @eld_nodemdc: rbtree node for uncommitted and committed objects
- * @eld_objid:   object ID associated with layout
- * @eld_mblen:   Amount of data written in the mblock in bytes (0 for mlogs)
- * @eld_state:   enum ecio_layout_state
- * @eld_flags:   enum mlog_open_flags for mlogs
- * @eld_mlo:     info. specific to an mlog, NULL for mblocks.
- * @eld_gen:     object generation
- * @eld_ld:
- * @eld_ref:     user ref count from alloc/get/put
- * @eld_rwlock:  implements pmd_obj_*lock() for this layout
- */
-struct ecio_layout {
-	struct rb_node                  eld_nodemdc;
-	u64                             eld_objid;
-	u32                             eld_mblen;
-	u8                              eld_state;
-	u8                              eld_flags;
-	struct ecio_layout_mlo         *eld_mlo;
-	u64                             eld_gen;
-	struct omf_layout_descriptor    eld_ld;
-
-	struct kref                     eld_ref;
-	struct rw_semaphore             eld_rwlock;
-};
-
-/* Shortcuts */
-#define eld_lstat   eld_mlo->mlo_lstat
-#define eld_pcs     eld_mlo->mlo_pcs
-#define eld_nodeoml eld_mlo->mlo_nodeoml
-#define eld_uuid    eld_mlo->mlo_uuid
-
-/*
  * ecio API functions
  */
 
@@ -253,40 +170,6 @@ ecio_mlog_erase(
 	struct mpool_descriptor    *mp,
 	struct ecio_layout         *layout,
 	enum pd_erase_flags         flags);
-
-/**
- * ecio_layout_alloc() - allocate an ecio_layout
- * @mp:        To get the mpool uuid necessary to hook up performance counters
- *             of the family "MLOG" in preformance counters tree. If passed,
- *             no performance counter will be associated to that layout.
- * @objid:     u64, objid to give to descriptor
- * @gen:       u64, generation for this descriptor
- * @mblen:     u64 for mblock length of data written in it
- * @zcnt:      number of zones in a strip
- *
- * Alloc and init object layout; non-arg fields and all strip descriptor
- * fields are set to 0/UNDEF/NONE; no auxiliary object info is allocated.
- *
- * Return: NULL if allocation fails.
- */
-struct ecio_layout *
-ecio_layout_alloc(
-	struct mpool_descriptor    *mp,
-	struct mpool_uuid          *uuid,
-	u64                         objid,
-	u64                         gen,
-	u64                         mblen,
-	u32                         zcnt);
-
-/**
- * ecio_layout_release() - free ecio_layout and internal elements
- * @layout:
- *
- * Deallocate all memory associated with object layout.
- *
- * Return: void
- */
-void ecio_layout_release(struct kref *refp);
 
 /*
  * ecio internal functions
