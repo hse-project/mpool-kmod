@@ -17,13 +17,19 @@
  */
 bool mlog_force_4ka = true;
 
-static struct pmd_layout *
-objid_to_layout_search_oml(struct rb_root *root, u64 key)
-{
-	struct rb_node *node = root->rb_node;
-	struct pmd_layout_mlo *mlo;
-	struct pmd_layout *this;
+#define oml_layout_lock(_mp)    mutex_lock(&(_mp)->pds_oml_lock)
+#define oml_layout_unlock(_mp)  mutex_unlock(&(_mp)->pds_oml_lock)
 
+static struct pmd_layout *
+oml_layout_find(
+	struct mpool_descriptor    *mp,
+	u64                         key)
+{
+	struct pmd_layout_mlo  *mlo;
+	struct pmd_layout      *this;
+	struct rb_node         *node;
+
+	node = mp->pds_oml_root.rb_node;
 	while (node) {
 		mlo = rb_entry(node, typeof(*mlo), mlo_nodeoml);
 		this = mlo->mlo_layout;
@@ -40,13 +46,18 @@ objid_to_layout_search_oml(struct rb_root *root, u64 key)
 }
 
 static int
-objid_to_layout_insert_oml(
-	struct rb_root     *root,
-	struct pmd_layout  *item)
+oml_layout_insert(
+	struct mpool_descriptor    *mp,
+	struct pmd_layout          *item)
 {
-	struct rb_node **pos = &root->rb_node, *parent = NULL;
-	struct pmd_layout_mlo *mlo;
-	struct pmd_layout *this;
+	struct pmd_layout_mlo  *mlo;
+	struct pmd_layout      *this;
+	struct rb_node        **pos, *parent;
+	struct rb_root         *root;
+
+	root = &mp->pds_oml_root;
+	pos = &root->rb_node;
+	parent = NULL;
 
 	/* Figure out where to put new node */
 	while (*pos) {
@@ -67,6 +78,20 @@ objid_to_layout_insert_oml(
 	rb_insert_color(&item->eld_nodeoml, root);
 
 	return true;
+}
+
+static struct pmd_layout *
+oml_layout_remove(
+	struct mpool_descriptor    *mp,
+	u64                         key)
+{
+	struct pmd_layout *found;
+
+	found = oml_layout_find(mp, key);
+	if (found)
+		rb_erase(&found->eld_nodeoml, &mp->pds_oml_root);
+
+	return found;
 }
 
 /**
@@ -515,14 +540,9 @@ merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	/* remove from open list and discard buffered log data */
 	pmd_obj_wrlock(layout);
 	if (layout->eld_lstat) {
-		struct pmd_layout *found;
-
-		mutex_lock(&mp->pds_oml_lock);
-		found = objid_to_layout_search_oml(&mp->pds_oml_root,
-						   layout->eld_objid);
-		if (found)
-			rb_erase(&found->eld_nodeoml, &mp->pds_oml_root);
-		mutex_unlock(&mp->pds_oml_lock);
+		oml_layout_lock(mp);
+		oml_layout_remove(mp, layout->eld_objid);
+		oml_layout_unlock(mp);
 
 		mlog_stat_free(layout);
 	}
@@ -1577,9 +1597,10 @@ mlog_open(
 	}
 
 	*gen = layout->eld_gen;
-	mutex_lock(&mp->pds_oml_lock);
-	objid_to_layout_insert_oml(&mp->pds_oml_root, layout);
-	mutex_unlock(&mp->pds_oml_lock);
+
+	oml_layout_lock(mp);
+	oml_layout_insert(mp, layout);
+	oml_layout_unlock(mp);
 
 	pmd_obj_wrunlock(layout);
 
@@ -2064,7 +2085,6 @@ mlog_logblocks_flush(
 merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
-	struct pmd_layout  *found = NULL;
 	struct mlog_stat   *lstat = NULL;
 
 	merr_t err  = 0;
@@ -2102,12 +2122,9 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 				  err, mp->pds_name, (ulong)layout->eld_objid);
 	}
 
-	mutex_lock(&mp->pds_oml_lock);
-	found = objid_to_layout_search_oml(&mp->pds_oml_root,
-					   layout->eld_objid);
-	if (found)
-		rb_erase(&found->eld_nodeoml, &mp->pds_oml_root);
-	mutex_unlock(&mp->pds_oml_lock);
+	oml_layout_lock(mp);
+	oml_layout_remove(mp, layout->eld_objid);
+	oml_layout_unlock(mp);
 
 	mlog_stat_free(layout);
 
@@ -3633,7 +3650,7 @@ void mlogutil_closeall(struct mpool_descriptor *mp)
 	struct pmd_layout_mlo  *mlo, *tmp;
 	struct pmd_layout      *layout;
 
-	/* mpool deactivation is single-threaded; don't need any locks */
+	oml_layout_lock(mp);
 
 	rbtree_postorder_for_each_entry_safe(
 		mlo, tmp, &mp->pds_oml_root, mlo_nodeoml) {
@@ -3654,6 +3671,8 @@ void mlogutil_closeall(struct mpool_descriptor *mp)
 		rb_erase(&mlo->mlo_nodeoml, &mp->pds_oml_root);
 		mlog_stat_free(layout);
 	}
+
+	oml_layout_unlock(mp);
 }
 
 void
