@@ -7,6 +7,7 @@
 #define MPOOL_PMD_PRIV_H
 
 #include <mpcore/mdc.h>
+#include "mlog.h"
 
 /**
  * DOC: Module info.
@@ -21,7 +22,6 @@ enum obj_type_omf;
 struct mpool_descriptor;
 struct mpool_devrpt;
 struct pmd_layout;
-struct mlog_stat;
 
 /**
  * DOC: Object lifecycle
@@ -88,9 +88,9 @@ enum pmd_layout_state {
  */
 struct pmd_layout_mlpriv {
 	struct rb_node      mlp_nodeoml;
-	struct mlog_stat   *mlp_lstat;
 	struct pmd_layout  *mlp_layout;
 	struct mpool_uuid   mlp_uuid;
+	struct mlog_stat    mlp_lstat;
 };
 
 /**

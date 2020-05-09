@@ -505,20 +505,16 @@ mlog_extract_fsetparms(
  */
 static void mlog_stat_free(struct pmd_layout *layout)
 {
-	struct mlog_stat *lstat;
+	struct mlog_stat *lstat = &layout->eld_lstat;
 
-	lstat = layout->eld_lstat;
-
-	if (!lstat) {
-		mp_pr_warn("mlog 0x%lx null status", (ulong)layout->eld_objid);
+	if (ev(!lstat->lst_abuf))
 		return;
-	}
 
 	mlog_free_rbuf(lstat, 0, MLOG_NLPGMB(lstat) - 1);
 	mlog_free_abuf(lstat, 0, MLOG_NLPGMB(lstat) - 1);
 
-	kfree(lstat);
-	layout->eld_lstat = NULL;
+	kfree(lstat->lst_abuf);
+	lstat->lst_abuf = NULL;
 }
 
 /**
@@ -539,13 +535,11 @@ merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 	/* remove from open list and discard buffered log data */
 	pmd_obj_wrlock(layout);
-	if (layout->eld_lstat) {
-		oml_layout_lock(mp);
-		oml_layout_remove(mp, layout->eld_objid);
-		oml_layout_unlock(mp);
+	oml_layout_lock(mp);
+	oml_layout_remove(mp, layout->eld_objid);
+	oml_layout_unlock(mp);
 
-		mlog_stat_free(layout);
-	}
+	mlog_stat_free(layout);
 	pmd_obj_wrunlock(layout);
 
 	return pmd_obj_delete(mp, layout);
@@ -764,22 +758,15 @@ mlog_stat_init_common(
 merr_t
 mlog_stat_reinit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
-	struct pmd_layout  *layout;
+	struct pmd_layout  *layout = mlog2layout(mlh);
 	struct mlog_stat   *lstat;
 
-	layout = mlog2layout(mlh);
 	if (!layout)
 		return merr(EINVAL);
 
 	pmd_obj_wrlock(layout);
 
-	lstat = (struct mlog_stat *)layout->eld_lstat;
-	if (!lstat) {
-		/* Nothing to free, erase called on a closed mlog */
-		pmd_obj_wrunlock(layout);
-
-		return 0;
-	}
+	lstat = &layout->eld_lstat;
 
 	mlog_free_abuf(lstat, 0, lstat->lst_abidx);
 	mlog_free_rbuf(lstat, 0, MLOG_NLPGMB(lstat) - 1);
@@ -926,38 +913,33 @@ mlog_stat_init(
 	struct mlog_descriptor     *mlh,
 	bool                        csem)
 {
-	struct pmd_layout     *layout;
+	struct pmd_layout      *layout = mlog2layout(mlh);
 	struct mlog_stat       *lstat;
 	struct mlog_fsetparms   mfp;
-	u32                     bufsz;
+	size_t                  bufsz;
 	merr_t                  err;
 
-	layout = mlog2layout(mlh);
 	if (!layout)
 		return merr(EINVAL);
 
-	layout->eld_lstat = NULL;
+	lstat = &layout->eld_lstat;
 
+	mlog_stat_init_common(layout, lstat);
 	mlog_init_fsetparms(mp, mlh, &mfp);
 
-	bufsz = sizeof(*lstat) + (2 * mfp.mfp_nlpgmb * sizeof(char *));
+	bufsz = mfp.mfp_nlpgmb * sizeof(char *) * 2;
 
-	lstat = kzalloc(bufsz, GFP_KERNEL);
-	if (!lstat) {
+	lstat->lst_abuf = kzalloc(bufsz, GFP_KERNEL);
+	if (!lstat->lst_abuf) {
 		err = merr(ENOMEM);
-		mp_pr_err("mpool %s, allocating mlog 0x%lx status failed %u",
+		mp_pr_err("mpool %s, allocating mlog 0x%lx status failed %zu",
 			  err, mp->pds_name, (ulong)layout->eld_objid, bufsz);
 		return err;
 	}
 
-	lstat->lst_abuf = (char **)((char *)lstat + sizeof(*lstat));
 	lstat->lst_rbuf = lstat->lst_abuf + mfp.mfp_nlpgmb;
 	lstat->lst_mfp  = mfp;
 	lstat->lst_csem = csem;
-
-	mlog_stat_init_common(layout, lstat);
-
-	layout->eld_lstat  = lstat;
 
 	return 0;
 }
@@ -1198,8 +1180,8 @@ mlog_populate_abuf(
 	char                       *buf,
 	bool                        skip_ser)
 {
-	struct mlog_stat       *lstat;
-	struct iovec            iov;
+	struct mlog_stat   *lstat = &layout->eld_lstat;
+	struct iovec        iov;
 
 	merr_t err;
 	off_t  off;
@@ -1208,7 +1190,6 @@ mlog_populate_abuf(
 	u16    iovcnt;
 	u8     leading;
 
-	lstat  = (struct mlog_stat *)layout->eld_lstat;
 	sectsz = MLOG_SECSZ(lstat);
 
 	/* Find the leading number of sectors to make it page-aligned. */
@@ -1266,8 +1247,8 @@ mlog_populate_rbuf(
 	off_t                      *soff,
 	bool                        skip_ser)
 {
-	struct iovec           *iov = NULL;
-	struct mlog_stat       *lstat;
+	struct mlog_stat   *lstat = &layout->eld_lstat;
+	struct iovec       *iov = NULL;
 
 	merr_t err;
 	off_t  off;
@@ -1278,7 +1259,6 @@ mlog_populate_rbuf(
 	u8     nseclpg;
 	u8     leading;
 
-	lstat  = (struct mlog_stat *)layout->eld_lstat;
 	mlog_extract_fsetparms(lstat, &sectsz, NULL, &maxsec, &nseclpg);
 
 	/* Find the leading number of sectors to make it page-aligned. */
@@ -1359,7 +1339,7 @@ mlog_read_and_validate(
 	struct pmd_layout          *layout,
 	bool                       *lempty)
 {
-	struct mlog_stat  *lstat;
+	struct mlog_stat *lstat = &layout->eld_lstat;
 
 	merr_t err         = 0;
 	off_t  leol_off    = 0;
@@ -1375,8 +1355,6 @@ mlog_read_and_validate(
 	u16    nlpgs;
 	u8     nseclpg;
 	bool   skip_ser = false;
-
-	lstat = (struct mlog_stat *)layout->eld_lstat;
 
 	remsec = MLOG_TOTSEC(lstat);
 	maxsec = MLOG_NSECMB(lstat);
@@ -1488,7 +1466,7 @@ mlog_open(
 	u8                       flags,
 	u64                     *gen)
 {
-	struct pmd_layout  *layout;
+	struct pmd_layout  *layout = mlog2layout(mlh);
 	struct mlog_stat   *lstat;
 
 	merr_t  err    = 0;
@@ -1499,7 +1477,6 @@ mlog_open(
 	lstat = NULL;
 	*gen = 0;
 
-	layout = mlog2layout(mlh);
 	if (!layout)
 		return merr(EINVAL);
 
@@ -1513,9 +1490,10 @@ mlog_open(
 	if (flags & MLOG_OF_SKIP_SER)
 		skip_ser = true;
 
-	if (layout->eld_lstat) {
+	lstat = &layout->eld_lstat;
+
+	if (lstat->lst_abuf) {
 		/* log already open */
-		lstat = (struct mlog_stat *)layout->eld_lstat;
 		if (csem && !lstat->lst_csem) {
 			pmd_obj_wrunlock(layout);
 
@@ -1565,7 +1543,6 @@ mlog_open(
 	}
 
 	lempty = true;
-	lstat = (struct mlog_stat *)layout->eld_lstat;
 
 	err = mlog_read_and_validate(mp, layout, &lempty);
 	if (err) {
@@ -1624,10 +1601,9 @@ mlog_alloc_abufpg(
 	u16                         abidx,
 	bool                        skip_ser)
 {
-	struct mlog_stat  *lstat;
-	char  *abuf;
+	struct mlog_stat   *lstat = &layout->eld_lstat;
+	char               *abuf;
 
-	lstat = layout->eld_lstat;
 	assert(MLOG_LPGSZ(lstat) == PAGE_SIZE);
 
 	abuf = (char *)get_zeroed_page(GFP_KERNEL);
@@ -1694,7 +1670,7 @@ mlog_alloc_abufpg(
 static merr_t mlog_logblocks_hdrpack(struct pmd_layout *layout)
 {
 	struct omf_logblock_header lbh;
-	struct mlog_stat          *lstat;
+	struct mlog_stat          *lstat = &layout->eld_lstat;
 
 	merr_t err;
 	off_t  lpgoff;
@@ -1707,7 +1683,6 @@ static merr_t mlog_logblocks_hdrpack(struct pmd_layout *layout)
 	u8     sec;
 	u8     start;
 
-	lstat   = (struct mlog_stat *)layout->eld_lstat;
 	sectsz  = MLOG_SECSZ(lstat);
 	nseclpg = MLOG_NSECLPG(lstat);
 	abidx   = lstat->lst_abidx;
@@ -1767,8 +1742,8 @@ mlog_flush_abuf(
 	struct pmd_layout          *layout,
 	bool                        skip_ser)
 {
-	struct iovec           *iov = NULL;
-	struct mlog_stat       *lstat;
+	struct mlog_stat   *lstat = &layout->eld_lstat;
+	struct iovec       *iov = NULL;
 
 	merr_t err;
 	off_t  off;
@@ -1777,7 +1752,6 @@ mlog_flush_abuf(
 	u16    sectsz;
 	u8     nseclpg;
 
-	lstat  = (struct mlog_stat *)layout->eld_lstat;
 	mlog_extract_fsetparms(lstat, &sectsz, NULL, NULL, &nseclpg);
 
 	abidx   = lstat->lst_abidx;
@@ -1838,7 +1812,7 @@ mlog_flush_posthdlr_4ka(
 	struct pmd_layout          *layout,
 	bool                        fsucc)
 {
-	struct mlog_stat   *lstat;
+	struct mlog_stat *lstat = &layout->eld_lstat;
 
 	char  *abuf;
 	off_t  asoff;
@@ -1848,7 +1822,6 @@ mlog_flush_posthdlr_4ka(
 	u16    sectsz;
 	u8     asidx;
 
-	lstat  = (struct mlog_stat *)layout->eld_lstat;
 	sectsz = MLOG_SECSZ(lstat);
 	abidx  = lstat->lst_abidx;
 	asoff  = lstat->lst_asoff;
@@ -1932,7 +1905,7 @@ mlog_flush_posthdlr(
 	struct pmd_layout          *layout,
 	bool                        fsucc)
 {
-	struct mlog_stat          *lstat;
+	struct mlog_stat *lstat = &layout->eld_lstat;
 
 	char  *abuf;
 	off_t  asoff;
@@ -1941,7 +1914,6 @@ mlog_flush_posthdlr(
 	u16    sectsz;
 	u8     asidx;
 
-	lstat  = (struct mlog_stat *)layout->eld_lstat;
 	sectsz = MLOG_SECSZ(lstat);
 	abidx  = lstat->lst_abidx;
 	asoff  = lstat->lst_asoff;
@@ -2023,7 +1995,7 @@ mlog_logblocks_flush(
 	struct pmd_layout          *layout,
 	bool                        skip_ser)
 {
-	struct mlog_stat          *lstat;
+	struct mlog_stat *lstat = &layout->eld_lstat;
 
 	merr_t err;
 	bool   fsucc = true;
@@ -2031,8 +2003,7 @@ mlog_logblocks_flush(
 	int    end;
 	u16    abidx;
 
-	lstat  = (struct mlog_stat *)layout->eld_lstat;
-	abidx  = lstat->lst_abidx;
+	abidx = lstat->lst_abidx;
 
 	/* Pack log block header in all the log blocks. */
 	err = mlog_logblocks_hdrpack(layout);
@@ -2085,7 +2056,7 @@ mlog_logblocks_flush(
 merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
-	struct mlog_stat   *lstat = NULL;
+	struct mlog_stat   *lstat;
 
 	merr_t err  = 0;
 	bool   skip_ser = false;
@@ -2101,13 +2072,11 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 	pmd_obj_wrlock(layout);
 
-	lstat = (struct mlog_stat *)layout->eld_lstat;
-
-	if (!lstat) {
-		/* Log already closed */
+	lstat = &layout->eld_lstat;
+	if (!lstat->lst_abuf) {
 		pmd_obj_wrunlock(layout);
 
-		return 0;
+		return 0; /* Log already closed */
 	}
 
 	/*
@@ -2146,7 +2115,7 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 merr_t mlog_flush(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
-	struct mlog_stat   *lstat = NULL;
+	struct mlog_stat   *lstat;
 
 	merr_t err  = 0;
 	bool   skip_ser = false;
@@ -2156,9 +2125,8 @@ merr_t mlog_flush(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 	pmd_obj_wrlock(layout);
 
-	lstat = (struct mlog_stat *)layout->eld_lstat;
-
-	if (!lstat) {
+	lstat = &layout->eld_lstat;
+	if (!lstat->lst_abuf) {
 		pmd_obj_wrunlock(layout);
 		return merr(EINVAL);
 	}
@@ -2212,7 +2180,7 @@ mlog_empty(
 	bool                    *empty)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
-	struct mlog_stat   *lstat = NULL;
+	struct mlog_stat   *lstat;
 	merr_t              err = 0;
 
 	*empty = false;
@@ -2222,8 +2190,8 @@ mlog_empty(
 
 	pmd_obj_rdlock(layout);
 
-	if (layout->eld_lstat) {
-		lstat = (struct mlog_stat *)layout->eld_lstat;
+	lstat = &layout->eld_lstat;
+	if (lstat->lst_abuf) {
 		if ((!lstat->lst_wsoff &&
 		     (lstat->lst_aoff == OMF_LOGBLOCK_HDR_PACKLEN)))
 			*empty = true;
@@ -2250,18 +2218,17 @@ mlog_empty(
 merr_t
 mlog_len(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *len)
 {
-	struct pmd_layout  *layout;
+	struct pmd_layout  *layout = mlog2layout(mlh);
 	struct mlog_stat   *lstat;
 	merr_t              err = 0;
 
-	layout = mlog2layout(mlh);
 	if (!layout)
 		return merr(EINVAL);
 
 	pmd_obj_rdlock(layout);
 
-	lstat = layout->eld_lstat;
-	if (lstat)
+	lstat = &layout->eld_lstat;
+	if (lstat->lst_abuf)
 		*len = ((u64) lstat->lst_wsoff * MLOG_SECSZ(lstat))
 			+ lstat->lst_aoff;
 	else
@@ -2335,9 +2302,9 @@ mlog_erase(
 	}
 
 	/* if successful updates state in layout */
-	if (layout->eld_lstat) {
+	lstat = &layout->eld_lstat;
+	if (lstat->lst_abuf) {
 		/* log is open so need to update lstat info */
-		lstat = (struct mlog_stat *)layout->eld_lstat;
 
 		mlog_free_abuf(lstat, 0, lstat->lst_abidx);
 		mlog_free_rbuf(lstat, 0, MLOG_NLPGMB(lstat) - 1);
@@ -2364,7 +2331,7 @@ mlog_update_append_idx(
 	struct pmd_layout          *layout,
 	bool                        skip_ser)
 {
-	struct mlog_stat  *lstat;
+	struct mlog_stat *lstat = &layout->eld_lstat;
 
 	merr_t err;
 	u16    sectsz;
@@ -2372,7 +2339,6 @@ mlog_update_append_idx(
 	u8     asidx;
 	u8     nseclpg;
 
-	lstat   = layout->eld_lstat;
 	sectsz  = MLOG_SECSZ(lstat);
 	nseclpg = MLOG_NSECLPG(lstat);
 
@@ -2416,8 +2382,8 @@ mlog_append_marker(
 	struct pmd_layout          *layout,
 	enum logrec_type_omf        mtype)
 {
-	struct mlog_stat            *lstat;
-	struct omf_logrec_descriptor lrd;
+	struct mlog_stat               *lstat = &layout->eld_lstat;
+	struct omf_logrec_descriptor    lrd;
 
 	merr_t err;
 	u16    sectsz;
@@ -2429,7 +2395,6 @@ mlog_append_marker(
 	u8     nseclpg;
 	bool   skip_ser = false;
 
-	lstat   = layout->eld_lstat;
 	sectsz  = MLOG_SECSZ(lstat);
 	nseclpg = MLOG_NSECLPG(lstat);
 
@@ -2487,7 +2452,7 @@ merr_t
 mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
-	struct mlog_stat   *lstat = NULL;
+	struct mlog_stat   *lstat;
 	merr_t              err = 0;
 
 	if (!layout)
@@ -2495,8 +2460,8 @@ mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 	pmd_obj_wrlock(layout);
 
-	lstat = layout->eld_lstat;
-	if (!lstat) {
+	lstat = &layout->eld_lstat;
+	if (!lstat->lst_abuf) {
 		pmd_obj_wrunlock(layout);
 
 		err = merr(ENOENT);
@@ -2543,7 +2508,7 @@ merr_t
 mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
-	struct mlog_stat   *lstat = NULL;
+	struct mlog_stat   *lstat;
 	merr_t              err = 0;
 
 	if (!layout)
@@ -2551,8 +2516,8 @@ mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 	pmd_obj_wrlock(layout);
 
-	lstat = layout->eld_lstat;
-	if (!lstat) {
+	lstat = &layout->eld_lstat;
+	if (!lstat->lst_abuf) {
 		pmd_obj_wrunlock(layout);
 
 		err =  merr(ENOENT);
@@ -2654,7 +2619,7 @@ mlog_append_data_internal(
 	bool                     skip_ser)
 {
 	struct pmd_layout              *layout = mlog2layout(mlh);
-	struct mlog_stat               *lstat = NULL;
+	struct mlog_stat               *lstat = &layout->eld_lstat;
 	struct omf_logrec_descriptor    lrd;
 
 	merr_t     err = 0;
@@ -2671,7 +2636,6 @@ mlog_append_data_internal(
 	u8         nseclpg;
 	int        cpidx;
 
-	lstat = (struct mlog_stat *)layout->eld_lstat;
 	mlog_extract_fsetparms(lstat, &sectsz, &datasec, NULL, &nseclpg);
 
 	bufoff = 0;
@@ -2783,7 +2747,7 @@ mlog_append_datav(
 	int                      sync)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
-	struct mlog_stat   *lstat = NULL;
+	struct mlog_stat   *lstat;
 
 	merr_t err   = 0;
 	s64    dmax  = 0;
@@ -2798,9 +2762,8 @@ mlog_append_datav(
 	if (!skip_ser)
 		pmd_obj_wrlock(layout);
 
-	lstat = (struct mlog_stat *)layout->eld_lstat;
-
-	if (!lstat) {
+	lstat = &layout->eld_lstat;
+	if (!lstat->lst_abuf) {
 		err = merr(ENOENT);
 		mp_pr_err("mpool %s, mlog 0x%lx, inconsistency: no mlog status",
 			  err, mp->pds_name, (ulong)layout->eld_objid);
@@ -2888,11 +2851,10 @@ mlog_read_data_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	if (!layout)
 		return merr(EINVAL);
 
-	lstat = layout->eld_lstat;
-
 	pmd_obj_wrlock(layout);
 
-	if (!lstat) {
+	lstat = &layout->eld_lstat;
+	if (!lstat->lst_abuf) {
 		err = merr(ENOENT);
 	} else {
 		lri = &lstat->lst_citr;
@@ -2919,8 +2881,8 @@ mlog_logblocks_load_media(
 	struct mlog_read_iter     *lri,
 	char                     **inbuf)
 {
-	struct pmd_layout  *layout;
-	struct mlog_stat   *lstat;
+	struct pmd_layout  *layout = lri->lri_layout;
+	struct mlog_stat   *lstat = &layout->eld_lstat;
 
 	off_t  rsoff;
 	int    remsec;
@@ -2928,8 +2890,6 @@ mlog_logblocks_load_media(
 	merr_t err;
 	bool   skip_ser = false;
 
-	layout = lri->lri_layout;
-	lstat  = layout->eld_lstat;
 	mlog_extract_fsetparms(lstat, &sectsz, NULL, &maxsec, NULL);
 
 	/*
@@ -3011,7 +2971,7 @@ mlog_logblock_load_internal(
 	u8     nseclpg;
 	u8     rsidx;
 
-	lstat = (struct mlog_stat *)lri->lri_layout->eld_lstat;
+	lstat = &lri->lri_layout->eld_lstat;
 
 	nseclpg = MLOG_NSECLPG(lstat);
 	rbidx   = lri->lri_rbidx;
@@ -3108,7 +3068,7 @@ mlog_logblock_load(
 
 	*inbuf = NULL;
 	*first = false;
-	lstat  = (struct mlog_stat *)lri->lri_layout->eld_lstat;
+	lstat  = &lri->lri_layout->eld_lstat;
 
 	if (!lri->lri_valid || lri->lri_soff > lstat->lst_wsoff) {
 		/* lri is invalid; prior checks should prevent this */
@@ -3252,9 +3212,8 @@ mlog_read_data_next_impl(
 	if (!skip_ser)
 		pmd_obj_wrlock(layout);
 
-	lstat = (struct mlog_stat *)layout->eld_lstat;
-
-	if (lstat) {
+	lstat = &layout->eld_lstat;
+	if (lstat->lst_abuf) {
 		sectsz = MLOG_SECSZ(lstat);
 		lri    = &lstat->lst_citr;
 
@@ -3604,14 +3563,12 @@ mlog_append_dmax(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *layout)
 {
-	struct mlog_stat      *lstat;
+	struct mlog_stat *lstat = &layout->eld_lstat;
 
 	u64    lbmax;
 	u64    lbrest;
 	u32    sectsz;
 	u32    datalb;
-
-	lstat = (struct mlog_stat *)layout->eld_lstat;
 
 	sectsz = MLOG_SECSZ(lstat);
 	datalb = MLOG_TOTSEC(lstat);
