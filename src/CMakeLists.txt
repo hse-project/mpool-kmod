@@ -23,7 +23,6 @@ set(MPCORE_SRC
     mp.c
     mpcore_params.c
     omf.c
-    pd.c
     pd_bio_k.c
     pmd.c
     sb.c
