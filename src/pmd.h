@@ -68,7 +68,7 @@ struct pmd_layout;
 #define MDC0_OBJID_LOG2 logid_make(1, 0)
 
 
-/*
+/**
  * enum pmd_layout_state - object state flags
  *
  * PMD_LYT_COMMITTED: object is committed to media
@@ -79,17 +79,15 @@ enum pmd_layout_state {
 	PMD_LYT_REMOVED    = 0x02,
 };
 
-/*
+/**
  * struct pmd_layout_mlpriv - mlog private data for pmd_layout
- * @mlo_lstat:   mlog status
- * @mlo_layout:  back pointer to the layout
- * @mlo_nodeoml: links this mlog in the mpool open mlogs tree
- * @mlo_uuid:    unique ID per mlog
+ * @mlp_uuid:       unique ID per mlog
+ * @mlp_lstat:      mlog status
+ * @mlp_nodeoml:    "open mlog" rbtree linkage
  */
 struct pmd_layout_mlpriv {
-	struct rb_node      mlp_nodeoml;
-	struct pmd_layout  *mlp_layout;
 	struct mpool_uuid   mlp_uuid;
+	struct rb_node      mlp_nodeoml;
 	struct mlog_stat    mlp_lstat;
 };
 
@@ -113,11 +111,14 @@ struct pmd_layout_mlpriv {
  * @eld_mblen:   Amount of data written in the mblock in bytes (0 for mlogs)
  * @eld_state:   enum pmd_layout_state
  * @eld_flags:   enum mlog_open_flags for mlogs
- * @eld_mlo:     info. specific to an mlog, NULL for mblocks.
  * @eld_gen:     object generation
  * @eld_ld:
  * @eld_ref:     user ref count from alloc/get/put
  * @eld_rwlock:  implements pmd_obj_*lock() for this layout
+ * @dle_mlpriv:  mlog private data
+ *
+ * eld_priv[] contains exactly one element if the object type
+ * is and mlog, otherwise it contains exactly zero element.
  */
 struct pmd_layout {
 	struct rb_node                  eld_nodemdc;
@@ -128,18 +129,19 @@ struct pmd_layout {
 	u64                             eld_gen;
 	struct omf_layout_descriptor    eld_ld;
 
+	/* The above fields are read-mostly, while the
+	 * following two fields mutate frequently.
+	 */
 	struct kref                     eld_ref;
 	struct rw_semaphore             eld_rwlock;
 
-	struct pmd_layout_mlpriv        eld_mlpriv[];
+	struct pmd_layout_mlpriv        eld_priv[];
 };
 
 /* Shortcuts */
-#define eld_lstat       eld_mlpriv->mlp_lstat
-#define eld_pcs         eld_mlpriv->mlp_pcs
-#define eld_nodeoml     eld_mlpriv->mlp_nodeoml
-#define eld_uuid        eld_mlpriv->mlp_uuid
-#define eld_layout      eld_mlpriv->mlp_layout
+#define eld_uuid        eld_priv->mlp_uuid
+#define eld_lstat       eld_priv->mlp_lstat
+#define eld_nodeoml     eld_priv->mlp_nodeoml
 
 /**
  * enum pmd_obj_op -

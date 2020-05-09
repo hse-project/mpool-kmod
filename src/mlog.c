@@ -17,26 +17,31 @@
  */
 bool mlog_force_4ka = true;
 
-#define oml_layout_lock(_mp)    mutex_lock(&(_mp)->pds_oml_lock)
-#define oml_layout_unlock(_mp)  mutex_unlock(&(_mp)->pds_oml_lock)
+#define mlpriv2layout(_ptr) \
+	((struct pmd_layout *)((char *)(_ptr) - offsetof(struct pmd_layout, eld_priv)))
 
-static struct pmd_layout *
+/* "open mlog" rbtree operations...
+ */
+#define oml_layout_lock(_mp)        mutex_lock(&(_mp)->pds_oml_lock)
+#define oml_layout_unlock(_mp)      mutex_unlock(&(_mp)->pds_oml_lock)
+
+static struct pmd_layout_mlpriv *
 oml_layout_find(
 	struct mpool_descriptor    *mp,
 	u64                         key)
 {
-	struct pmd_layout_mlpriv   *mlpriv;
-	struct pmd_layout          *this;
+	struct pmd_layout_mlpriv   *this;
+	struct pmd_layout          *layout;
 	struct rb_node             *node;
 
 	node = mp->pds_oml_root.rb_node;
 	while (node) {
-		mlpriv = rb_entry(node, typeof(*mlpriv), mlp_nodeoml);
-		this = mlpriv->mlp_layout;
+		this = rb_entry(node, typeof(*this), mlp_nodeoml);
+		layout = mlpriv2layout(this);
 
-		if (key < this->eld_objid)
+		if (key < layout->eld_objid)
 			node = node->rb_left;
-		else if (key > this->eld_objid)
+		else if (key > layout->eld_objid)
 			node = node->rb_right;
 		else
 			return this;
@@ -45,51 +50,53 @@ oml_layout_find(
 	return NULL;
 }
 
-static int
+static struct pmd_layout_mlpriv *
 oml_layout_insert(
 	struct mpool_descriptor    *mp,
-	struct pmd_layout          *item)
+	struct pmd_layout_mlpriv   *item)
 {
-	struct pmd_layout_mlpriv   *mlpriv;
-	struct pmd_layout          *this;
+	struct pmd_layout_mlpriv   *this;
+	struct pmd_layout          *layout;
 	struct rb_node            **pos, *parent;
 	struct rb_root             *root;
+	u64                         key;
 
 	root = &mp->pds_oml_root;
 	pos = &root->rb_node;
 	parent = NULL;
 
-	/* Figure out where to put new node */
+	key = mlpriv2layout(item)->eld_objid;
+
 	while (*pos) {
-		mlpriv = rb_entry(*pos, typeof(*mlpriv), mlp_nodeoml);
-		this = mlpriv->mlp_layout;
+		this = rb_entry(*pos, typeof(*this), mlp_nodeoml);
+		layout = mlpriv2layout(this);
 
 		parent = *pos;
-		if (item->eld_objid < this->eld_objid)
+		if (key < layout->eld_objid)
 			pos = &(*pos)->rb_left;
-		else if (item->eld_objid > this->eld_objid)
+		else if (key > layout->eld_objid)
 			pos = &(*pos)->rb_right;
 		else
-			return false;
+			return this;
 	}
 
 	/* Add new node and rebalance tree. */
-	rb_link_node(&item->eld_nodeoml, parent, pos);
-	rb_insert_color(&item->eld_nodeoml, root);
+	rb_link_node(&item->mlp_nodeoml, parent, pos);
+	rb_insert_color(&item->mlp_nodeoml, root);
 
-	return true;
+	return NULL;
 }
 
-static struct pmd_layout *
+static struct pmd_layout_mlpriv *
 oml_layout_remove(
 	struct mpool_descriptor    *mp,
 	u64                         key)
 {
-	struct pmd_layout *found;
+	struct pmd_layout_mlpriv *found;
 
 	found = oml_layout_find(mp, key);
 	if (found)
-		rb_erase(&found->eld_nodeoml, &mp->pds_oml_root);
+		rb_erase(&found->mlp_nodeoml, &mp->pds_oml_root);
 
 	return found;
 }
@@ -1575,8 +1582,10 @@ mlog_open(
 
 	*gen = layout->eld_gen;
 
+	/* TODO: Verify that the insert succeeded...
+	 */
 	oml_layout_lock(mp);
-	oml_layout_insert(mp, layout);
+	oml_layout_insert(mp, layout->eld_priv);
 	oml_layout_unlock(mp);
 
 	pmd_obj_wrunlock(layout);
@@ -3604,15 +3613,15 @@ mlog_append_dmax(
  */
 void mlogutil_closeall(struct mpool_descriptor *mp)
 {
-	struct pmd_layout_mlpriv   *mlpriv, *tmp;
+	struct pmd_layout_mlpriv   *this, *tmp;
 	struct pmd_layout          *layout;
 
 	oml_layout_lock(mp);
 
 	rbtree_postorder_for_each_entry_safe(
-		mlpriv, tmp, &mp->pds_oml_root, mlp_nodeoml) {
+		this, tmp, &mp->pds_oml_root, mlp_nodeoml) {
 
-		layout = mlpriv->mlp_layout;
+		layout = mlpriv2layout(this);
 
 		if (pmd_objid_type(layout->eld_objid) != OMF_OBJ_MLOG) {
 			mp_pr_warn("mpool %s, non-mlog object 0x%lx in open mlog layout tree",
@@ -3625,7 +3634,7 @@ void mlogutil_closeall(struct mpool_descriptor *mp)
 
 		/* Remove layout from open list and discard log data.
 		 */
-		rb_erase(&mlpriv->mlp_nodeoml, &mp->pds_oml_root);
+		rb_erase(&this->mlp_nodeoml, &mp->pds_oml_root);
 		mlog_stat_free(layout);
 	}
 

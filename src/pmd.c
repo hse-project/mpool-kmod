@@ -76,10 +76,8 @@ pmd_layout_alloc(
 	kref_init(&layout->eld_ref);
 	init_rwsem(&layout->eld_rwlock);
 
-	if (pmd_objid_type(objid) == OMF_OBJ_MLOG) {
+	if (pmd_objid_type(objid) == OMF_OBJ_MLOG)
 		mpool_uuid_copy(&layout->eld_uuid, uuid);
-		layout->eld_layout = layout;
-	}
 
 	return layout;
 }
