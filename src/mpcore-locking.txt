@@ -13,14 +13,13 @@ Hierarchy
 
 mpool_s_lock
 pmd_s_lock
-eld_rwlock
-pds_omlock
+eld_rwlock          object layout r/w lock (per layout)
+pds_oml_lock        "open mlog" rbtree lock
 mdi_slotvlock
-mmi_uqlock
-mmi_compactlock
-mmi_uncolock
-mmi_colock
-mmi_reflock
+mmi_uqlock          unique ID generator lock
+mmi_compactlock     compaction lock (per MDC)
+mmi_uc_lock         uncommitted objects rbtree lock (per MDC)
+mmi_co_lock         committed objects rbtree lock (per MDC)
 pds_pdvlock
 pdi_rmlock[]
 sda_dalock
@@ -58,7 +57,7 @@ In addition to obeying the lock hierarchy and lock-class nesting levels, the
 following locking rules must also be followed for object layouts and all
 mpool properties stored in MDC-0 (e.g., the list of mpool drives pds_pdv[]).
 
-Object layouts (struct ecio_layout_descriptor):
+Object layouts (struct pmd_layout):
 + Readers must read-lock the layout using pmd_obj_rdlock().
 + Updaters must both write-lock the layout using pmd_obj_wrlock() and lock
   the mmi_compactlock for the object's MDC using pmd_mdc_lock() before
@@ -76,7 +75,9 @@ concurrent with compacting that MDC, whereas layout updaters cannot.
 + For mpool properties stored in MDC-0, property readers can execute
 concurrent with compacting MDC-0, whereas property updaters cannot.
 + To compact a given MDC-0/255, all in-memory and on-media state to be
-written is frozen by simply locking the mmi_compactlock for that MDC.
+written is frozen by simply locking the mmi_compactlock for that MDC
+(because updates to the committed objects tree may take place only while
+holding both both the compaction mutex and the mmi_co_lock write lock).
 
 Furthermore, taking the mmi_compactlock does not reduce concurrency for
 object or property updaters because these are inherently serialized by the
@@ -86,10 +87,6 @@ requirement to synchronously append log records in the associated MDC.
 Object Layout Reference Counts
 ------------------------------
 
-The reference counts for an object layout (eld_refcnt and eld_bgops) are
-protected by the mmi_reflock for the object's MDC.  Because these values
-are never written to media, the mmi_compactlock for the object's MDC need
-not (and should not) be locked when updating the reference count.
-
-If the mmi_reflock proves to be heavily contended, it can easily be replaced
-with a lock pool.
+The reference counts for an object layout (eld_ref) are protected
+by mmi_co_lock or mmi_uc_lock of the object's MDC dependiing upon
+which tree it is in at the time of acquisition.
