@@ -327,8 +327,8 @@ ecio_mblock_erase(
 	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
 		return merr(EIO);
 
-	err = pd_bio_erase(pd, layout->eld_ld.ol_zaddr,
-			   layout->eld_ld.ol_zcnt, 0);
+	err = pd_zone_erase(pd, layout->eld_ld.ol_zaddr,
+			    layout->eld_ld.ol_zcnt, 0);
 	if (ev(err))
 		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
 
@@ -424,8 +424,8 @@ ecio_mlog_erase(
 	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
 		return merr(EIO);
 
-	err = pd_bio_erase(pd, layout->eld_ld.ol_zaddr,
-			   layout->eld_ld.ol_zcnt, flags);
+	err = pd_zone_erase(pd, layout->eld_ld.ol_zaddr,
+			    layout->eld_ld.ol_zcnt, flags);
 	if (ev(err))
 		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
 

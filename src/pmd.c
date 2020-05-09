@@ -24,8 +24,6 @@
 
 #include <mpool/mpool_ioctl.h>
 
-#include "mpcore/qos.h"
-
 static merr_t
 pmd_write_meta_to_latest_version(
 	struct mpool_descriptor    *mp,

@@ -25,7 +25,11 @@
 static const fmode_t    pd_bio_fmode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
 static char            *pd_bio_holder = "mpool";
 
-merr_t pd_bio_dev_open(const char *path, struct pd_dev_parm *dparm)
+merr_t
+pd_dev_open(
+	const char         *path,
+	struct pd_dev_parm *dparm,
+	struct pd_prop     *pd_prop)
 {
 	struct block_device *bdev;
 
@@ -34,11 +38,20 @@ merr_t pd_bio_dev_open(const char *path, struct pd_dev_parm *dparm)
 		return merr(PTR_ERR(bdev));
 
 	dparm->dpr_dev_private = bdev;
+	dparm->dpr_prop = *pd_prop;
+
+	if ((pd_prop->pdp_devtype != PD_DEV_TYPE_BLOCK_STD) &&
+	    (pd_prop->pdp_devtype != PD_DEV_TYPE_BLOCK_NVDIMM)) {
+		merr_t err = merr(EINVAL);
+
+		mp_pr_err("unsupported PD type %d", err, pd_prop->pdp_devtype);
+		return err;
+	}
 
 	return 0;
 }
 
-merr_t pd_bio_dev_close(struct pd_dev_parm *dparm)
+merr_t pd_dev_close(struct pd_dev_parm *dparm)
 {
 	struct block_device *bdev = dparm->dpr_dev_private;
 
@@ -148,7 +161,7 @@ pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
 	  ((b) & PD_ERASE_READS_ERASED))
 
 /**
- * pd_bio_erase() - issue write-zeros or discard commands to erase PD
+ * pd_zone_erase() - issue write-zeros or discard commands to erase PD
  * @pd
  * @zoneaddr:
  * @zonecnt:
@@ -156,7 +169,7 @@ pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
  * @afp:
  */
 merr_t
-pd_bio_erase(
+pd_zone_erase(
 	struct mpool_dev_info  *pd,
 	u64                     zoneaddr,
 	u32                     zonecnt,
@@ -285,7 +298,7 @@ pd_bio_chain(
  * all other split writes, due to mismatch between data and DIF tags.
  * In order to use DIF with stock linux kernel, do not IOs larger than MDTS.
  */
-merr_t
+static merr_t
 pd_bio_rw(
 	struct mpool_dev_info  *pd,
 	struct iovec           *iov,
@@ -504,24 +517,6 @@ pd_zone_preadv(
 	return pd_bio_rw(pd, iov, iovcnt, roff, REQ_OP_READ, 0);
 }
 
-merr_t pd_dev_init(struct pd_dev_parm *dparm, struct pd_prop *pd_prop)
-{
-	merr_t err;
-
-	dparm->dpr_prop = *pd_prop;
-
-	if ((pd_prop->pdp_devtype != PD_DEV_TYPE_FILE) &&
-		(pd_prop->pdp_devtype != PD_DEV_TYPE_BLOCK_STD) &&
-		(pd_prop->pdp_devtype != PD_DEV_TYPE_BLOCK_NVDIMM)) {
-
-		err = merr(EINVAL);
-		mp_pr_err("unsupported PD type %d", err, pd_prop->pdp_devtype);
-		return err;
-	}
-
-	return 0;
-}
-
 void
 pd_dev_set_unavail(
 	struct pd_dev_parm            *dparm,
@@ -545,17 +540,4 @@ pd_dev_set_unavail(
 	pd_prop->pdp_phys_if		= DEVICE_PHYS_IF_UNKNOWN;
 	pd_prop->pdp_sectorsz		= omf_devparm->odp_sectorsz;
 	pd_prop->pdp_devsz		= omf_devparm->odp_devsz;
-}
-
-void pd_dev_set_avail(struct pd_dev_parm *tgtparm, struct pd_dev_parm *srcparm)
-{
-	/*
-	 * Copy non-zone parms from srcparm to tgtparm, including the ops vector
-	 * for the device type, so that tgtparm can be made available.
-	 */
-	strncpy(tgtparm->dpr_prop.pdp_didstr,
-		srcparm->dpr_prop.pdp_didstr, PD_DEV_ID_LEN);
-	tgtparm->dpr_prop.pdp_cmdopt = srcparm->dpr_prop.pdp_cmdopt;
-
-	tgtparm->dpr_prop.pdp_devstate = PD_DEV_STATE_AVAIL;
 }

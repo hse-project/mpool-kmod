@@ -3,14 +3,12 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_PD_PRIV_H
-#define MPOOL_PD_PRIV_H
+#ifndef MPOOL_PD_H
+#define MPOOL_PD_H
 
 #include <mpool/mpool_ioctl.h>
-#include <mpcore/qos.h>
 
 struct mpool_dev_info;
-struct pd_dev_parm;
 
 /**
  * pd_erase_flags
@@ -47,11 +45,6 @@ struct pd_dev_parm {
 #define dpr_optiosz       dpr_prop.pdp_optiosz
 
 /*
- * From a PD structure, convert a page number into a byte number.
- */
-#define PDBPAGE2BYTE(_pd, _bpgoff) ((_bpgoff) << PAGE_SHIFT)
-
-/*
  * pd API functions -- device-type independent dparm ops
  */
 
@@ -64,20 +57,23 @@ struct pd_dev_parm {
  */
 
 /**
- * pd_dev_init() - update PD parameters from the PD properties passed in.
- * @dparm: output
- * @pd_prop: input
- */
-merr_t pd_dev_init(struct pd_dev_parm *dparm, struct pd_prop *pd_prop);
-
-/**
- * pd_bio_dev_open() -
+ * pd_dev_open() -
  * @path:
  * @dparm:
  *
  * Return:
  */
-merr_t pd_bio_dev_open(const char *path, struct pd_dev_parm *dparm);
+merr_t
+pd_dev_open(
+	const char         *path,
+	struct pd_dev_parm *dparm,
+	struct pd_prop     *pd_prop);
+
+/**
+ * pd_dev_close() -
+ * @pd:
+ */
+merr_t pd_dev_close(struct pd_dev_parm *dparm);
 
 /**
  * pd_bio_erase() -
@@ -89,35 +85,11 @@ merr_t pd_bio_dev_open(const char *path, struct pd_dev_parm *dparm);
  * Return:
  */
 merr_t
-pd_bio_erase(
+pd_zone_erase(
 	struct mpool_dev_info  *pd,
 	u64                     zoneaddr,
 	u32                     zonecnt,
 	enum pd_erase_flags     flag);
-
-/**
- * pd_bio_dev_close() -
- * @pd:
- */
-merr_t pd_bio_dev_close(struct pd_dev_parm *dparm);
-
-/**
- * pd_bio_rw() -
- * @pd:
- * @iov:
- * @iovcnt:
- * @off:
- * @rw:
- * @op_flags:
- */
-merr_t
-pd_bio_rw(
-	struct mpool_dev_info  *pd,
-	struct iovec           *iov,
-	int                     iovcnt,
-	loff_t                  off,
-	int                     rw,
-	int                     op_flags);
 
 /*
  * pd API functions - device dependent operations
@@ -191,14 +163,4 @@ pd_dev_set_unavail(
 	struct pd_dev_parm	      *dparm,
 	struct omf_devparm_descriptor *omf_devparm);
 
-/**
- * pd_dev_set_avail() -
- * @tgtparm:
- * @srcparm:
- *
- * Return:
- */
-void
-pd_dev_set_avail(struct pd_dev_parm *tgtparm, struct pd_dev_parm *srcparm);
-
-#endif
+#endif /* MPOOL_PD_H */

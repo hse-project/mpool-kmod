@@ -36,7 +36,6 @@
 #include <mpcore/assert.h>
 #include <mpcore/mpcore.h>
 #include <mpcore/mlog.h>
-#include <mpcore/qos.h>
 #include <mpcore/init.h>
 #include <mpcore/evc.h>
 

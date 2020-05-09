@@ -261,7 +261,7 @@ mpool_mdc0_alloc(
 		/*
 		 * mdc0 log1/2 alloced on first 2 * zcnt zone's
 		 */
-		err = pd_bio_erase(pd, cnt, zcnt * 2, fzero_flag);
+		err = pd_zone_erase(pd, cnt, zcnt * 2, fzero_flag);
 		if (err) {
 			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 				     "erase MDC0 failed on %s %u %lu",
@@ -516,20 +516,11 @@ mpool_dev_init_all(
 		return merr(EINVAL);
 
 	for (idx = 0; idx < dcnt; idx++, pd_prop++) {
-		err = pd_bio_dev_open(dpaths[idx], &pdv[idx].pdi_parm);
+		err = pd_dev_open(dpaths[idx], &pdv[idx].pdi_parm, pd_prop);
 		if (err) {
 			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 				     "Getting device %s params, open failed %d",
 				     dpaths[idx], merr_errno(err));
-			break;
-		}
-
-		err = pd_dev_init(&pdv[idx].pdi_parm, pd_prop);
-		if (err) {
-			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-				     "Setting device %s params failed %d",
-				     dpaths[idx], merr_errno(err));
-			pd_bio_dev_close(&pdv[idx].pdi_parm);
 			break;
 		}
 
@@ -541,7 +532,7 @@ mpool_dev_init_all(
 	}
 
 	while (err && idx-- > 0)
-		pd_bio_dev_close(&pdv[idx].pdi_parm);
+		pd_dev_close(&pdv[idx].pdi_parm);
 
 	return err;
 }
@@ -1867,7 +1858,7 @@ errout:
 		if (erase)
 			sb_erase(pd);
 
-		pd_bio_dev_close(&pd->pdi_parm);
+		pd_dev_close(&pd->pdi_parm);
 	}
 
 	mutex_unlock(&mpool_s_lock);
@@ -2289,7 +2280,7 @@ void mpool_desc_free(struct mpool_descriptor *mp)
 
 	for (i = 0; i < mp->pds_pdvcnt; i++) {
 		if (mpool_pd_status_get(&mp->pds_pdv[i]) != PD_STAT_UNAVAIL)
-			pd_bio_dev_close(&mp->pds_pdv[i].pdi_parm);
+			pd_dev_close(&mp->pds_pdv[i].pdi_parm);
 	}
 
 	kfree(mp);
@@ -2326,7 +2317,7 @@ mpool_sb_erase(
 				     dpaths[i]);
 			break;
 		}
-		pd_bio_dev_close(&pdv[i].pdi_parm);
+		pd_dev_close(&pdv[i].pdi_parm);
 	}
 exit:
 	kfree(pdv);
@@ -2412,7 +2403,7 @@ mpool_sb_magic_check(
 		err = merr(EBUSY);
 	}
 
-	pd_bio_dev_close(&pd->pdi_parm);
+	pd_dev_close(&pd->pdi_parm);
 	kfree(pd);
 
 	return err;

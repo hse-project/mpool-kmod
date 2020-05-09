@@ -11,7 +11,6 @@
 #include <mpcore/assert.h>
 #include <mpcore/mpcore.h>
 #include <mpcore/mlog.h>
-#include <mpcore/qos.h>
 #include <mpcore/evc.h>
 
 #define mdc_logerr(_mpname, _msg, _mlh, _objid, _gen1, _gen2, _err)     \
