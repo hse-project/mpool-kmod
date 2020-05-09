@@ -92,6 +92,14 @@ struct pmd_layout_mlpriv {
 };
 
 /**
+ * union pmd_layout_priv - pmd_layout object type specific private data
+ * @mlpriv: mlog private data
+ */
+union pmd_layout_priv {
+	struct pmd_layout_mlpriv    mlpriv;
+};
+
+/**
  * struct pmd_layout - object layout (in-memory version)
  *
  * LOCKING:
@@ -135,13 +143,15 @@ struct pmd_layout {
 	struct kref                     eld_ref;
 	struct rw_semaphore             eld_rwlock;
 
-	struct pmd_layout_mlpriv        eld_priv[];
+	union pmd_layout_priv           eld_priv[];
 };
 
-/* Shortcuts */
-#define eld_uuid        eld_priv->mlp_uuid
-#define eld_lstat       eld_priv->mlp_lstat
-#define eld_nodeoml     eld_priv->mlp_nodeoml
+/* Shortcuts for mlog private data...
+ */
+#define eld_mlpriv      eld_priv->mlpriv
+#define eld_uuid        eld_mlpriv.mlp_uuid
+#define eld_lstat       eld_mlpriv.mlp_lstat
+#define eld_nodeoml     eld_mlpriv.mlp_nodeoml
 
 /**
  * enum pmd_obj_op -

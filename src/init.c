@@ -23,7 +23,7 @@ struct omf_sb_descriptor SBCLEAR;
  * high-count objects.
  */
 struct kmem_cache  *pmd_obj_erase_work_cache __read_mostly;
-struct kmem_cache  *pmd_layout_mlpriv_cache __read_mostly;
+struct kmem_cache  *pmd_layout_priv_cache __read_mostly;
 struct kmem_cache  *pmd_layout_cache __read_mostly;
 struct kmem_cache  *smap_zone_cache __read_mostly;
 
@@ -71,15 +71,15 @@ int mpool_mod_init(void)
 		return -merr_errno(err);
 	}
 
-	pmd_layout_mlpriv_cache = kmem_cache_create(
-		"mpool_pmd_layout_mlpriv",
-		sizeof(struct pmd_layout) + sizeof(struct pmd_layout_mlpriv),
+	pmd_layout_priv_cache = kmem_cache_create(
+		"mpool_pmd_layout_priv",
+		sizeof(struct pmd_layout) + sizeof(union pmd_layout_priv),
 		0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 
-	if (!pmd_layout_mlpriv_cache) {
+	if (!pmd_layout_priv_cache) {
 		err = merr(ENOMEM);
-		mp_pr_err("kmem_cache_create(pmd mlpriv, %zu) failed",
-			  err, sizeof(struct pmd_layout_mlpriv));
+		mp_pr_err("kmem_cache_create(pmd priv, %zu) failed",
+			  err, sizeof(union pmd_layout_priv));
 		mpool_mod_exit();
 		return -merr_errno(err);
 	}
@@ -143,12 +143,12 @@ void mpool_mod_exit(void)
 
 	/* Destroy the slab caches. */
 	kmem_cache_destroy(pmd_obj_erase_work_cache);
-	kmem_cache_destroy(pmd_layout_mlpriv_cache);
+	kmem_cache_destroy(pmd_layout_priv_cache);
 	kmem_cache_destroy(pmd_layout_cache);
 	kmem_cache_destroy(smap_zone_cache);
 
 	pmd_obj_erase_work_cache = NULL;
-	pmd_layout_mlpriv_cache = NULL;
+	pmd_layout_priv_cache = NULL;
 	pmd_layout_cache = NULL;
 	smap_zone_cache = NULL;
 

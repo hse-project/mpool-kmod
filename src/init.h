@@ -19,7 +19,7 @@
 extern struct crypto_shash *mpool_tfm;
 
 extern struct kmem_cache *pmd_obj_erase_work_cache;
-extern struct kmem_cache *pmd_layout_mlpriv_cache;
+extern struct kmem_cache *pmd_layout_priv_cache;
 extern struct kmem_cache *pmd_layout_cache;
 extern struct kmem_cache *smap_zone_cache;
 

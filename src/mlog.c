@@ -1585,7 +1585,7 @@ mlog_open(
 	/* TODO: Verify that the insert succeeded...
 	 */
 	oml_layout_lock(mp);
-	oml_layout_insert(mp, layout->eld_priv);
+	oml_layout_insert(mp, &layout->eld_mlpriv);
 	oml_layout_unlock(mp);
 
 	pmd_obj_wrunlock(layout);

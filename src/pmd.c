@@ -61,7 +61,7 @@ pmd_layout_alloc(
 	struct pmd_layout *layout;
 
 	if (pmd_objid_type(objid) == OMF_OBJ_MLOG)
-		cache = pmd_layout_mlpriv_cache;
+		cache = pmd_layout_priv_cache;
 
 	layout = kmem_cache_zalloc(cache, GFP_KERNEL);
 	if (ev(!layout))
@@ -97,7 +97,7 @@ void pmd_layout_release(struct kref *refp)
 		  layout->eld_state, (long)kref_read(&layout->eld_ref));
 
 	if (pmd_objid_type(layout->eld_objid) == OMF_OBJ_MLOG)
-		cache = pmd_layout_mlpriv_cache;
+		cache = pmd_layout_priv_cache;
 
 	layout->eld_objid = 0;
 
