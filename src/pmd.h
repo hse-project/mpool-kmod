@@ -80,17 +80,17 @@ enum pmd_layout_state {
 };
 
 /*
- * struct pmd_layout_mlo - "mlog only" data for pmd_layout
+ * struct pmd_layout_mlpriv - mlog private data for pmd_layout
  * @mlo_lstat:   mlog status
  * @mlo_layout:  back pointer to the layout
  * @mlo_nodeoml: links this mlog in the mpool open mlogs tree
  * @mlo_uuid:    unique ID per mlog
  */
-struct pmd_layout_mlo {
-	struct mlog_stat   *mlo_lstat;
-	struct pmd_layout  *mlo_layout;
-	struct rb_node      mlo_nodeoml;
-	struct mpool_uuid   mlo_uuid;
+struct pmd_layout_mlpriv {
+	struct rb_node      mlp_nodeoml;
+	struct mlog_stat   *mlp_lstat;
+	struct pmd_layout  *mlp_layout;
+	struct mpool_uuid   mlp_uuid;
 };
 
 /**
@@ -125,19 +125,21 @@ struct pmd_layout {
 	u32                             eld_mblen;
 	u8                              eld_state;
 	u8                              eld_flags;
-	struct pmd_layout_mlo          *eld_mlo;
 	u64                             eld_gen;
 	struct omf_layout_descriptor    eld_ld;
 
 	struct kref                     eld_ref;
 	struct rw_semaphore             eld_rwlock;
+
+	struct pmd_layout_mlpriv        eld_mlpriv[];
 };
 
 /* Shortcuts */
-#define eld_lstat   eld_mlo->mlo_lstat
-#define eld_pcs     eld_mlo->mlo_pcs
-#define eld_nodeoml eld_mlo->mlo_nodeoml
-#define eld_uuid    eld_mlo->mlo_uuid
+#define eld_lstat       eld_mlpriv->mlp_lstat
+#define eld_pcs         eld_mlpriv->mlp_pcs
+#define eld_nodeoml     eld_mlpriv->mlp_nodeoml
+#define eld_uuid        eld_mlpriv->mlp_uuid
+#define eld_layout      eld_mlpriv->mlp_layout
 
 /**
  * enum pmd_obj_op -

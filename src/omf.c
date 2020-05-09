@@ -467,8 +467,7 @@ omf_ecio_layout_pack_htole(
 	omf_set_pdrc_gen(ocre_omf, ecl->eld_gen);
 	omf_set_pdrc_mblen(ocre_omf, ecl->eld_mblen);
 
-	if (ecl->eld_mlo) {
-		assert(objid_type(ecl->eld_objid) == OMF_OBJ_MLOG);
+	if (objid_type(ecl->eld_objid) == OMF_OBJ_MLOG) {
 		memcpy(ocre_omf->pdrc_uuid, ecl->eld_uuid.uuid,
 		       OMF_UUID_PACKLEN);
 		data_rec_sz += OMF_UUID_PACKLEN;

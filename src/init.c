@@ -23,7 +23,7 @@ struct omf_sb_descriptor SBCLEAR;
  * high-count objects.
  */
 struct kmem_cache  *pmd_obj_erase_work_cache __read_mostly;
-struct kmem_cache  *pmd_layout_mlo_cache __read_mostly;
+struct kmem_cache  *pmd_layout_mlpriv_cache __read_mostly;
 struct kmem_cache  *pmd_layout_cache __read_mostly;
 struct kmem_cache  *smap_zone_cache __read_mostly;
 
@@ -71,20 +71,15 @@ int mpool_mod_init(void)
 		return -merr_errno(err);
 	}
 
-	/*
-	 * mlog only part of the pmd object layout.
-	 * Elements can share a cache line because an element is not changed
-	 * after the mlog layout is allocated. And an mlog is long lived.
-	 */
-	pmd_layout_mlo_cache = kmem_cache_create(
-		"mpool_pmd_layout_mlo",
-		sizeof(struct pmd_layout_mlo),
-		0, SLAB_POISON, NULL);
+	pmd_layout_mlpriv_cache = kmem_cache_create(
+		"mpool_pmd_layout_mlpriv",
+		sizeof(struct pmd_layout) + sizeof(struct pmd_layout_mlpriv),
+		0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 
-	if (!pmd_layout_mlo_cache) {
+	if (!pmd_layout_mlpriv_cache) {
 		err = merr(ENOMEM);
-		mp_pr_err("kmem_cache_create(pmd mlo, %zu) failed",
-			  err, sizeof(struct pmd_layout_mlo));
+		mp_pr_err("kmem_cache_create(pmd mlpriv, %zu) failed",
+			  err, sizeof(struct pmd_layout_mlpriv));
 		mpool_mod_exit();
 		return -merr_errno(err);
 	}
@@ -148,12 +143,12 @@ void mpool_mod_exit(void)
 
 	/* Destroy the slab caches. */
 	kmem_cache_destroy(pmd_obj_erase_work_cache);
-	kmem_cache_destroy(pmd_layout_mlo_cache);
+	kmem_cache_destroy(pmd_layout_mlpriv_cache);
 	kmem_cache_destroy(pmd_layout_cache);
 	kmem_cache_destroy(smap_zone_cache);
 
 	pmd_obj_erase_work_cache = NULL;
-	pmd_layout_mlo_cache = NULL;
+	pmd_layout_mlpriv_cache = NULL;
 	pmd_layout_cache = NULL;
 	smap_zone_cache = NULL;
 

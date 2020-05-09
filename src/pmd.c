@@ -59,23 +59,15 @@ pmd_layout_alloc(
 	u64                         mblen,
 	u32                         zcnt)
 {
+	struct kmem_cache *cache = pmd_layout_cache;
 	struct pmd_layout *layout;
 
-	layout = kmem_cache_zalloc(pmd_layout_cache, GFP_KERNEL);
+	if (pmd_objid_type(objid) == OMF_OBJ_MLOG)
+		cache = pmd_layout_mlpriv_cache;
+
+	layout = kmem_cache_zalloc(cache, GFP_KERNEL);
 	if (ev(!layout))
 		return NULL;
-
-	if (pmd_objid_type(objid) == OMF_OBJ_MLOG) {
-		layout->eld_mlo =
-			kmem_cache_zalloc(pmd_layout_mlo_cache, GFP_KERNEL);
-		if (ev(!layout->eld_mlo)) {
-			kmem_cache_free(pmd_layout_cache, layout);
-			return NULL;
-		}
-
-		mpool_uuid_copy(&layout->eld_uuid, uuid);
-		layout->eld_mlo->mlo_layout = layout;
-	}
 
 	layout->eld_objid     = objid;
 	layout->eld_gen       = gen;
@@ -83,6 +75,11 @@ pmd_layout_alloc(
 	layout->eld_ld.ol_zcnt = zcnt;
 	kref_init(&layout->eld_ref);
 	init_rwsem(&layout->eld_rwlock);
+
+	if (pmd_objid_type(objid) == OMF_OBJ_MLOG) {
+		mpool_uuid_copy(&layout->eld_uuid, uuid);
+		layout->eld_layout = layout;
+	}
 
 	return layout;
 }
@@ -92,8 +89,8 @@ pmd_layout_alloc(
  */
 void pmd_layout_release(struct kref *refp)
 {
-	struct pmd_layout_mlo  *mlo;
-	struct pmd_layout      *layout;
+	struct kmem_cache *cache = pmd_layout_cache;
+	struct pmd_layout *layout;
 
 	layout = container_of(refp, typeof(*layout), eld_ref);
 
@@ -103,22 +100,12 @@ void pmd_layout_release(struct kref *refp)
 		  __func__, layout, (ulong)layout->eld_objid,
 		  layout->eld_state, (long)kref_read(&layout->eld_ref));
 
-	mlo = layout->eld_mlo;
-	if (mlo && mlo->mlo_lstat)
-		mp_pr_warn("eld_lstat object %p not freed properly", mlo);
-
-	/*
-	 * Free the performance counter set instance associated to the mlog.
-	 * There is no perf counters associated to an mblock.
-	 */
-	if (pmd_objid_type(layout->eld_objid) == OMF_OBJ_MLOG) {
-		assert(mlo != NULL);
-		kmem_cache_free(pmd_layout_mlo_cache, mlo);
-	}
+	if (pmd_objid_type(layout->eld_objid) == OMF_OBJ_MLOG)
+		cache = pmd_layout_mlpriv_cache;
 
 	layout->eld_objid = 0;
 
-	kmem_cache_free(pmd_layout_cache, layout);
+	kmem_cache_free(cache, layout);
 }
 
 static struct pmd_layout *

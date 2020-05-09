@@ -25,14 +25,14 @@ oml_layout_find(
 	struct mpool_descriptor    *mp,
 	u64                         key)
 {
-	struct pmd_layout_mlo  *mlo;
-	struct pmd_layout      *this;
-	struct rb_node         *node;
+	struct pmd_layout_mlpriv   *mlpriv;
+	struct pmd_layout          *this;
+	struct rb_node             *node;
 
 	node = mp->pds_oml_root.rb_node;
 	while (node) {
-		mlo = rb_entry(node, typeof(*mlo), mlo_nodeoml);
-		this = mlo->mlo_layout;
+		mlpriv = rb_entry(node, typeof(*mlpriv), mlp_nodeoml);
+		this = mlpriv->mlp_layout;
 
 		if (key < this->eld_objid)
 			node = node->rb_left;
@@ -50,10 +50,10 @@ oml_layout_insert(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *item)
 {
-	struct pmd_layout_mlo  *mlo;
-	struct pmd_layout      *this;
-	struct rb_node        **pos, *parent;
-	struct rb_root         *root;
+	struct pmd_layout_mlpriv   *mlpriv;
+	struct pmd_layout          *this;
+	struct rb_node            **pos, *parent;
+	struct rb_root             *root;
 
 	root = &mp->pds_oml_root;
 	pos = &root->rb_node;
@@ -61,8 +61,8 @@ oml_layout_insert(
 
 	/* Figure out where to put new node */
 	while (*pos) {
-		mlo = rb_entry(*pos, typeof(*mlo), mlo_nodeoml);
-		this = mlo->mlo_layout;
+		mlpriv = rb_entry(*pos, typeof(*mlpriv), mlp_nodeoml);
+		this = mlpriv->mlp_layout;
 
 		parent = *pos;
 		if (item->eld_objid < this->eld_objid)
@@ -3647,15 +3647,15 @@ mlog_append_dmax(
  */
 void mlogutil_closeall(struct mpool_descriptor *mp)
 {
-	struct pmd_layout_mlo  *mlo, *tmp;
-	struct pmd_layout      *layout;
+	struct pmd_layout_mlpriv   *mlpriv, *tmp;
+	struct pmd_layout          *layout;
 
 	oml_layout_lock(mp);
 
 	rbtree_postorder_for_each_entry_safe(
-		mlo, tmp, &mp->pds_oml_root, mlo_nodeoml) {
+		mlpriv, tmp, &mp->pds_oml_root, mlp_nodeoml) {
 
-		layout = mlo->mlo_layout;
+		layout = mlpriv->mlp_layout;
 
 		if (pmd_objid_type(layout->eld_objid) != OMF_OBJ_MLOG) {
 			mp_pr_warn("mpool %s, non-mlog object 0x%lx in open mlog layout tree",
@@ -3668,7 +3668,7 @@ void mlogutil_closeall(struct mpool_descriptor *mp)
 
 		/* Remove layout from open list and discard log data.
 		 */
-		rb_erase(&mlo->mlo_nodeoml, &mp->pds_oml_root);
+		rb_erase(&mlpriv->mlp_nodeoml, &mp->pds_oml_root);
 		mlog_stat_free(layout);
 	}
 
