@@ -262,4 +262,4 @@ extern struct upg_history sb_descriptor_table[OMF_SB_DESC_TABLE_SZ];
 extern struct upg_history
 	mdcrec_data_ocreate_table[OMF_MDCREC_DATA_OCREATE_TABLE_SZ];
 
-#endif
+#endif /* MPOOL_OMF_INT_H */

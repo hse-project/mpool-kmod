@@ -10,7 +10,6 @@
  */
 
 #include "mpcore_defs.h"
-#include <mpcore/mdc.h>
 
 /*
  * Drives have 4 superblocks.

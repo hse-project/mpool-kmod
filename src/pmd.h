@@ -6,8 +6,10 @@
 #ifndef MPOOL_PMD_PRIV_H
 #define MPOOL_PMD_PRIV_H
 
-#include <mpcore/mdc.h>
+#include <mpcore/mpool_params.h>
+
 #include "mlog.h"
+#include "mdc.h"
 
 /**
  * DOC: Module info.
@@ -965,4 +967,4 @@ pmd_layout_alloc(
  */
 void pmd_layout_release(struct kref *refp);
 
-#endif
+#endif /* MPOOL_PMD_PRIV_H */

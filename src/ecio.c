@@ -8,8 +8,6 @@
 #include <linux/log2.h>
 #include <linux/mm.h>
 
-#include <mpcore/mdc.h>
-
 #include "mpcore_defs.h"
 
 /*

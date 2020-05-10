@@ -398,4 +398,4 @@ void smap_log_mpool_usage(struct work_struct *ws);
  */
 void smap_wait_usage_done(struct mpool_descriptor *mp);
 
-#endif
+#endif /* MPOOL_SMAP_PRIV_H */

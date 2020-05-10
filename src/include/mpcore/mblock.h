@@ -14,7 +14,6 @@
 #define MPOOL_MBLOCK_H
 
 #include <mpool/mpool_ioctl.h>
-#include <mpcore/mdc.h>
 /*
  * Opaque handles for clients
  */
@@ -234,4 +233,4 @@ free_pages_asyncio(
 	int              pagesc,
 	int              pagesvsz);
 
-#endif
+#endif /* MPOOL_MBLOCK_H */

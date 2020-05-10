@@ -196,4 +196,4 @@ sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb, struct mpool_mdparm *mdparm);
  */
 extern struct omf_sb_descriptor SBCLEAR;
 
-#endif
+#endif /* MPOOL_SB_PRIV_H */

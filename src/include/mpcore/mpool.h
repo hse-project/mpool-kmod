@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_MPCORE_H
-#define MPOOL_MPCORE_H
+#ifndef MPOOL_MPOOL_H
+#define MPOOL_MPOOL_H
 
 /*
  * DOC: Module info
@@ -18,12 +18,10 @@
 #include <mpool/mpool_devrpt.h>
 #include <mpool/mpool_ioctl.h>
 
-#include <mpcore/mpcore_params.h>
 #include <mpcore/uuid.h>
+#include <mpcore/mpool_params.h>
 
-/* opaque handle for clients */
 struct mpool_descriptor;
-struct mp_obj_descriptor; /* for any mpool object: mblock, mlog, etc... */
 
 #define MPOOL_OP_READ  0
 #define MPOOL_OP_WRITE 1
@@ -541,4 +539,4 @@ mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config *cfg);
 merr_t
 mpool_config_fetch(struct mpool_descriptor *mp, struct mpool_config *cfg);
 
-#endif
+#endif /* MPOOL_MPOOL_H */

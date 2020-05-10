@@ -16,8 +16,7 @@
  *
  */
 
-#include <mpcore/mpcore_params.h>
-#include <mpcore/mpcore.h>
+#include <mpcore/mpool.h>
 
 /**
  * DOC: LOCKING
@@ -365,4 +364,4 @@ mpool_desc_pdmc_add(
 	bool				 check_only,
 	struct mpool_devrpt             *devrpt);
 
-#endif
+#endif /* MPOOL_MPOOL_PRIV_H */

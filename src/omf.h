@@ -19,8 +19,8 @@
  * The name of the structure members start with a "p" that means "packed".
  */
 
-#ifndef MPCORE_OMF_H
-#define MPCORE_OMF_H
+#ifndef MPOOL_OMF_PRIV_H
+#define MPOOL_OMF_PRIV_H
 
 #include <asm/byteorder.h>
 
@@ -656,4 +656,4 @@ OMF_SETGET_CHBUF(struct sb_descriptor_omf, psb_mdc02devid)
 				       max(OMF_MDCREC_CLS_SPARE_PACKLEN, \
 					   OMF_MDCREC_MPCONFIG_PACKLEN)))
 
-#endif /* MPCORE_OMF_H */
+#endif /* MPOOL_OMF_PRIV_H */

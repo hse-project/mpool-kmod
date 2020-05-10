@@ -128,4 +128,5 @@ static inline int merr_lineno(merr_t err)
 {
 	return (err & MERR_LINE_MASK) >> MERR_LINE_SHIFT;
 }
-#endif
+
+#endif /* MPOOL_MERR_H */

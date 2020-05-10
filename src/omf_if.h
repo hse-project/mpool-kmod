@@ -459,4 +459,4 @@ extern struct shash_desc *mpool_shash_desc_sha256;
  */
 struct omf_mdccver *omf_sbver_to_mdccver(enum sb_descriptor_ver_omf sbver);
 
-#endif
+#endif /* MPOOL_OMF_IF_PRIV_H */

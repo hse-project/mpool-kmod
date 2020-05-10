@@ -70,4 +70,4 @@ do {								\
 	}							\
 } while (0)
 
-#endif
+#endif /* MPOOL_PRINTK_H */

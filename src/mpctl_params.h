@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPCTL_PARAMS_H
-#define MPCTL_PARAMS_H
+#ifndef MPOOL_MPCTL_PARAMS_H
+#define MPOOL_MPCTL_PARAMS_H
 
 #include <linux/sysctl.h>
 
@@ -62,4 +62,4 @@ mpc_uuid_proc_handler(
 	size_t             *lenp,
 	loff_t             *ppos);
 
-#endif /* MPCTL_PARAMS_H */
+#endif /* MPOOL_MPCTL_PARAMS_H */

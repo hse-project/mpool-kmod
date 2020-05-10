@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_PD_H
-#define MPOOL_PD_H
+#ifndef MPOOL_PD_PRIV_H
+#define MPOOL_PD_PRIV_H
 
 #include <mpool/mpool_ioctl.h>
 
@@ -163,4 +163,4 @@ pd_dev_set_unavail(
 	struct pd_dev_parm	      *dparm,
 	struct omf_devparm_descriptor *omf_devparm);
 
-#endif /* MPOOL_PD_H */
+#endif /* MPOOL_PD_PRIV_H */

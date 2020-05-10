@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPCTL_INTERNAL_H
-#define MPCTL_INTERNAL_H
+#ifndef MPOOL_MPCTL_H
+#define MPOOL_MPCTL_H
 
 #include <linux/rbtree.h>
 
@@ -66,4 +66,4 @@ static inline size_t mpc_vma_pglen(struct mpc_vma *meta)
 
 void mpc_vma_free(struct mpc_vma *meta);
 
-#endif
+#endif /* MPOOL_MPCTL_H */

@@ -112,4 +112,4 @@ mlog_append_dmax(
 
 void mlogutil_closeall(struct mpool_descriptor *mp);
 
-#endif
+#endif /* MPOOL_MLOG_PRIV_H */

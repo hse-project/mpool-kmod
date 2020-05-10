@@ -16,8 +16,6 @@
 #include <mpool/mpool_ioctl.h>
 
 #include "mpcore_defs.h"
-#include <mpcore/mdc.h>
-#include <mpcore/upgrade.h>
 
 /*
  * lock for serializing certain mpool ops where required/desirable; could be per

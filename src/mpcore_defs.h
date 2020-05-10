@@ -8,8 +8,8 @@
  * Common headers definitions for mpool.
  *
  */
-#ifndef MPOOL_MPCORE_DEFS_PRIV_H
-#define MPOOL_MPCORE_DEFS_PRIV_H
+#ifndef MPOOL_MPCORE_DEFS_H
+#define MPOOL_MPCORE_DEFS_H
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -19,8 +19,8 @@
 
 #include <mpool/mpool_ioctl.h>
 
-#include <mpcore/mpcore_printk.h>
-#include <mpcore/mpcore_defs.h>
+#include <mpcore/mpool_printk.h>
+#include <mpcore/mpool_defs.h>
 #include <mpcore/evc.h>
 #include <mpcore/assert.h>
 
@@ -32,9 +32,10 @@
 #include "smap.h"
 #include "pmd.h"
 #include "mlog.h"
+#include "mdc.h"
 #include "mclass.h"
 #include "mp.h"
 #include "sb.h"
 #include "upgrade.h"
 
-#endif
+#endif /* MPOOL_MPCORE_DEFS_H */

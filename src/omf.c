@@ -16,7 +16,6 @@
 #include <crypto/hash.h>
 
 #include "mpcore_defs.h"
-#include <mpcore/upgrade.h>
 #include "omf_internal.h"
 
 /*

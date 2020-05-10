@@ -6,12 +6,13 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 
-#include <mpcore/mpcore_printk.h>
-#include <mpcore/mdc.h>
+#include <mpcore/mpool_printk.h>
 #include <mpcore/assert.h>
-#include <mpcore/mpcore.h>
+#include <mpcore/mpool.h>
 #include <mpcore/mlog.h>
 #include <mpcore/evc.h>
+
+#include "mdc.h"
 
 #define mdc_logerr(_mpname, _msg, _mlh, _objid, _gen1, _gen2, _err)     \
 	mp_pr_err("mpool %s, mdc open, %s "			        \

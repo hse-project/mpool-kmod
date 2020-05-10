@@ -60,4 +60,4 @@ static inline void mpool_unparse_uuid(const struct mpool_uuid *uuid, char *dst)
 		 u[12], u[13], u[14], u[15]);
 }
 
-#endif
+#endif /* MPOOL_UUID_H */

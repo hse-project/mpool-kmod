@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_MPCORE_MDC_H
-#define MPOOL_MPCORE_MDC_H
+#ifndef MPOOL_MDC_PRIV_H
+#define MPOOL_MDC_PRIV_H
 
 #include <linux/mutex.h>
 
@@ -172,4 +172,4 @@ uint64_t
 mp_mdc_cend(
 	struct mp_mdc  *mdc);
 
-#endif /* MPOOL_MPCORE_MDC_H */
+#endif /* MPOOL_MDC_PRIV_H */

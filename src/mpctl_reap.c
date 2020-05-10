@@ -33,12 +33,12 @@
 #include <linux/sched/clock.h>
 #endif
 
-#include <mpcore/mpcore_printk.h>
+#include <mpcore/mpool_printk.h>
 #include <mpcore/assert.h>
 #include <mpcore/evc.h>
 
 #include "mpctl_params.h"
-#include "mpctl_internal.h"
+#include "mpctl.h"
 
 #define REAP_ELEM_MAX       3
 
@@ -108,7 +108,7 @@ struct mpc_reap {
 };
 
 /**
- * mpc_readp_meminfo() - Get current system-wide memory usage
+ * mpc_reap_meminfo() - Get current system-wide memory usage
  * @freep:    ptr to return bytes of free memory
  * @availp:   ptr to return bytes of available memory
  * @shift:    shift results by %shift bits

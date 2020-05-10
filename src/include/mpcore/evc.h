@@ -37,4 +37,4 @@ void evc_count(struct evc *evc);
 void evc_init(void);
 void evc_fini(void);
 
-#endif
+#endif /* MPOOL_EVC_H */

@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPCTL_REAP_H
-#define MPCTL_REAP_H
+#ifndef MPOOL_MPCTL_REAP_H
+#define MPOOL_MPCTL_REAP_H
 
 struct mpc_reap;
 struct mpc_vma;
@@ -78,4 +78,4 @@ bool
 mpc_reap_vma_duress(
 	struct mpc_vma *meta);
 
-#endif /* MPCTL_REAP_H */
+#endif /* MPOOL_MPCTL_REAP_H */

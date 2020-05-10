@@ -206,4 +206,4 @@ ecio_obj_get_cap_from_layout(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *layout);
 
-#endif
+#endif /* MPOOL_ECIO_PRIV_H */

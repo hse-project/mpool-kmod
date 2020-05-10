@@ -19,7 +19,6 @@
 #include <linux/sort.h>
 #include <linux/delay.h>
 
-#include <mpcore/upgrade.h>
 #include "mpcore_defs.h"
 
 #include <mpool/mpool_ioctl.h>

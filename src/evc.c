@@ -11,7 +11,7 @@
 #include <linux/debugfs.h>
 
 #include <mpcore/evc.h>
-#include <mpcore/mpcore_printk.h>
+#include <mpcore/mpool_printk.h>
 
 static struct {
 	spinlock_t      lock;

@@ -150,4 +150,4 @@ mc_smap_parms_get(
 	enum mp_media_classp        mclass,
 	struct mc_smap_parms       *mcsp);
 
-#endif
+#endif /* MPOOL_MCLASS_PRIV_H */

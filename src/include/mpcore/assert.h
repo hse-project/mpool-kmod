@@ -14,4 +14,4 @@
 #define assert(cond)    BUG_ON(!(cond))
 #endif
 
-#endif
+#endif /* MPOOL_ASSERT_H */

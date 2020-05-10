@@ -205,4 +205,4 @@ mlog_rw_raw(
 
 bool mlog_objid(u64 objid);
 
-#endif
+#endif /* MPOOL_MLOG_H */

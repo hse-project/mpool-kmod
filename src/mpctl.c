@@ -31,17 +31,15 @@
 
 #include <mpool/mpool_ioctl.h>
 
-#include <mpcore/mpcore_printk.h>
-#include <mpcore/mdc.h>
+#include <mpcore/mpool.h>
+#include <mpcore/mpool_printk.h>
 #include <mpcore/assert.h>
-#include <mpcore/mpcore.h>
 #include <mpcore/mlog.h>
-#include <mpcore/init.h>
 #include <mpcore/evc.h>
 
-#include <mpctl_internal.h>
 #include <mpool_version.h>
 
+#include "mpctl.h"
 #include "mpctl_params.h"
 #include "mpctl_reap.h"
 #include "init.h"

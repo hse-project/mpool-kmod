@@ -7,8 +7,6 @@
 #include <linux/log2.h>
 #include <asm/page.h>
 
-#include <mpcore/mdc.h>
-
 #include "mpcore_defs.h"
 
 /**
