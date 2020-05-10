@@ -5,6 +5,7 @@
 
 #include <linux/mm.h>
 #include <linux/log2.h>
+#include <linux/blk_types.h>
 #include <asm/page.h>
 
 #include "mpcore_defs.h"
@@ -229,7 +230,7 @@ mlog_alloc_cmn(
 	 * not needed to make atomic
 	 */
 	pmd_obj_wrlock(layout);
-	err = ecio_mlog_erase(mp, layout, 0);
+	err = pmd_layout_erase(mp, layout, PD_ERASE_READS_ERASED);
 	if (!ev(err))
 		mlog_getprops_cmn(mp, layout, prop);
 	pmd_obj_wrunlock(layout);
@@ -808,29 +809,13 @@ mlog_rw_internal(
 	u8                       rw)
 {
 	struct pmd_layout  *layout;
-	merr_t              err;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
 		return merr(EINVAL);
 
-	switch (rw) {
-	case MPOOL_OP_READ:
-		err = ecio_mlog_read(mp, layout, iov, iovcnt, boff);
-		ev(err);
-		break;
-
-	case MPOOL_OP_WRITE:
-		err = ecio_mlog_write(mp, layout, iov, iovcnt, boff);
-		ev(err);
-		break;
-
-	default:
-		err = merr(EINVAL);
-		break;
-	}
-
-	return err;
+	return pmd_layout_rw(mp, layout, iov, iovcnt, boff,
+			     rw == MPOOL_OP_WRITE ? REQ_FUA : 0, rw);
 }
 
 /**
@@ -871,9 +856,6 @@ mlog_rw_raw(
 
 /**
  * mlog_rw:
- *
- * If called in mpctl context call call into mpctl user. Otherwise, directly
- * call into mpcore.
  *
  * @mp:      mpool descriptor
  * @mlh:     mlog descriptor
@@ -2297,7 +2279,7 @@ mlog_erase(
 		return err;
 	}
 
-	err = ecio_mlog_erase(mp, layout, 0);
+	err = pmd_layout_erase(mp, layout, PD_ERASE_READS_ERASED);
 	if (err) {
 		/*
 		 * Log the failure as a debugging message, but ignore the

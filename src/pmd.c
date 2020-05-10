@@ -1963,10 +1963,9 @@ static void pmd_obj_erase_cb(struct work_struct *work)
 
 	otype = pmd_objid_type(layout->eld_objid);
 	if (otype == OMF_OBJ_MLOG)
-		/* discard is advisory and no need to check the result */
-		ecio_mlog_erase(mp, layout, 0);
+		pmd_layout_erase(mp, layout, PD_ERASE_READS_ERASED);
 	else if (otype == OMF_OBJ_MBLOCK)
-		ecio_mblock_erase(mp, layout);
+		pmd_layout_erase(mp, layout, 0);
 
 	if (oef->oef_cache)
 		kmem_cache_free(oef->oef_cache, oef);
@@ -2402,14 +2401,14 @@ pmd_mdc_alloc(
 	 * not needed to make atomic.
 	 */
 	pmd_obj_wrlock(layout1);
-	err = ecio_mlog_erase(mp, layout1, 0);
+	err = pmd_layout_erase(mp, layout1, PD_ERASE_READS_ERASED);
 	pmd_obj_wrunlock(layout1);
 
 	if (err) {
 		msg = "erase of first mlog failed";
 	} else {
 		pmd_obj_wrlock(layout2);
-		err = ecio_mlog_erase(mp, layout2, 0);
+		err = pmd_layout_erase(mp, layout2, PD_ERASE_READS_ERASED);
 		pmd_obj_wrunlock(layout2);
 
 		if (err)
@@ -2755,6 +2754,69 @@ pmd_layout_provision(
 	layout->eld_ld.ol_zaddr = zoneaddr;
 
 	return 0;
+}
+
+merr_t
+pmd_layout_rw(
+	struct mpool_descriptor    *mp,
+	struct pmd_layout          *layout,
+	struct iovec               *iov,
+	int                         iovcnt,
+	u64                         boff,
+	int                         flags,
+	u8                          rw)
+{
+	struct mpool_dev_info  *pd;
+	u64                     zaddr;
+	merr_t                  err;
+
+	if (!mp || !layout || !iov)
+		return merr(EINVAL);
+
+	if (rw != MPOOL_OP_READ && rw != MPOOL_OP_WRITE)
+		return merr(EINVAL);
+
+	pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
+	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
+		return merr(EIO);
+
+	if (iovcnt == 0)
+		return 0;
+
+	zaddr = layout->eld_ld.ol_zaddr;
+	if (rw == MPOOL_OP_READ)
+		err = pd_zone_preadv(pd, iov, iovcnt, zaddr, boff);
+	else
+		err = pd_zone_pwritev(pd, iov, iovcnt, zaddr, boff, flags);
+
+	if (ev(err))
+		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
+
+	return err;
+}
+
+merr_t
+pmd_layout_erase(
+	struct mpool_descriptor    *mp,
+	struct pmd_layout          *layout,
+	int                         flags)
+{
+	struct mpool_dev_info  *pd;
+	merr_t                  err;
+
+	if (!mp || !layout)
+		return merr(EINVAL);
+
+	pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
+	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
+		return merr(EIO);
+
+	err = pd_zone_erase(pd, layout->eld_ld.ol_zaddr,
+			    layout->eld_ld.ol_zcnt, flags);
+	if (ev(err))
+		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
+
+	return err;
 }
 
 static merr_t pmd_log_idckpt(struct mpool_descriptor *mp, u64 objid)

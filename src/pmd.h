@@ -967,4 +967,20 @@ pmd_layout_alloc(
  */
 void pmd_layout_release(struct kref *refp);
 
+merr_t
+pmd_layout_rw(
+	struct mpool_descriptor    *mp,
+	struct pmd_layout          *layout,
+	struct iovec               *iov,
+	int                         iovcnt,
+	u64                         boff,
+	int                         flags,
+	u8                          rw);
+
+merr_t
+pmd_layout_erase(
+	struct mpool_descriptor    *mp,
+	struct pmd_layout          *layout,
+	int                         flags);
+
 #endif /* MPOOL_PMD_PRIV_H */
