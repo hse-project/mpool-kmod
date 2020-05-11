@@ -67,13 +67,15 @@ struct mpc_mpool;
 /* mpc pseudo-driver instance data (i.e., all globals live here).
  */
 struct mpc_softstate {
-	struct mutex        ss_lock;        /* Protects ss_units */
+	struct mutex        ss_lock;        /* Protects ss_unitmap */
 	struct idr          ss_unitmap;     /* minor-to-unit map */
-	dev_t               ss_devno;       /* Control device devno */
-	uint                ss_maxunits;    /* Max mpool devices */
+
+	____cacheline_aligned
 	struct semaphore    ss_op_sema;     /* Serialize mgmt. ops */
+	dev_t               ss_devno;       /* Control device devno */
 	struct cdev         ss_cdev;
 	struct class       *ss_class;
+	bool                ss_inited;
 	bool                ss_mpcore_inited;
 };
 
@@ -87,7 +89,6 @@ struct mpc_uinfo {
 /* There is one unit object for each device object created by the driver.
  */
 struct mpc_unit {
-	struct mpc_softstate       *un_ss;
 	struct kref                 un_ref;
 	struct semaphore            un_open_lock;   /* Protects un_open_* */
 	struct backing_dev_info    *un_saved_bdi;
@@ -112,13 +113,12 @@ struct mpc_unit {
 	u64                         un_mdc_captgt;
 	uuid_le                     un_utype;
 	u8                          un_label[MPOOL_LABELSZ_MAX];
-	char                        un_name[];      /* Flexible array!!! */
+	char                        un_name[];
 };
 
-/* One mpc_mpool object per mpool
+/* One mpc_mpool object per mpool.
  */
 struct mpc_mpool {
-	struct mpc_softstate       *mp_ss;
 	struct kref                 mp_ref;
 	struct rw_semaphore         mp_lock;
 	struct mpool_descriptor    *mp_desc;
@@ -209,7 +209,7 @@ static const struct mpc_uinfo mpc_uinfo_mpool = {
 	.ui_subdirfmt = "mpool/%s",
 };
 
-static struct mpc_softstate   *mpc_softstate __read_mostly;
+static struct mpc_softstate     mpc_softstate;
 
 static struct workqueue_struct *mpc_wq_trunc __read_mostly;
 static struct workqueue_struct *mpc_wq_rav[4] __read_mostly;
@@ -306,7 +306,7 @@ mpc_errinfo(
 			  merr(EFAULT), msg, len + 1, rc);
 }
 
-static inline struct mpc_softstate *mpc_softstate_cdev2ss(struct cdev *cdev)
+static struct mpc_softstate *mpc_cdev2ss(struct cdev *cdev)
 {
 	if (ev(!cdev || cdev->owner != THIS_MODULE)) {
 		merr_t err = merr(EINVAL);
@@ -494,7 +494,6 @@ mpool_to_mpcore_params(
  * mpc_mpool_open() - Open the mpool specified by the given drive paths,
  *                    and then create an mpool object to track the
  *                    underlying mpool.
- * @ss:     driver softstate
  * @dpathc: drive count
  * @dpathv: drive path name vector
  * @mpoolp: mpool ptr. Set only if success.
@@ -506,7 +505,6 @@ mpool_to_mpcore_params(
  */
 static merr_t
 mpc_mpool_open(
-	struct mpc_softstate   *ss,
 	uint                    dpathc,
 	char                  **dpathv,
 	struct mpc_mpool      **mpoolp,
@@ -515,6 +513,7 @@ mpc_mpool_open(
 	struct mpool_params    *params,
 	u32			flags)
 {
+	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpcore_params    mpc_params;
 	struct mpc_mpool       *mpool;
 	size_t                  mpoolsz;
@@ -556,7 +555,6 @@ mpc_mpool_open(
 		return err;
 	}
 
-	mpool->mp_ss = ss;
 	kref_init(&mpool->mp_ref);
 	init_rwsem(&mpool->mp_lock);
 	mpool->mp_dpathc = dpathc;
@@ -570,7 +568,6 @@ mpc_mpool_open(
 
 /**
  * mpc_unit_create() - Create and install a unit object
- * @ss:           driver softstate
  * @path:         device path under "/dev/" to create
  * @mpool:        mpool ptr
  * @unitp:        unit ptr
@@ -591,15 +588,15 @@ mpc_mpool_open(
  */
 static merr_t
 mpc_unit_create(
-	struct mpc_softstate   *ss,
 	const char             *name,
 	struct mpc_mpool       *mpool,
 	struct mpc_unit       **unitp)
 {
-	struct mpc_unit    *unit;
-	size_t              unitsz;
-	int                 minor;
-	merr_t              err;
+	struct mpc_softstate   *ss = &mpc_softstate;
+	struct mpc_unit        *unit;
+	size_t                  unitsz;
+	int                     minor;
+	merr_t                  err;
 
 	if (!ss || !name || !unitp)
 		return merr(EINVAL);
@@ -618,7 +615,6 @@ mpc_unit_create(
 	unit->un_devno = NODEV;
 	kref_init(&unit->un_ref);
 	kref_get(&unit->un_ref);
-	unit->un_ss = ss;
 	unit->un_mpool = mpool;
 
 	err = 0;
@@ -651,7 +647,7 @@ mpc_unit_create(
 static void mpc_unit_destroy(struct kref *refp)
 {
 	struct mpc_unit *unit = container_of(refp, struct mpc_unit, un_ref);
-	struct mpc_softstate *ss = unit->un_ss;
+	struct mpc_softstate *ss = &mpc_softstate;
 
 	mutex_lock(&ss->ss_lock);
 	idr_remove(&ss->ss_unitmap, MINOR(unit->un_devno));
@@ -668,7 +664,6 @@ static void mpc_unit_destroy(struct kref *refp)
 
 /**
  * mpc_unit_iterate() - Iterate over all active unit objects
- * @ss:     driver softstate
  * @func:   function to call on each iteration
  * @arg:    arg to supply to func()
  *
@@ -680,10 +675,11 @@ static void mpc_unit_destroy(struct kref *refp)
  */
 static void
 mpc_unit_iterate(
-	struct mpc_softstate   *ss,
 	mpc_unit_itercb_t      *func,
 	void                   *arg)
 {
+	struct mpc_softstate *ss = &mpc_softstate;
+
 	mutex_lock(&ss->ss_lock);
 	idr_for_each(&ss->ss_unitmap, func, arg);
 	mutex_unlock(&ss->ss_lock);
@@ -691,7 +687,6 @@ mpc_unit_iterate(
 
 /**
  * mpc_unit_lookup() - Look up a unit by minor number.
- * @ss:     driver softstate
  * @minor:  minor number
  * @unitp:  unit ptr
  *
@@ -699,9 +694,10 @@ mpc_unit_iterate(
  * otherwise it sets *unitp to NULL.
  */
 static void
-mpc_unit_lookup(struct mpc_softstate *ss, int minor, struct mpc_unit **unitp)
+mpc_unit_lookup(int minor, struct mpc_unit **unitp)
 {
-	struct mpc_unit *unit;
+	struct mpc_softstate   *ss = &mpc_softstate;
+	struct mpc_unit        *unit;
 
 	*unitp = NULL;
 
@@ -768,14 +764,13 @@ mpc_unit_lookup_by_name(
 {
 	void   *argv[] = { parent, (void *)name, NULL };
 
-	mpc_unit_iterate(parent->un_ss, mpc_unit_lookup_by_name_itercb, argv);
+	mpc_unit_iterate(mpc_unit_lookup_by_name_itercb, argv);
 
 	*unitp = argv[2];
 }
 
 /**
  * mpc_unit_setup() - Create a device unit object and special file
- * @ss:     driver softstate
  * @uinfo:
  * @name:
  * @cfg:
@@ -796,7 +791,6 @@ mpc_unit_lookup_by_name(
  */
 static merr_t
 mpc_unit_setup(
-	struct mpc_softstate       *ss,
 	const struct mpc_uinfo     *uinfo,
 	const char                 *name,
 	const struct mpool_config  *cfg,
@@ -804,10 +798,11 @@ mpc_unit_setup(
 	struct mpc_unit           **unitp,
 	struct mpioc_cmn           *cmn)
 {
-	struct mpc_unit    *unit;
-	enum mpool_rc       rcode;
-	struct device      *device;
-	merr_t              err;
+	struct mpc_softstate   *ss = &mpc_softstate;
+	struct mpc_unit        *unit;
+	enum mpool_rc           rcode;
+	struct device          *device;
+	merr_t                  err;
 
 	if (!ss || !uinfo || !name || !name[0] || !cfg || !cmn)
 		return merr(EINVAL);
@@ -836,7 +831,7 @@ mpc_unit_setup(
 	 * handling beyond this point must route through the errout label
 	 * to ensure the unit is fully destroyed.
 	 */
-	err = mpc_unit_create(ss, name, mpool, &unit);
+	err = mpc_unit_create(name, mpool, &unit);
 	if (err)
 		return err;
 
@@ -1597,21 +1592,21 @@ static void mpc_bdi_free(void)
  */
 static int mpc_open(struct inode *ip, struct file *fp)
 {
-	struct mpc_softstate       *ss;
-	struct mpc_unit            *unit;
+	struct mpc_softstate   *ss;
+	struct mpc_unit        *unit;
 
 	bool    firstopen;
 	merr_t  err = 0;
 	int     rc;
 
-	ss = mpc_softstate_cdev2ss(ip->i_cdev);
-	if (!ss)
+	ss = mpc_cdev2ss(ip->i_cdev);
+	if (!ss || ss != &mpc_softstate)
 		return -EBADFD;
 
 	/* Acquire a reference on the unit object.  We'll release it
 	 * in mpc_release().
 	 */
-	mpc_unit_lookup(ss, iminor(fp->f_inode), &unit);
+	mpc_unit_lookup(iminor(fp->f_inode), &unit);
 	if (!unit)
 		return -ENODEV;
 
@@ -1930,8 +1925,8 @@ static merr_t mpc_mp_chown(struct mpc_unit *unit, struct mpool_params *params)
 static merr_t
 mpioc_params_get(struct mpc_unit *unit, uint cmd, struct mpioc_params *get)
 {
+	struct mpc_softstate       *ss = &mpc_softstate;
 	struct mpool_descriptor    *desc;
-	struct mpc_softstate       *ss;
 	struct mpool_params        *params;
 	struct mpool_xprops         xprops = { };
 	u8                          mclass;
@@ -1939,7 +1934,6 @@ mpioc_params_get(struct mpc_unit *unit, uint cmd, struct mpioc_params *get)
 	if (!mpc_unit_ismpooldev(unit))
 		return merr(EINVAL);
 
-	ss = unit->un_ss;
 	desc = unit->un_mpool->mp_desc;
 
 	mutex_lock(&ss->ss_lock);
@@ -1992,8 +1986,8 @@ mpioc_params_get(struct mpc_unit *unit, uint cmd, struct mpioc_params *get)
 static merr_t
 mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_params *set)
 {
+	struct mpc_softstate       *ss = &mpc_softstate;
 	struct mpool_descriptor    *mp;
-	struct mpc_softstate       *ss;
 	struct mpool_params        *params;
 	struct mpioc_cmn           *cmn;
 
@@ -2004,7 +1998,6 @@ mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_params *set)
 	if (!mpc_unit_ismpooldev(unit))
 		return merr(EINVAL);
 
-	ss = unit->un_ss;
 	cmn = &set->mps_cmn;
 	params = &set->mps_params;
 
@@ -2196,11 +2189,11 @@ mpioc_mp_create(
 	struct pd_prop       *pd_prop,
 	char               ***dpathv)
 {
+	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpool_config     cfg = { };
 	struct mpool_devrpt    *devrpt;
 	struct mpcore_params    mpc_params;
 	struct mpool_mdparm     mdparm;
-	struct mpc_softstate   *ss;
 	struct mpc_unit        *mpool_unit = NULL;
 	struct mpc_mpool       *mpool      = NULL;
 	size_t                  len;
@@ -2265,15 +2258,13 @@ mpioc_mp_create(
 		return err;
 	}
 
-	ss = ctl->un_ss;
-
 	/*
 	 * Create an mpc_mpool object through which we can (re)open and manage
 	 * the mpool.  If successful, mpc_mpool_open() adopts dpathv.
 	 */
 	mpool_params_merge_defaults(&mp->mp_params);
 
-	err = mpc_mpool_open(ss, mp->mp_dpathc, *dpathv,
+	err = mpc_mpool_open(mp->mp_dpathc, *dpathv,
 			     &mpool, &mp->mp_devrpt, pd_prop,
 			     &mp->mp_params, mp->mp_flags);
 	if (err) {
@@ -2309,9 +2300,8 @@ mpioc_mp_create(
 		goto errout;
 	}
 
-	err = mpc_unit_setup(ss, &mpc_uinfo_mpool,
-			     mp->mp_params.mp_name, &cfg,
-			     mpool, &mpool_unit, &mp->mp_cmn);
+	err = mpc_unit_setup(&mpc_uinfo_mpool, mp->mp_params.mp_name,
+			     &cfg, mpool, &mpool_unit, &mp->mp_cmn);
 	if (err) {
 		mp_pr_err("%s unit setup failed", err, mp->mp_params.mp_name);
 		goto errout;
@@ -2375,8 +2365,8 @@ mpioc_mp_activate(
 	struct pd_prop       *pd_prop,
 	char               ***dpathv)
 {
+	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpool_config     cfg;
-	struct mpc_softstate   *ss;
 	struct mpc_mpool       *mpool      = NULL;
 	struct mpc_unit        *mpool_unit = NULL;
 	struct mpool_devrpt    *devrpt;
@@ -2401,8 +2391,8 @@ mpioc_mp_activate(
 	 * Create an mpc_mpool object through which we can (re)open and manage
 	 * the mpool.  If successful, mpc_mpool_open() adopts dpathv.
 	 */
-	err = mpc_mpool_open(ctl->un_ss, mp->mp_dpathc,
-			     *dpathv, &mpool, &mp->mp_devrpt, pd_prop,
+	err = mpc_mpool_open(mp->mp_dpathc, *dpathv,
+			     &mpool, &mp->mp_devrpt, pd_prop,
 			     &mp->mp_params, mp->mp_flags);
 	if (err) {
 		if (mp->mp_devrpt.mdr_off == -1)
@@ -2422,9 +2412,8 @@ mpioc_mp_activate(
 	if (mpool_params_merge_config(&mp->mp_params, &cfg))
 		mpool_config_store(mpool->mp_desc, &cfg);
 
-	err = mpc_unit_setup(ctl->un_ss, &mpc_uinfo_mpool,
-			     mp->mp_params.mp_name, &cfg,
-			     mpool, &mpool_unit, &mp->mp_cmn);
+	err = mpc_unit_setup(&mpc_uinfo_mpool, mp->mp_params.mp_name,
+			     &cfg, mpool, &mpool_unit, &mp->mp_cmn);
 	if (err) {
 		mp_pr_err("%s unit setup failed", err, mp->mp_params.mp_name);
 		goto errout;
@@ -2452,8 +2441,6 @@ mpioc_mp_activate(
 		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
 		goto errout;
 	}
-
-	ss = ctl->un_ss;
 
 	mutex_lock(&ss->ss_lock);
 	idr_replace(&ss->ss_unitmap, mpool_unit, MINOR(mpool_unit->un_devno));
@@ -2485,8 +2472,8 @@ mp_deactivate_impl(
 	struct mpioc_mpool *mp,
 	bool                locked)
 {
-	struct mpc_softstate    *ss;
-	struct mpc_unit         *unit = NULL;
+	struct mpc_softstate   *ss = &mpc_softstate;
+	struct mpc_unit        *unit = NULL;
 
 	merr_t  err = 0;
 	size_t  len;
@@ -2502,7 +2489,6 @@ mp_deactivate_impl(
 	if (len < 1 || len >= MPOOL_NAMESZ_MAX)
 		return merr(len < 1 ? EINVAL : ENAMETOOLONG);
 
-	ss = ctl->un_ss;
 	if (!locked) {
 		rc = down_interruptible(&ss->ss_op_sema);
 		if (rc)
@@ -2555,7 +2541,7 @@ mpioc_mp_deactivate(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 static merr_t
 mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 {
-	struct mpc_softstate   *ss;
+	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpc_unit        *mpool_unit = NULL;
 	struct pd_prop         *pd_prop    = NULL;
 	char                  **dpathv     = NULL;
@@ -2616,7 +2602,6 @@ mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 	if (ev(mp->mp_dpathssz > (mp->mp_dpathc + 1) * PATH_MAX))
 		return merr(EINVAL);
 
-	ss = ctl->un_ss;
 	rc = down_interruptible(&ss->ss_op_sema);
 	if (rc)
 		return merr(rc);
@@ -2877,7 +2862,7 @@ mpioc_proplist_get(struct mpc_unit *unit, uint cmd, struct mpioc_list *ls)
 	if (!ls || ls->ls_listc < 1 || ls->ls_cmd == MPIOC_LIST_CMD_INVALID)
 		return merr(EINVAL);
 
-	mpc_unit_iterate(unit->un_ss, mpioc_proplist_get_itercb, argv);
+	mpc_unit_iterate(mpioc_proplist_get_itercb, argv);
 
 	ls->ls_listc = cnt;
 
@@ -3434,7 +3419,7 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 	idr_preload(GFP_KERNEL);
 
 	spin_lock(&mm->mm_rgnlock);
-	meta->mcm_rgn = idr_alloc(&mm->mm_rgnmap, NULL, 1, -1, GFP_ATOMIC);
+	meta->mcm_rgn = idr_alloc(&mm->mm_rgnmap, NULL, 1, -1, GFP_NOWAIT);
 	if (meta->mcm_rgn < 1) {
 		spin_unlock(&mm->mm_rgnlock);
 
@@ -4107,10 +4092,10 @@ static int mpc_exit_unit(int minor, void *item, void *arg)
  */
 static void mpc_exit_impl(void)
 {
-	struct mpc_softstate   *ss = mpc_softstate;
+	struct mpc_softstate   *ss = &mpc_softstate;
 	int                     i;
 
-	if (ss) {
+	if (ss->ss_inited) {
 		idr_for_each(&ss->ss_unitmap, mpc_exit_unit, NULL);
 
 		if (ss->ss_devno != NODEV) {
@@ -4119,12 +4104,12 @@ static void mpc_exit_impl(void)
 					cdev_del(&ss->ss_cdev);
 				class_destroy(ss->ss_class);
 			}
-			unregister_chrdev_region(ss->ss_devno, ss->ss_maxunits);
+			unregister_chrdev_region(ss->ss_devno, mpc_maxunits);
 		}
 
 		if (ss->ss_mpcore_inited)
 			mpcore_fini();
-		kfree(ss);
+		ss->ss_inited = false;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
@@ -4151,22 +4136,19 @@ static void mpc_exit_impl(void)
  */
 static __init int mpc_init(void)
 {
+	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpioc_cmn        cmn = { };
 	struct mpool_config     cfg = { };
-	struct mpc_softstate   *ss;
 	struct mpc_unit        *ctlunit;
-	struct device          *device;
 	const char             *errmsg;
 	size_t                  sz;
 	merr_t                  err;
 	int                     rc, i;
 
-	if (mpc_softstate)
+	if (ss->ss_inited)
 		return -EBUSY;
 
 	ctlunit = NULL;
-	device = NULL;
-	ss = NULL;
 
 	evc_init();
 
@@ -4239,13 +4221,6 @@ static __init int mpc_init(void)
 		}
 	}
 
-	ss = kzalloc(sizeof(*ss), GFP_KERNEL);
-	if (!ss) {
-		errmsg = "cannot allocate softstate";
-		err = merr(ENOMEM);
-		goto errout;
-	}
-
 	cdev_init(&ss->ss_cdev, &mpc_fops_default);
 	ss->ss_cdev.owner = THIS_MODULE;
 
@@ -4254,9 +4229,7 @@ static __init int mpc_init(void)
 	ss->ss_class = NULL;
 	ss->ss_devno = NODEV;
 	sema_init(&ss->ss_op_sema, 1);
-	ss->ss_maxunits = mpc_maxunits;
-
-	mpc_softstate = ss;
+	ss->ss_inited = true;
 
 	rc = mpcore_init();
 	if (rc) {
@@ -4267,7 +4240,7 @@ static __init int mpc_init(void)
 
 	ss->ss_mpcore_inited = true;
 
-	rc = alloc_chrdev_region(&ss->ss_devno, 0, ss->ss_maxunits, "mpool");
+	rc = alloc_chrdev_region(&ss->ss_devno, 0, mpc_maxunits, "mpool");
 	if (rc) {
 		errmsg = "cannot allocate control device major";
 		ss->ss_devno = NODEV;
@@ -4286,7 +4259,7 @@ static __init int mpc_init(void)
 
 	ss->ss_class->dev_uevent = mpc_uevent;
 
-	rc = cdev_add(&ss->ss_cdev, ss->ss_devno, ss->ss_maxunits);
+	rc = cdev_add(&ss->ss_cdev, ss->ss_devno, mpc_maxunits);
 	if (rc) {
 		errmsg = "cdev_add() failed";
 		ss->ss_cdev.ops = NULL;
@@ -4298,7 +4271,7 @@ static __init int mpc_init(void)
 	cfg.mc_gid = mpc_ctl_gid;
 	cfg.mc_mode = mpc_ctl_mode;
 
-	err = mpc_unit_setup(ss, &mpc_uinfo_ctl, MPC_DEV_CTLNAME,
+	err = mpc_unit_setup(&mpc_uinfo_ctl, MPC_DEV_CTLNAME,
 			     &cfg, NULL, &ctlunit, &cmn);
 	if (err) {
 		errmsg = "cannot create control device";
