@@ -35,22 +35,17 @@ struct bio_set mpool_bioset;
 struct bio_set *mpool_bioset;
 #endif
 
-static atomic_t mpool_mod_refcnt;
-
-int mpool_mod_init(void)
+int mpcore_init(void)
 {
 	const char *algo = "crc32c";
 	merr_t      err;
 	int         rc = 0;
 
-	if (atomic_inc_return(&mpool_mod_refcnt) > 1)
-		return 0;
-
 	mpool_tfm = crypto_alloc_shash(algo, 0, 0);
 	if (!mpool_tfm) {
 		err = merr(ENOMEM);
 		mp_pr_err("crypto_alloc_shash(%s) failed", err, algo);
-		mpool_mod_exit();
+		mpcore_fini();
 		return -merr_errno(err);
 	}
 
@@ -67,7 +62,7 @@ int mpool_mod_init(void)
 		err = merr(ENOMEM);
 		mp_pr_err("kmem_cache_create(pmd_layout, %zu) failed",
 			  err, sizeof(struct pmd_layout));
-		mpool_mod_exit();
+		mpcore_fini();
 		return -merr_errno(err);
 	}
 
@@ -80,7 +75,7 @@ int mpool_mod_init(void)
 		err = merr(ENOMEM);
 		mp_pr_err("kmem_cache_create(pmd priv, %zu) failed",
 			  err, sizeof(union pmd_layout_priv));
-		mpool_mod_exit();
+		mpcore_fini();
 		return -merr_errno(err);
 	}
 
@@ -93,7 +88,7 @@ int mpool_mod_init(void)
 		err = merr(ENOMEM);
 		mp_pr_err("kmem_cache_create(smap_zone, %zu) failed",
 			  err, sizeof(struct smap_zone));
-		mpool_mod_exit();
+		mpcore_fini();
 		return -merr_errno(err);
 	}
 
@@ -106,7 +101,7 @@ int mpool_mod_init(void)
 		err = merr(ENOMEM);
 		mp_pr_err("kmem_cache_create(pmd_obj_erase, %zu) failed",
 			  err, sizeof(struct pmd_obj_erase_work));
-		mpool_mod_exit();
+		mpcore_fini();
 		return -merr_errno(ENOMEM);
 	}
 
@@ -127,21 +122,15 @@ int mpool_mod_init(void)
 	if (rc) {
 		err = merr(rc);
 		mp_pr_err("mpool bioset init failed", err);
-		mpool_mod_exit();
+		mpcore_fini();
 		return rc;
 	}
 
 	return 0;
 }
 
-void mpool_mod_exit(void)
+void mpcore_fini(void)
 {
-	assert(atomic_read(&mpool_mod_refcnt) > 0);
-
-	if (atomic_dec_return(&mpool_mod_refcnt) > 0)
-		return;
-
-	/* Destroy the slab caches. */
 	kmem_cache_destroy(pmd_obj_erase_work_cache);
 	kmem_cache_destroy(pmd_layout_priv_cache);
 	kmem_cache_destroy(pmd_layout_cache);
@@ -160,5 +149,4 @@ void mpool_mod_exit(void)
 #else
 	bioset_free(mpool_bioset);
 #endif
-
 }

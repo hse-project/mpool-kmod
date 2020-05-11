@@ -67,13 +67,14 @@ struct mpc_mpool;
 /* mpc pseudo-driver instance data (i.e., all globals live here).
  */
 struct mpc_softstate {
+	struct mutex        ss_lock;        /* Protects ss_units */
+	struct idr          ss_unitmap;     /* minor-to-unit map */
 	dev_t               ss_devno;       /* Control device devno */
-	struct cdev         ss_cdev;
+	uint                ss_maxunits;    /* Max mpool devices */
 	struct semaphore    ss_op_sema;     /* Serialize mgmt. ops */
+	struct cdev         ss_cdev;
 	struct class       *ss_class;
-	uint                ss_units_max;   /* Max mpool devices */
-	struct mutex        ss_lock;        /* Protects unitv[], wq */
-	struct mpc_unit    *ss_unitv[];     /* Flexible array!!! */
+	bool                ss_mpcore_inited;
 };
 
 /* Unit-type specific information.
@@ -97,7 +98,6 @@ struct mpc_unit {
 	uid_t                       un_uid;
 	gid_t                       un_gid;
 	mode_t                      un_mode;
-	bool                        un_transient;
 	const struct mpc_uinfo     *un_uinfo;
 	struct mpc_mpool           *un_mpool;
 	struct mpc_metamap         *un_metamap;
@@ -187,10 +187,10 @@ mpc_physio(
 
 static int mpc_readpage_impl(struct page *page, struct mpc_vma *map);
 
+#define ITERCB_NEXT     (0)
 #define ITERCB_DONE     (1)
-#define ITERCB_NEXT     (2)
 
-typedef int mpc_unit_itercb_t(struct mpc_unit *unit, void *arg);
+typedef int mpc_unit_itercb_t(int minor, void *item, void *arg);
 
 
 /* The following structures are initialized at the end of this file.
@@ -252,9 +252,9 @@ static unsigned int mpc_default_mode __read_mostly = 0660;
 module_param(mpc_default_mode, uint, 0644);
 MODULE_PARM_DESC(mpc_default_mode, " default mpool device mode");
 
-static unsigned int mpc_units_max __read_mostly = 1024;
-module_param(mpc_units_max, uint, 0444);
-MODULE_PARM_DESC(mpc_units_max, " max mpools");
+static unsigned int mpc_maxunits __read_mostly = 1024;
+module_param(mpc_maxunits, uint, 0444);
+MODULE_PARM_DESC(mpc_maxunits, " max mpools");
 
 static unsigned int mpc_vma_max __read_mostly = 1048576 * 128;
 module_param(mpc_vma_max, uint, 0444);
@@ -575,9 +575,10 @@ mpc_mpool_open(
  * @mpool:        mpool ptr
  * @unitp:        unit ptr
  *
- * Create a unit object and install a ptr to it in the units table, thereby
- * reserving a minor number.  The unit cannot be found by any of the lookup
- * routines until it leaves transient mode.
+ * Create a unit object and install a NULL ptr for it in the units map,
+ * thereby reserving a minor number.  The unit cannot be found by any
+ * of the lookup routines until the NULL ptr is replaced by the actual
+ * ptr to the unit.
  *
  * A unit maps an mpool device (.e.g., /dev/mpool/foo)  to an mpool object
  * created by mpool_create().
@@ -597,9 +598,8 @@ mpc_unit_create(
 {
 	struct mpc_unit    *unit;
 	size_t              unitsz;
-	uint                minor;
+	int                 minor;
 	merr_t              err;
-	uint                i;
 
 	if (!ss || !name || !unitp)
 		return merr(EINVAL);
@@ -610,47 +610,29 @@ mpc_unit_create(
 	if (!unit)
 		return merr(ENOMEM);
 
-	err = 0;
-	minor = UINT_MAX;
 	strcpy(unit->un_name, name);
 
 	sema_init(&unit->un_open_lock, 1);
 	unit->un_open_excl = false;
 	unit->un_open_cnt = 0;
-	unit->un_transient = true;
 	unit->un_devno = NODEV;
 	kref_init(&unit->un_ref);
 	kref_get(&unit->un_ref);
 	unit->un_ss = ss;
 	unit->un_mpool = mpool;
 
+	err = 0;
+
+	/* Check to see if the desired name is in use.
+	 */
 	mutex_lock(&ss->ss_lock);
-	for (i = 0; i < ss->ss_units_max; ++i) {
-		if (!ss->ss_unitv[i]) {
-			if (minor == UINT_MAX)
-				minor = i;
-			continue;
-		}
-
-		/* Check to see if the desired name is in use.
-		 */
-		if (strcmp(ss->ss_unitv[i]->un_name, name) == 0) {
-			err = merr(EEXIST);
-			minor = UINT_MAX;
-			break;
-		}
-	}
-
-	if (minor < UINT_MAX) {
+	minor = idr_alloc(&ss->ss_unitmap, NULL, 0, -1, GFP_KERNEL);
+	if (minor >= 0)
 		unit->un_devno = MKDEV(MAJOR(ss->ss_cdev.dev), minor);
-		ss->ss_unitv[minor] = unit;
-	}
 	mutex_unlock(&ss->ss_lock);
 
-	if (minor == UINT_MAX)
-		err = err ?: merr(ENFILE);
-
-	if (err) {
+	if (minor < 0) {
+		err = merr(minor);
 		kfree(unit);
 		unit = NULL;
 	}
@@ -672,7 +654,7 @@ static void mpc_unit_destroy(struct kref *refp)
 	struct mpc_softstate *ss = unit->un_ss;
 
 	mutex_lock(&ss->ss_lock);
-	ss->ss_unitv[MINOR(unit->un_devno)] = NULL;
+	idr_remove(&ss->ss_unitmap, MINOR(unit->un_devno));
 	mutex_unlock(&ss->ss_lock);
 
 	if (unit->un_mpool)
@@ -687,7 +669,6 @@ static void mpc_unit_destroy(struct kref *refp)
 /**
  * mpc_unit_iterate() - Iterate over all active unit objects
  * @ss:     driver softstate
- * @atomic: if true, keep unit table locked over entire iteration
  * @func:   function to call on each iteration
  * @arg:    arg to supply to func()
  *
@@ -700,34 +681,11 @@ static void mpc_unit_destroy(struct kref *refp)
 static void
 mpc_unit_iterate(
 	struct mpc_softstate   *ss,
-	bool                    atomic,
 	mpc_unit_itercb_t      *func,
 	void                   *arg)
 {
-	int     rc, i;
-
 	mutex_lock(&ss->ss_lock);
-	for (i = 0; i < ss->ss_units_max; ++i) {
-		struct mpc_unit *unit = ss->ss_unitv[i];
-
-		if (!unit || unit->un_transient)
-			continue;
-
-		if (!atomic) {
-			kref_get(&unit->un_ref);
-			mutex_unlock(&ss->ss_lock);
-		}
-
-		rc = func(unit, arg);
-
-		if (!atomic) {
-			mutex_lock(&ss->ss_lock);
-			kref_put(&unit->un_ref, mpc_unit_destroy);
-		}
-
-		if (rc == ITERCB_DONE)
-			break;
-	}
+	idr_for_each(&ss->ss_unitmap, func, arg);
 	mutex_unlock(&ss->ss_lock);
 }
 
@@ -741,25 +699,24 @@ mpc_unit_iterate(
  * otherwise it sets *unitp to NULL.
  */
 static void
-mpc_unit_lookup(struct mpc_softstate *ss, uint minor, struct mpc_unit **unitp)
+mpc_unit_lookup(struct mpc_softstate *ss, int minor, struct mpc_unit **unitp)
 {
+	struct mpc_unit *unit;
+
 	*unitp = NULL;
 
 	mutex_lock(&ss->ss_lock);
-	if (minor < ss->ss_units_max) {
-		struct mpc_unit *unit = ss->ss_unitv[minor];
-
-		if (unit && !unit->un_transient) {
-			kref_get(&unit->un_ref);
-			*unitp = unit;
-		}
+	unit = idr_find(&ss->ss_unitmap, minor);
+	if (unit) {
+		kref_get(&unit->un_ref);
+		*unitp = unit;
 	}
 	mutex_unlock(&ss->ss_lock);
 }
 
 /**
  * mpc_unit_lookup_by_name_itercb() - Test to see if unit matches arg.
- * @unit:   unit ptr
+ * @item:   unit ptr
  * @arg:    argument vector base ptr
  *
  * This iterator callback is called by mpc_unit_iterate() on behalf
@@ -768,11 +725,15 @@ mpc_unit_lookup(struct mpc_softstate *ss, uint minor, struct mpc_unit **unitp)
  * Return:  Returns ITERCB_DONE if unit matches args.
  *          Returns ITERCB_NEXT if unit does not match args.
  */
-static int mpc_unit_lookup_by_name_itercb(struct mpc_unit *unit, void *arg)
+static int mpc_unit_lookup_by_name_itercb(int minor, void *item, void *arg)
 {
+	struct mpc_unit    *unit = item;
 	void              **argv = arg;
 	struct mpc_unit    *parent = argv[0];
 	const char         *name = argv[1];
+
+	if (!unit)
+		return ITERCB_NEXT;
 
 	if (mpc_unit_isctldev(parent) && !mpc_unit_ismpooldev(unit))
 		return ITERCB_NEXT;
@@ -807,8 +768,7 @@ mpc_unit_lookup_by_name(
 {
 	void   *argv[] = { parent, (void *)name, NULL };
 
-	mpc_unit_iterate(parent->un_ss, 1, mpc_unit_lookup_by_name_itercb,
-			 argv);
+	mpc_unit_iterate(parent->un_ss, mpc_unit_lookup_by_name_itercb, argv);
 
 	*unitp = argv[2];
 }
@@ -2236,17 +2196,18 @@ mpioc_mp_create(
 	struct pd_prop       *pd_prop,
 	char               ***dpathv)
 {
-	struct mpool_config          cfg = { };
-	struct mpool_devrpt         *devrpt;
-	struct mpcore_params         mpc_params;
-	struct mpool_mdparm          mdparm;
-	struct mpc_unit             *mpool_unit = NULL;
-	struct mpc_mpool            *mpool      = NULL;
-	size_t                       len;
-	merr_t                       err;
-	mode_t                       mode;
-	uid_t                        uid;
-	gid_t                        gid;
+	struct mpool_config     cfg = { };
+	struct mpool_devrpt    *devrpt;
+	struct mpcore_params    mpc_params;
+	struct mpool_mdparm     mdparm;
+	struct mpc_softstate   *ss;
+	struct mpc_unit        *mpool_unit = NULL;
+	struct mpc_mpool       *mpool      = NULL;
+	size_t                  len;
+	merr_t                  err;
+	mode_t                  mode;
+	uid_t                   uid;
+	gid_t                   gid;
 
 	if (!ctl || !mp || !pd_prop || !dpathv)
 		return merr(EINVAL);
@@ -2304,14 +2265,16 @@ mpioc_mp_create(
 		return err;
 	}
 
+	ss = ctl->un_ss;
+
 	/*
 	 * Create an mpc_mpool object through which we can (re)open and manage
 	 * the mpool.  If successful, mpc_mpool_open() adopts dpathv.
 	 */
 	mpool_params_merge_defaults(&mp->mp_params);
 
-	err = mpc_mpool_open(ctl->un_ss, mp->mp_dpathc,
-			     *dpathv, &mpool, &mp->mp_devrpt, pd_prop,
+	err = mpc_mpool_open(ss, mp->mp_dpathc, *dpathv,
+			     &mpool, &mp->mp_devrpt, pd_prop,
 			     &mp->mp_params, mp->mp_flags);
 	if (err) {
 		if (mp->mp_devrpt.mdr_off == -1)
@@ -2346,7 +2309,7 @@ mpioc_mp_create(
 		goto errout;
 	}
 
-	err = mpc_unit_setup(ctl->un_ss, &mpc_uinfo_mpool,
+	err = mpc_unit_setup(ss, &mpc_uinfo_mpool,
 			     mp->mp_params.mp_name, &cfg,
 			     mpool, &mpool_unit, &mp->mp_cmn);
 	if (err) {
@@ -2371,9 +2334,9 @@ mpioc_mp_create(
 		goto errout;
 	}
 
-	mutex_lock(&ctl->un_ss->ss_lock);
-	mpool_unit->un_transient = false;
-	mutex_unlock(&ctl->un_ss->ss_lock);
+	mutex_lock(&ss->ss_lock);
+	idr_replace(&ss->ss_unitmap, mpool_unit, MINOR(mpool_unit->un_devno));
+	mutex_unlock(&ss->ss_lock);
 
 	mpool = NULL;
 
@@ -2413,6 +2376,7 @@ mpioc_mp_activate(
 	char               ***dpathv)
 {
 	struct mpool_config     cfg;
+	struct mpc_softstate   *ss;
 	struct mpc_mpool       *mpool      = NULL;
 	struct mpc_unit        *mpool_unit = NULL;
 	struct mpool_devrpt    *devrpt;
@@ -2489,9 +2453,11 @@ mpioc_mp_activate(
 		goto errout;
 	}
 
-	mutex_lock(&ctl->un_ss->ss_lock);
-	mpool_unit->un_transient = false;
-	mutex_unlock(&ctl->un_ss->ss_lock);
+	ss = ctl->un_ss;
+
+	mutex_lock(&ss->ss_lock);
+	idr_replace(&ss->ss_unitmap, mpool_unit, MINOR(mpool_unit->un_devno));
+	mutex_unlock(&ss->ss_lock);
 
 	mpool = NULL;
 
@@ -2520,12 +2486,11 @@ mp_deactivate_impl(
 	bool                locked)
 {
 	struct mpc_softstate    *ss;
-	struct mpc_unit        **unitv;
-	struct mpc_unit         *mpunit = NULL;
+	struct mpc_unit         *unit = NULL;
 
-	int     unitc, i, rc;
 	merr_t  err = 0;
 	size_t  len;
+	int     rc;
 
 	if (!ctl || !mp)
 		return merr(EINVAL);
@@ -2537,89 +2502,46 @@ mp_deactivate_impl(
 	if (len < 1 || len >= MPOOL_NAMESZ_MAX)
 		return merr(len < 1 ? EINVAL : ENAMETOOLONG);
 
-	unitv = kmalloc_array(mpc_units_max, sizeof(*unitv), GFP_KERNEL);
-	if (!unitv)
-		return merr(ENOMEM);
-
 	ss = ctl->un_ss;
 	if (!locked) {
 		rc = down_interruptible(&ss->ss_op_sema);
-		if (rc) {
-			kfree(unitv);
+		if (rc)
 			return merr(rc);
-		}
 	}
 
-	mpc_unit_lookup_by_name(ctl, mp->mp_params.mp_name, &mpunit);
-	if (!mpunit) {
+	mpc_unit_lookup_by_name(ctl, mp->mp_params.mp_name, &unit);
+	if (!unit) {
 		err = merr(ENXIO);
-		goto err_exit;
+		goto errout;
 	}
 
-	unitc = 0;
-	err = 0;
-
-	/* The following loop builds a list of all the units in the given
-	 * mpool.  If they all appear to be idle, then they all are removed
-	 * from the units table and released.  If any one appears to be in
-	 * use, then no state changes occur and we simply return an error.
-	 *
-	 * In order to be determined idle, a unit shall not be open nor in
-	 * a transient state, and shall have a ref count no greater than
-	 * one, with the following exceptions:
-	 *
-	 * - An idle mpool unit will have an additional reference because
-	 * we acquired one via mpc_unit_lookup_by_name() (above).
+	/* In order to be determined idle, a unit shall not be open
+	 * and shall have a ref count of exactly two (the birth ref
+	 * and the lookup ref from above).
 	 */
 	mutex_lock(&ss->ss_lock);
-	for (i = ss->ss_units_max - 1; i >= 0; --i) {
-		struct mpc_unit    *un = ss->ss_unitv[i];
-		int                 reftgt = 1;
-
-		if (!un || un->un_mpool != mpunit->un_mpool)
-			continue;
-
-		if (mpc_unit_ismpooldev(un))
-			++reftgt;
-
-		/* If the unit is not idle we set unitc to zero to prevent
-		 * the ensuing loops from making any state changes.
-		 */
-		if (un->un_open_cnt > 0 || kref_read(&un->un_ref) > reftgt ||
-		    un->un_transient) {
-			mpc_errinfo(&mp->mp_cmn, MPOOL_RC_STAT, un->un_name);
-			err = merr(EBUSY);
-			unitc = 0;
-			break;
-		}
-
-		un->un_transient = true;
-		unitv[unitc++] = un;
+	if (unit->un_open_cnt > 0 || kref_read(&unit->un_ref) != 2) {
+		mpc_errinfo(&mp->mp_cmn, MPOOL_RC_STAT, unit->un_name);
+		err = merr(EBUSY);
+	} else {
+		idr_replace(&ss->ss_unitmap, NULL, MINOR(unit->un_devno));
+		err = 0;
 	}
-
-	for (i = 0; i < unitc; ++i)
-		ss->ss_unitv[MINOR(unitv[i]->un_devno)] = NULL;
 	mutex_unlock(&ss->ss_lock);
 
-	/* Release birth ref. */
-	for (i = 0; i < unitc; ++i)
-		kref_put(&unitv[i]->un_ref, mpc_unit_destroy);
+	if (!err) {
+		mpc_params_unregister(unit);
 
-	dev_dbg(mpunit->un_device,
-		"mpool %s deactivated, %d units",
-		mp->mp_params.mp_name, unitc);
-
-	if (!err)
-		mpc_params_unregister(mpunit);
+		/* Release birth ref. */
+		kref_put(&unit->un_ref, mpc_unit_destroy);
+	}
 
 	/* Release lookup ref. */
-	kref_put(&mpunit->un_ref, mpc_unit_destroy);
+	kref_put(&unit->un_ref, mpc_unit_destroy);
 
-err_exit:
+errout:
 	if (!locked)
 		up(&ss->ss_op_sema);
-
-	kfree(unitv);
 
 	return err;
 }
@@ -2883,7 +2805,7 @@ mpioc_devprops_get(struct mpc_unit *unit, struct mpioc_devprops *devprops)
 
 /**
  * mpioc_proplist_get_itercb() - Get properties iterator callback.
- * @unit:   mpool or dataset unit ptr
+ * @item:   unit ptr
  * @arg:    argument list
  *
  * Return:  Returns ITERCB_DONE when the iteratior is complete or an
@@ -2891,14 +2813,18 @@ mpioc_devprops_get(struct mpc_unit *unit, struct mpioc_devprops *devprops)
  *          Returns ITERCB_NEXT to continue the iteration.
  */
 static int
-mpioc_proplist_get_itercb(struct mpc_unit *unit, void *arg)
+mpioc_proplist_get_itercb(int minor, void *item, void *arg)
 {
+	struct mpc_unit    *unit = item;
 	struct mpioc_prop  *uprop, kprop;
 	struct mpc_unit    *match;
 	struct mpioc_list  *ls;
 	void              **argv = arg;
 	int                *cntp, rc;
 	merr_t             *errp;
+
+	if (!unit)
+		return ITERCB_NEXT;
 
 	match = argv[0];
 	ls = argv[1];
@@ -2951,7 +2877,7 @@ mpioc_proplist_get(struct mpc_unit *unit, uint cmd, struct mpioc_list *ls)
 	if (!ls || ls->ls_listc < 1 || ls->ls_cmd == MPIOC_LIST_CMD_INVALID)
 		return merr(EINVAL);
 
-	mpc_unit_iterate(unit->un_ss, 0, mpioc_proplist_get_itercb, argv);
+	mpc_unit_iterate(unit->un_ss, mpioc_proplist_get_itercb, argv);
 
 	ls->ls_listc = cnt;
 
@@ -4165,6 +4091,60 @@ void mpool_meminfo(ulong *freep, ulong *availp, uint shift)
 		*availp = (si_mem_available() * si.mem_unit) >> shift;
 }
 
+static int mpc_exit_unit(int minor, void *item, void *arg)
+{
+	struct mpc_unit *unit = item;
+
+	if (unit)
+		kref_put(&unit->un_ref, mpc_unit_destroy);
+
+	return 0;
+}
+
+/**
+ * mpc_exit_impl() - Tear down and unload the mpool control module.
+ *
+ */
+static void mpc_exit_impl(void)
+{
+	struct mpc_softstate   *ss = mpc_softstate;
+	int                     i;
+
+	if (ss) {
+		idr_for_each(&ss->ss_unitmap, mpc_exit_unit, NULL);
+
+		if (ss->ss_devno != NODEV) {
+			if (ss->ss_class) {
+				if (ss->ss_cdev.ops)
+					cdev_del(&ss->ss_cdev);
+				class_destroy(ss->ss_class);
+			}
+			unregister_chrdev_region(ss->ss_devno, ss->ss_maxunits);
+		}
+
+		if (ss->ss_mpcore_inited)
+			mpcore_fini();
+		kfree(ss);
+	}
+
+	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
+		destroy_workqueue(mpc_wq_rav[i]);
+		mpc_wq_rav[i] = NULL;
+	}
+
+	mpc_reap_destroy(mpc_reap);
+	destroy_workqueue(mpc_wq_trunc);
+	kmem_cache_destroy(mpc_vma_cache[1]);
+	kmem_cache_destroy(mpc_vma_cache[0]);
+	mpc_vcache_fini(&mpc_physio_vcache);
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+	mpc_bdi_free();
+#endif
+
+	evc_fini();
+}
+
 /**
  * mpc_init() - Load and initialize the mpool control module.
  *
@@ -4174,25 +4154,23 @@ static __init int mpc_init(void)
 	struct mpioc_cmn        cmn = { };
 	struct mpool_config     cfg = { };
 	struct mpc_softstate   *ss;
-	struct mpc_unit        *unit;
+	struct mpc_unit        *ctlunit;
 	struct device          *device;
 	const char             *errmsg;
-	bool                    modinit;
 	size_t                  sz;
 	merr_t                  err;
 	int                     rc, i;
 
-	modinit = false;
-	device = NULL;
-	unit = NULL;
-	ss = NULL;
-
 	if (mpc_softstate)
 		return -EBUSY;
 
+	ctlunit = NULL;
+	device = NULL;
+	ss = NULL;
+
 	evc_init();
 
-	mpc_units_max = clamp_t(uint, mpc_units_max, 8, 8192);
+	mpc_maxunits = clamp_t(uint, mpc_maxunits, 8, 8192);
 	mpc_vma_max = clamp_t(uint, mpc_vma_max, 1024, 1u << 30);
 	mpc_vma_size_max = clamp_t(ulong, mpc_vma_size_max, 27, 32);
 
@@ -4261,8 +4239,7 @@ static __init int mpc_init(void)
 		}
 	}
 
-	ss = kzalloc(sizeof(*ss) + sizeof(*ss->ss_unitv) * mpc_units_max,
-		     GFP_KERNEL);
+	ss = kzalloc(sizeof(*ss), GFP_KERNEL);
 	if (!ss) {
 		errmsg = "cannot allocate softstate";
 		err = merr(ENOMEM);
@@ -4272,21 +4249,25 @@ static __init int mpc_init(void)
 	cdev_init(&ss->ss_cdev, &mpc_fops_default);
 	ss->ss_cdev.owner = THIS_MODULE;
 
-	ss->ss_units_max = mpc_units_max;
 	mutex_init(&ss->ss_lock);
+	idr_init(&ss->ss_unitmap);
 	ss->ss_class = NULL;
 	ss->ss_devno = NODEV;
 	sema_init(&ss->ss_op_sema, 1);
+	ss->ss_maxunits = mpc_maxunits;
 
-	modinit = true;
-	rc = mpool_mod_init();
+	mpc_softstate = ss;
+
+	rc = mpcore_init();
 	if (rc) {
-		errmsg = "mpool_mod_init() failed";
+		errmsg = "mpcore_init() failed";
 		err = merr(rc);
 		goto errout;
 	}
 
-	rc = alloc_chrdev_region(&ss->ss_devno, 0, ss->ss_units_max, "mpool");
+	ss->ss_mpcore_inited = true;
+
+	rc = alloc_chrdev_region(&ss->ss_devno, 0, ss->ss_maxunits, "mpool");
 	if (rc) {
 		errmsg = "cannot allocate control device major";
 		ss->ss_devno = NODEV;
@@ -4305,7 +4286,7 @@ static __init int mpc_init(void)
 
 	ss->ss_class->dev_uevent = mpc_uevent;
 
-	rc = cdev_add(&ss->ss_cdev, ss->ss_devno, ss->ss_units_max);
+	rc = cdev_add(&ss->ss_cdev, ss->ss_devno, ss->ss_maxunits);
 	if (rc) {
 		errmsg = "cdev_add() failed";
 		ss->ss_cdev.ops = NULL;
@@ -4318,7 +4299,7 @@ static __init int mpc_init(void)
 	cfg.mc_mode = mpc_ctl_mode;
 
 	err = mpc_unit_setup(ss, &mpc_uinfo_ctl, MPC_DEV_CTLNAME,
-			     &cfg, NULL, &unit, &cmn);
+			     &cfg, NULL, &ctlunit, &cmn);
 	if (err) {
 		errmsg = "cannot create control device";
 		goto errout;
@@ -4328,108 +4309,31 @@ static __init int mpc_init(void)
 	rc = mpc_bdi_alloc();
 	if (ev(rc)) {
 		errmsg = "bdi alloc failed";
+		err = merr(rc);
 		goto errout;
 	}
 #endif
 
-	dev_info(unit->un_device, "%s", mpool_version);
-
-	mpc_softstate = ss;
+	dev_info(ctlunit->un_device, "%s", mpool_version);
 
 	mutex_lock(&ss->ss_lock);
-	unit->un_transient = false;
+	idr_replace(&ss->ss_unitmap, ctlunit, MINOR(ctlunit->un_devno));
 	mutex_unlock(&ss->ss_lock);
 
-	kref_put(&unit->un_ref, mpc_unit_destroy);
-
-	return 0;
+	kref_put(&ctlunit->un_ref, mpc_unit_destroy);
 
 errout:
-	mp_pr_err("%s", err, errmsg);
-
-	if (ss) {
-		if (ss->ss_devno != NODEV) {
-			if (ss->ss_class) {
-				if (ss->ss_cdev.ops)
-					cdev_del(&ss->ss_cdev);
-				class_destroy(ss->ss_class);
-			}
-			unregister_chrdev_region(ss->ss_devno,
-						 ss->ss_units_max);
-		}
-		if (modinit)
-			mpool_mod_exit();
-		kfree(ss);
+	if (err) {
+		mp_pr_err("%s", err, errmsg);
+		mpc_exit_impl();
 	}
-
-	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
-		destroy_workqueue(mpc_wq_rav[i]);
-		mpc_wq_rav[i] = NULL;
-	}
-
-	mpc_reap_destroy(mpc_reap);
-	mpc_reap = NULL;
-
-	destroy_workqueue(mpc_wq_trunc);
-	mpc_wq_trunc = NULL;
-
-	kmem_cache_destroy(mpc_vma_cache[1]);
-	mpc_vma_cache[1] = NULL;
-
-	kmem_cache_destroy(mpc_vma_cache[0]);
-	mpc_vma_cache[0] = NULL;
-
-	mpc_vcache_fini(&mpc_physio_vcache);
 
 	return -merr_errno(err);
 }
 
-/**
- * mpc_exit() - Tear down and unload the mpool control module.
- *
- */
 static __exit void mpc_exit(void)
 {
-	struct mpc_softstate   *ss;
-	int                     i;
-
-	ss = mpc_softstate;
-	if (ss) {
-		for (i = ss->ss_units_max - 1; i >= 0; --i) {
-			if (ss->ss_unitv[i])
-				kref_put(&ss->ss_unitv[i]->un_ref,
-					 mpc_unit_destroy);
-		}
-
-		cdev_del(&ss->ss_cdev);
-		class_destroy(ss->ss_class);
-		unregister_chrdev_region(ss->ss_devno, ss->ss_units_max);
-		mpool_mod_exit();
-		kfree(ss);
-	}
-
-	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
-		destroy_workqueue(mpc_wq_rav[i]);
-		mpc_wq_rav[i] = NULL;
-	}
-
-	mpc_reap_destroy(mpc_reap);
-	mpc_reap = NULL;
-
-	destroy_workqueue(mpc_wq_trunc);
-	mpc_wq_trunc = NULL;
-
-	kmem_cache_destroy(mpc_vma_cache[1]);
-	mpc_vma_cache[1] = NULL;
-
-	kmem_cache_destroy(mpc_vma_cache[0]);
-	mpc_vma_cache[0] = NULL;
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
-	mpc_bdi_free();
-#endif
-
-	evc_fini();
+	mpc_exit_impl();
 }
 
 static const struct file_operations mpc_fops_default = {

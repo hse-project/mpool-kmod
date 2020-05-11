@@ -29,17 +29,7 @@ extern struct bio_set mpool_bioset;
 extern struct bio_set *mpool_bioset;
 #endif
 
-/**
- * mpool_mod_init() - mpool module initialization function
- *
- * Return: 0 if successful, -(errno) otherwise
- */
-int mpool_mod_init(void);
-
-/**
- * mpool_mod_exit() - mpool module exit function
- *
- */
-void mpool_mod_exit(void);
+int mpcore_init(void);
+void mpcore_fini(void);
 
 #endif /* MPOOL_INIT_H */
