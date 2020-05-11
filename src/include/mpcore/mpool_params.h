@@ -8,7 +8,7 @@
 
 #include <mpcore/merr.h>
 
-#define MPOOL_MDC_SET_SZ          16
+#define MPOOL_MDC_SET_SZ                16
 
 /* Mpool metadata container compaction retries; keep relatively small */
 #define MPOOL_MDC_COMPACT_RETRY_DEFAULT 5
@@ -17,7 +17,7 @@
  * Space map allocation zones per drive; bounds number of concurrent obj
  * allocs
  */
-#define MPOOL_SMAP_RGNCNT_DEFAULT 4
+#define MPOOL_SMAP_RGNCNT_DEFAULT       4
 
 /*
  * Space map alignment in number of zones.
@@ -27,7 +27,7 @@
 /*
  * Number of concurent jobs for loading user MDC 1~N
  */
-#define MPOOL_OBJ_LOAD_JOBS_DEFAULT      4
+#define MPOOL_OBJ_LOAD_JOBS_DEFAULT     8
 
 /*
  * Defaults for MDC1/255 pre-compaction.

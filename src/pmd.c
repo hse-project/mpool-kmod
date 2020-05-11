@@ -11,6 +11,7 @@
  *
  */
 
+#include <linux/workqueue.h>
 #include <linux/log2.h>
 #include <linux/string.h>
 #include <linux/atomic.h>
@@ -1308,19 +1309,14 @@ static void pmd_objs_load_worker(struct work_struct *ws)
 
 	olw = container_of(ws, struct pmd_obj_load_work, olw_work);
 
-	while (1) {
-		if (*olw->olw_err)
-			break; /* Stop, another worker it an error */
-
+	while (!*olw->olw_err) {
 		sidx = atomic_fetch_add(1, olw->olw_progress);
 		if (sidx >= olw->olw_mp->pds_mda.mdi_slotvcnt)
 			break; /* No more MDCs to load */
 
 		err = pmd_objs_load(olw->olw_mp, sidx, &olw->olw_devrpt);
-		if (ev(err)) {
+		if (ev(err))
 			*olw->olw_err = err;
-			break;
-		}
 	}
 }
 
@@ -1341,7 +1337,7 @@ pmd_objs_load_parallel(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 	volatile merr_t             err = 0;
 
 	atomic_t    progress = ATOMIC_INIT(1);
-	uint        njobs, i;
+	uint        njobs, inc, cpu, i;
 
 	if (mp->pds_mda.mdi_slotvcnt < 2)
 		return 0; /* No user MDCs allocated */
@@ -1349,19 +1345,32 @@ pmd_objs_load_parallel(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 	njobs = mp->pds_params.mp_objloadjobs;
 	njobs = clamp_t(uint, njobs, 1, mp->pds_mda.mdi_slotvcnt - 1);
 
+	if (mp->pds_mda.mdi_slotvcnt / njobs >= 4 && num_online_cpus() > njobs)
+		njobs *= 2;
+
 	olwv = kcalloc(njobs, sizeof(*olwv), GFP_KERNEL);
 	if (!olwv)
 		return merr(ENOMEM);
 
+	inc = (num_online_cpus() / njobs) & ~1u;
+	cpu = raw_smp_processor_id();
+
 	/* Each of njobs workers will atomically grab MDC numbers from &progress
 	 * and load them, until all valid user MDCs have been loaded.
 	 */
-	for (i = 0; i < njobs; i++) {
+	for (i = 0; i < njobs; ++i) {
 		INIT_WORK(&olwv[i].olw_work, pmd_objs_load_worker);
 		olwv[i].olw_progress = &progress;
 		olwv[i].olw_err = &err;
 		olwv[i].olw_mp = mp;
-		queue_work(mp->pds_workq, &olwv[i].olw_work);
+
+		/* Try to distribute work across all NUMA nodes.
+		 * queue_work_node() would be preferable, but
+		 * it's not available on older kernels.
+		 */
+		cpu = cpumask_next_wrap(
+			cpu + inc, cpu_online_mask, nr_cpumask_bits, false);
+		queue_work_on(cpu, mp->pds_workq, &olwv[i].olw_work);
 	}
 
 	/* Wait for all worker threads to complete */
