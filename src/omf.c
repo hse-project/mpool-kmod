@@ -16,7 +16,7 @@
 #include <crypto/hash.h>
 
 #include "mpcore_defs.h"
-#include "omf_internal.h"
+#include "omf_int.h"
 
 /*
  * Forward declarations.
