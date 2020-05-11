@@ -13,7 +13,6 @@ set(MPOOL_INCLUDE_DIRS
 )
 
 set(MPCORE_SRC
-    ecio.c
     evc.c
     init.c
     mblock.c

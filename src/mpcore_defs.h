@@ -27,7 +27,6 @@
 #include "init.h"
 #include "omf.h"
 #include "omf_if.h"
-#include "ecio.h"
 #include "pd.h"
 #include "smap.h"
 #include "pmd.h"

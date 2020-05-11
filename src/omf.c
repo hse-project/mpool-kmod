@@ -23,7 +23,7 @@
  */
 static merr_t omf_dparm_unpack_letoh_v1(void *out, const char *inbuf);
 static merr_t omf_mdcrec_mcspare_unpack_letoh_v1(void *out, const char *inbuf);
-static merr_t omf_ecio_layout_unpack_letoh_v1(void *out, const char *inbuf);
+static merr_t omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf);
 
 /*
  * layout_descriptor_table: track changes in OMF and in-memory layout descriptor
@@ -100,7 +100,7 @@ struct upg_history mdcrec_data_ocreate_table[]
 	= {
 	{
 		sizeof(struct omf_mdcrec_data),
-		omf_ecio_layout_unpack_letoh_v1,
+		omf_pmd_layout_unpack_letoh_v1,
 		NULL,
 		OMF_SB_DESC_UNDEF,
 		{ {1, 0, 0, 0} }
@@ -437,10 +437,10 @@ omf_layout_unpack_letoh(
 }
 
 /*
- * ecio_layout
+ * pmd_layout
  */
 int
-omf_ecio_layout_pack_htole(
+omf_pmd_layout_pack_htole(
 	const struct mpool_descriptor  *mp,
 	u8                              rtype,
 	struct pmd_layout              *ecl,
@@ -478,7 +478,7 @@ omf_ecio_layout_pack_htole(
 }
 
 /**
- * omf_ecio_layout_unpack_letoh_v1() - Unpack little-endian mdc obj record and
+ * omf_pmd_layout_unpack_letoh_v1() - Unpack little-endian mdc obj record and
  *	optional obj layout from inbuf.
  * For version 1 of OMF_MDR_OCREATE record (strut layout_descriptor_omf)
  * @out:
@@ -490,7 +490,7 @@ omf_ecio_layout_pack_htole(
  *   EINVAL if invalid record type or format
  *   ENOMEM if cannot alloc memory for metadata conversion
  */
-static merr_t omf_ecio_layout_unpack_letoh_v1(void *out, const char *inbuf)
+static merr_t omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf)
 {
 	struct mdcrec_data_ocreate_omf *ocre_omf;
 	struct omf_mdcrec_data         *cdr = out;
@@ -528,7 +528,7 @@ static merr_t omf_ecio_layout_unpack_letoh_v1(void *out, const char *inbuf)
 
 
 /**
- * omf_ecio_layout_unpack_letoh() - Unpack little-endian mdc obj record and
+ * omf_pmd_layout_unpack_letoh() - Unpack little-endian mdc obj record and
  *	optional obj layout from inbuf.
  *	Allocate object layout.
  * For version 1 of OMF_MDR_OCREATE record (strut layout_descriptor_omf)
@@ -546,7 +546,7 @@ static merr_t omf_ecio_layout_unpack_letoh_v1(void *out, const char *inbuf)
  *   ENOENT if cannot convert a devid to a device handle (pdh)
  */
 static merr_t
-omf_ecio_layout_unpack_letoh(
+omf_pmd_layout_unpack_letoh(
 	struct mpool_descriptor    *mp,
 	struct omf_mdccver         *mdccver,
 	enum mdcrec_type_omf        rtype,
@@ -886,7 +886,7 @@ omf_mdcrec_objcmn_pack_htole(
 		return ev(-EINVAL);
 	}
 
-	bytes = omf_ecio_layout_pack_htole(mp, cdr->omd_rtype, layout, outbuf);
+	bytes = omf_pmd_layout_pack_htole(mp, cdr->omd_rtype, layout, outbuf);
 	if (bytes < 0)
 		return ev(-EINVAL);
 
@@ -944,7 +944,7 @@ omf_mdcrec_objcmn_unpack_letoh(
 
 	case OMF_MDR_OCREATE:
 	case OMF_MDR_OUPDATE:
-		err = omf_ecio_layout_unpack_letoh(mp, mdccver,
+		err = omf_pmd_layout_unpack_letoh(mp, mdccver,
 						   rtype, cdr, inbuf);
 		ev(err);
 		break;

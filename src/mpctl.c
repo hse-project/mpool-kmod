@@ -3968,7 +3968,7 @@ mpc_physio(
 	pagesvsz = (sizeof(*pagesv) + sizeof(*iov)) * pagesc;
 
 	/* pagesvsz may be big, and it will not be used as the iovec_list
-	 * for the block stack - ecio will chunk it up to the underlying
+	 * for the block stack - pd will chunk it up to the underlying
 	 * devices (with another iovec list per pd).
 	 */
 	if (pagesvsz > stkbufsz) {

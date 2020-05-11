@@ -903,7 +903,7 @@ pmd_update_mdc_stats(
 		/* fall through */
 
 	case PMD_OBJ_ALLOC:
-		cap = ecio_obj_get_cap_from_layout(mp, layout);
+		cap = pmd_layout_cap_get(mp, layout);
 		if (otype == OMF_OBJ_MLOG) {
 			pms->pms_mlog_cnt++;
 			pms->pms_mlog_alen += cap;
@@ -924,7 +924,7 @@ pmd_update_mdc_stats(
 		/* fall through */
 
 	case PMD_OBJ_ABORT:
-		cap = ecio_obj_get_cap_from_layout(mp, layout);
+		cap = pmd_layout_cap_get(mp, layout);
 		if (otype == OMF_OBJ_MLOG) {
 			pms->pms_mlog_cnt--;
 			pms->pms_mlog_alen -= cap;
@@ -2557,7 +2557,7 @@ pmd_mdc_cap(
 			/* Ignore detritus from failed pmd_mdc_alloc() */
 			continue;
 
-		zonepg = ecio_zonepg(mp, layout);
+		zonepg = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_parm.dpr_zonepg;
 		mlogsz = (layout->eld_ld.ol_zcnt * zonepg) << PAGE_SHIFT;
 
 		if (!mdcn)
@@ -2817,6 +2817,28 @@ pmd_layout_erase(
 		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
 
 	return err;
+}
+
+u64 pmd_layout_cap_get(struct mpool_descriptor *mp, struct pmd_layout *layout)
+{
+	enum obj_type_omf otype = pmd_objid_type(layout->eld_objid);
+
+	u32 zonepg;
+
+	switch (otype) {
+	case OMF_OBJ_MBLOCK:
+	case OMF_OBJ_MLOG:
+		zonepg = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_parm.dpr_zonepg;
+		return (zonepg * layout->eld_ld.ol_zcnt) << PAGE_SHIFT;
+
+	case OMF_OBJ_UNDEF:
+		break;
+	}
+
+	mp_pr_warn("mpool %s objid 0x%lx, undefined object type %d",
+		   mp->pds_name, (ulong)layout->eld_objid, otype);
+
+	return 0;
 }
 
 static merr_t pmd_log_idckpt(struct mpool_descriptor *mp, u64 objid)

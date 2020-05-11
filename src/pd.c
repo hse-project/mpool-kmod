@@ -25,6 +25,8 @@
 static const fmode_t    pd_bio_fmode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
 static char            *pd_bio_holder = "mpool";
 
+extern int mpc_chunker_size;
+
 merr_t
 pd_dev_open(
 	const char         *path,

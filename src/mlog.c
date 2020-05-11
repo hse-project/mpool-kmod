@@ -174,7 +174,7 @@ mlog_getprops_cmn(
 {
 	memcpy(prop->lpr_uuid.b, layout->eld_uuid.uuid, MPOOL_UUID_SIZE);
 	prop->lpr_objid       = layout->eld_objid;
-	prop->lpr_alloc_cap   = ecio_obj_get_cap_from_layout(mp, layout);
+	prop->lpr_alloc_cap   = pmd_layout_cap_get(mp, layout);
 	prop->lpr_gen         = layout->eld_gen;
 	prop->lpr_iscommitted = layout->eld_state & PMD_LYT_COMMITTED;
 	prop->lpr_mclassp    = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_mclass;
@@ -457,14 +457,17 @@ mlog_init_fsetparms(
 	struct mlog_fsetparms      *mfp)
 {
 	struct pmd_layout *layout;
+	struct pd_prop    *pdp;
+
 	u8     secshift;
 	u16    sectsz;
 
 	layout = mlog2layout(mlh);
 	assert(layout);
 
-	secshift        = ecio_sectorsz(mp, layout);
-	mfp->mfp_totsec = ecio_obj_get_cap_from_layout(mp, layout) >> secshift;
+	pdp = &mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_prop;
+	secshift = PD_SECTORSZ(pdp);
+	mfp->mfp_totsec = pmd_layout_cap_get(mp, layout) >> secshift;
 
 	sectsz = 1 << secshift;
 	assert((sectsz == PAGE_SIZE) || (sectsz == 512));
@@ -1212,7 +1215,7 @@ mlog_populate_abuf(
 /**
  * mlog_populate_rbuf() - Fill the read buffer after aligning the read offset
  * to page boundary. Having the read offsets page-aligned avoids unnecessary
- * complexity at the ecio layer.
+ * complexity at the pd layer.
  *
  * In the worst case, for 512 byte sectors, we would end up reading 7
  * additional sectors, which is acceptable. There won't be any overhead for
@@ -3522,20 +3525,21 @@ mlog_get_props_ex(
 	struct mlog_props_ex    *prop)
 {
 	struct pmd_layout *layout;
+	struct pd_prop    *pdp;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
 		return merr(EINVAL);
 
+	pdp = &mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_prop;
+
 	pmd_obj_rdlock(layout);
-
 	mlog_getprops_cmn(mp, layout, &prop->lpx_props);
-	prop->lpx_zonecnt    = layout->eld_ld.ol_zcnt;
-	prop->lpx_state     = layout->eld_state;
-	prop->lpx_secshift  = ecio_sectorsz(mp, layout);
-	prop->lpx_totsec    = ecio_obj_get_cap_from_layout(mp, layout)
-							>> prop->lpx_secshift;
-
+	prop->lpx_zonecnt  = layout->eld_ld.ol_zcnt;
+	prop->lpx_state    = layout->eld_state;
+	prop->lpx_secshift = PD_SECTORSZ(pdp);
+	prop->lpx_totsec   = pmd_layout_cap_get(mp, layout) >>
+		prop->lpx_secshift;
 	pmd_obj_rdunlock(layout);
 
 	return 0;

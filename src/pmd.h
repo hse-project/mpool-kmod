@@ -983,4 +983,6 @@ pmd_layout_erase(
 	struct pmd_layout          *layout,
 	int                         flags);
 
+u64 pmd_layout_cap_get(struct mpool_descriptor *mp, struct pmd_layout *layout);
+
 #endif /* MPOOL_PMD_PRIV_H */

@@ -43,6 +43,18 @@ mblock2layout(struct mblock_descriptor *mbh)
 	return mblock_objid(layout->eld_objid) ? layout : NULL;
 }
 
+u32
+mblock_stripe_size_get(
+	struct mpool_descriptor    *mp,
+	struct pmd_layout          *layout)
+{
+	struct mpool_dev_info  *pd;
+
+	pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
+
+	return pd->pdi_parm.dpr_optiosz;
+}
+
 /**
  * layout2mblock() - convert pmd_layout to opaque mblock_descriptor
  *
@@ -64,10 +76,10 @@ mblock_getprops_cmn(
 	assert(layout);
 	assert(prop);
 
-	prop->mpr_objid       = layout->eld_objid;
-	prop->mpr_alloc_cap   = ecio_obj_get_cap_from_layout(mp, layout);
-	prop->mpr_write_len   = layout->eld_mblen;
-	prop->mpr_stripe_len  = ecio_mblock_stripe_size(mp, layout);
+	prop->mpr_objid      = layout->eld_objid;
+	prop->mpr_alloc_cap  = pmd_layout_cap_get(mp, layout);
+	prop->mpr_write_len  = layout->eld_mblen;
+	prop->mpr_stripe_len = mblock_stripe_size_get(mp, layout);
 	prop->mpr_mclassp = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_mclass;
 	prop->mpr_iscommitted = layout->eld_state & PMD_LYT_COMMITTED;
 }
@@ -259,6 +271,146 @@ merr_t mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 	return pmd_obj_delete(mp, layout);
 }
 
+/**
+ * iov_len_and_alignment()
+ *
+ * Calculate the total data length of an iovec list, and set a flag if there
+ * are any non-page-aligned pointers (or non-page-multiple iovecs)
+ */
+static u64 iov_len_and_alignment(struct iovec *iov, int iovcnt, int *alignment)
+{
+	u64    len = 0;
+	int    i = 0;
+	int    align = 0;
+
+	*alignment = 0;
+
+	for (i = 0; i < iovcnt; i++) {
+		len += iov[i].iov_len;
+
+		/* Make alignment and length problems distinguishable */
+		if (!PAGE_ALIGNED((ulong)iov[i].iov_base))
+			align |= 1;
+		if (!PAGE_ALIGNED(iov[i].iov_len))
+			align |= 2;
+	}
+
+	*alignment = align;
+
+	return len;
+}
+
+/**
+ * mblock_rw_argcheck()
+ *
+ * @mp:      - Mpool descriptor
+ * @layout:  - Layout of the mblock
+ * @iov:     - iovec array
+ * @iovcnt:  - iovec count
+ * @boff:    - Byte offset into the layout.  Must be equal to layout->eld_mblen
+ *             for write
+ * @rw:      - MPOOL_OP_READ or MPOOL_OP_WRITE
+ * @len:     - Output: number of bytes in iov list
+ *
+ * Validate mblock_write() and mblock_read()
+ *
+ * Sets *len to total data in iov
+ *
+ * Returns: 0 if successful, merr_t otherwise
+ *
+ * Note: be aware that there are checks in this function that prevent illegal
+ * arguments in lower level functions (lower level functions should assert the
+ * requirements but not otherwise check them)
+ */
+static merr_t
+mblock_rw_argcheck(
+	struct mpool_descriptor    *mp,
+	struct pmd_layout          *layout,
+	struct iovec               *iov,
+	int                         iovcnt,
+	loff_t                      boff,
+	int                         rw,
+	u64                        *len)
+{
+	u64    data_len = 0;
+	u64    stripe_bytes;
+	u32    mblock_cap;
+	int    alignment;
+	merr_t err;
+
+	mblock_cap = pmd_layout_cap_get(mp, layout);
+	stripe_bytes = mblock_stripe_size_get(mp, layout);
+
+	data_len = iov_len_and_alignment(iov, iovcnt, &alignment);
+	if (alignment) {
+		err = merr(EINVAL);
+		mp_pr_err("mpool %s, mblock %s IOV not page aligned (%d)",
+			  err, mp->pds_name,
+			  (rw == MPOOL_OP_READ) ? "read" : "write",
+			  alignment);
+		return err;
+	}
+
+	if (rw == MPOOL_OP_READ) {
+		/* boff must be a multiple of the OS page size */
+		if (!PAGE_ALIGNED(boff)) {
+			err = merr(EINVAL);
+			mp_pr_err("mpool %s, read offset 0x%lx is not multiple of OS page size",
+				  err, mp->pds_name, (ulong) boff);
+			return err;
+		}
+
+		/* Check that boff is not past end of mblock capacity.
+		 */
+		if (mblock_cap <= boff) {
+			err = merr(EINVAL);
+			mp_pr_err("mpool %s, read offset 0x%lx >= mblock capacity 0x%x",
+				  err, mp->pds_name, (ulong)boff, mblock_cap);
+			return err;
+		}
+
+		/* Check that the request does not extend past the data
+		 * written.  Don't record an error if this appears to
+		 * be an mcache readahead request.
+		 *
+		 * TODO: Use (data_len != MCACHE_RA_PAGES_MAX)
+		 */
+		if (ev(boff + data_len > layout->eld_mblen))
+			return merr(EINVAL);
+	} else {
+		/* Write boff required to match eld_mblen */
+		if (boff != layout->eld_mblen) {
+			err = merr(EINVAL);
+			mp_pr_err("mpool %s write boff (%ld) != eld_mblen (%d)",
+				  err, mp->pds_name, (ulong)boff,
+				  layout->eld_mblen);
+			return err;
+		}
+
+		/* Writes must be stripe-aligned */
+		if (boff % stripe_bytes) {
+			err = merr(EINVAL);
+			mp_pr_err("mpool %s, write not stripe-aligned, offset 0x%lx",
+				  err, mp->pds_name, (ulong)boff);
+			return err;
+		}
+
+		/* Check for write past end of allocated space (!) */
+		if ((data_len + boff) > mblock_cap) {
+			err = merr(EINVAL);
+			mp_pr_err("(write): len %lu + boff %lu > mblock_cap %lu",
+				  err, (ulong)data_len, (ulong)boff,
+				  (ulong)mblock_cap);
+			return err;
+		}
+	}
+
+	/* Set the amount of data to read/write */
+	*len = data_len;
+
+	return 0;
+}
+
 merr_t
 mblock_write(
 	struct mpool_descriptor    *mp,
@@ -268,8 +420,9 @@ mblock_write(
 {
 	struct pmd_layout *layout;
 
-	merr_t err = 0;
-	u64    tdata = 0;
+	merr_t err;
+	u64    len = 0;
+	loff_t boff;
 	u8     state;
 
 	layout = mblock2layout(mbh);
@@ -278,10 +431,30 @@ mblock_write(
 		return merr(EINVAL);
 	}
 
+	err = mblock_rw_argcheck(mp, layout, iov, iovcnt, layout->eld_mblen,
+				 MPOOL_OP_WRITE, &len);
+	if (ev(err)) {
+		mp_pr_debug("mblock write argcheck failed ", err);
+		return err;
+	}
+
+	if (len == 0)
+		return 0;
+
+	boff = layout->eld_mblen;
+
+	assert(PAGE_ALIGNED(len));
+	assert(iovcnt == (len >> PAGE_SHIFT));
+	assert(PAGE_ALIGNED(boff));
+
 	pmd_obj_wrlock(layout);
 	state = layout->eld_state;
-	if (!(state & PMD_LYT_COMMITTED))
-		err = ecio_mblock_write(mp, layout, iov, iovcnt, &tdata);
+	if (!(state & PMD_LYT_COMMITTED)) {
+		err = pmd_layout_rw(mp, layout, iov, iovcnt, boff,
+				    REQ_FUA, MPOOL_OP_WRITE);
+		if (!err)
+			layout->eld_mblen += len;
+	}
 	pmd_obj_wrunlock(layout);
 
 	return (!(state & PMD_LYT_COMMITTED)) ? err : merr(EALREADY);
@@ -297,8 +470,9 @@ mblock_read(
 {
 	struct pmd_layout *layout;
 
-	merr_t  err = 0;
-	u8      state;
+	merr_t err;
+	u64    len = 0;
+	u8     state;
 
 	assert(mp);
 
@@ -307,6 +481,20 @@ mblock_read(
 		mp_pr_layout_not_found(mp, mbh);
 		return merr(EINVAL);
 	}
+
+	err = mblock_rw_argcheck(mp, layout, iov, iovcnt, boff,
+				 MPOOL_OP_READ, &len);
+	if (ev(err)) {
+		mp_pr_debug("mblock read argcheck failed ", err);
+		return err;
+	}
+
+	if (len == 0)
+		return 0;
+
+	assert(PAGE_ALIGNED(len));
+	assert(PAGE_ALIGNED(boff));
+	assert(iovcnt == (len >> PAGE_SHIFT));
 
 	/*
 	 * read lock the mblock layout; mblock reads can proceed
@@ -317,7 +505,8 @@ mblock_read(
 	pmd_obj_rdlock(layout);
 	state = layout->eld_state;
 	if (state & PMD_LYT_COMMITTED)
-		err = ecio_mblock_read(mp, layout, iov, iovcnt, boff);
+		err = pmd_layout_rw(mp, layout, iov, iovcnt, boff, 0,
+				    MPOOL_OP_READ);
 	pmd_obj_rdunlock(layout);
 
 	return (state & PMD_LYT_COMMITTED) ? err : merr(EAGAIN);
