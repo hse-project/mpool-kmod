@@ -1640,7 +1640,6 @@ static int mpc_open(struct inode *ip, struct file *fp)
 	struct mpc_softstate       *ss;
 	struct mpc_unit            *unit;
 
-	int     open_cnt = 0;
 	bool    firstopen;
 	merr_t  err = 0;
 	int     rc;
@@ -1668,48 +1667,53 @@ static int mpc_open(struct inode *ip, struct file *fp)
 
 	firstopen = (unit->un_open_cnt == 0);
 
-	if (!(firstopen || !(unit->un_open_excl || (fp->f_flags & O_EXCL)))) {
-		err = merr(EBUSY);
+	if (!firstopen) {
+		if (fp->f_mapping != unit->un_mapping)
+			err = merr(EBUSY);
+		else if (unit->un_open_excl || (fp->f_flags & O_EXCL))
+			err = merr(EBUSY);
 		goto unlock;
 	}
 
-	nonseekable_open(ip, fp);
-
-	if (fp->f_flags & O_EXCL)
-		unit->un_open_excl = true;
-
-	fp->private_data = unit;
-	open_cnt = 1;
-
-	if (firstopen && mpc_unit_ismpooldev(unit)) {
-		if (!fp->f_mapping || fp->f_mapping != ip->i_mapping) {
-			err = merr(EINVAL);
-			goto unlock;
-		}
-
-		err = mpc_metamap_create(&unit->un_metamap);
-		if (ev(err))
-			goto unlock;
-
-		fp->f_op = &mpc_fops_default;
-		fp->f_mapping->a_ops = &mpc_aops_default;
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
-		unit->un_saved_bdi = fp->f_mapping->backing_dev_info;
-		fp->f_mapping->backing_dev_info = &mpc_bdi;
-#endif
-
-		unit->un_mapping = fp->f_mapping;
-		unit->un_ds_reap = mpc_reap;
-
-		inode_lock(ip);
-		i_size_write(ip, 1ul << 63);
-		inode_unlock(ip);
+	if (!mpc_unit_ismpooldev(unit)) {
+		unit->un_open_excl = !!(fp->f_flags & O_EXCL);
+		goto unlock; /* control device */
 	}
 
+	/* First open of an mpool unit (not the control device).
+	 */
+	if (!fp->f_mapping || fp->f_mapping != ip->i_mapping) {
+		err = merr(EINVAL);
+		goto unlock;
+	}
+
+	err = mpc_metamap_create(&unit->un_metamap);
+	if (ev(err))
+		goto unlock;
+
+	fp->f_op = &mpc_fops_default;
+	fp->f_mapping->a_ops = &mpc_aops_default;
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+	unit->un_saved_bdi = fp->f_mapping->backing_dev_info;
+	fp->f_mapping->backing_dev_info = &mpc_bdi;
+#endif
+
+	unit->un_mapping = fp->f_mapping;
+	unit->un_ds_reap = mpc_reap;
+
+	inode_lock(ip);
+	i_size_write(ip, 1ul << 63);
+	inode_unlock(ip);
+
+	unit->un_open_excl = !!(fp->f_flags & O_EXCL);
+
 unlock:
-	if (!err)
-		unit->un_open_cnt += open_cnt;
+	if (!err) {
+		fp->private_data = unit;
+		nonseekable_open(ip, fp);
+		++unit->un_open_cnt;
+	}
 	up(&unit->un_open_lock);
 
 errout:
