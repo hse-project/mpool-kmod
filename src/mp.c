@@ -708,7 +708,7 @@ mpool_create(
 	 * Add the version record (always first record) in MDC0.
 	 * The version record is used only from version 1.0.0.1.
 	 */
-	if (upg_ver_cmp2(upg_mdccver_latest(), ">=", 1, 0, 0, 1)) {
+	if (omfu_mdcver_cmp2(omfu_mdcver_cur(), ">=", 1, 0, 0, 1)) {
 		err = pmd_mdc_addrec_version(mp, 0);
 		if (err) {
 			mp_pr_err("mpool %s, writing MDC version record in MDC0 failed",
@@ -1007,27 +1007,27 @@ mpool_desc_init_sb(
 		} else if (!force && (omf_ver < OMF_SB_DESC_VER_LAST ||
 				      resize)) {
 			if ((flags & (1 << MP_FLAGS_PERMIT_META_CONV)) == 0) {
-				char buf1[MAX_MDCCVERSTR];
-				char buf2[MAX_MDCCVERSTR];
-				struct omf_mdccver  *mdccver;
+				char buf1[MAX_MDCVERSTR];
+				char buf2[MAX_MDCVERSTR];
+				struct omf_mdcver  *mdcver;
 
 				/*
 				 * We have to get the permission from users
 				 * to update mpool meta data
 				 */
-				mdccver = omf_sbver_to_mdccver(omf_ver);
-				assert(mdccver != NULL);
+				mdcver = omf_sbver_to_mdcver(omf_ver);
+				assert(mdcver != NULL);
 
-				upg_mdccver2str(mdccver, buf1, sizeof(buf1));
-				upg_mdccver2str(upg_mdccver_latest(),
-						buf2, sizeof(buf2));
+				omfu_mdcver_to_str(mdcver, buf1, sizeof(buf1));
+				omfu_mdcver_to_str(omfu_mdcver_cur(),
+						   buf2, sizeof(buf2));
 
 				mpool_devrpt(
 					devrpt, MPOOL_RC_ERRMSG, -1,
 					"mpool metadata upgrade from version %s (%s) to %s (%s) required",
-					buf1,
-					upg_mdccver_comment(mdccver) ?: "",
-					buf2, upg_mdccver_latest_comment());
+					buf1, omfu_mdcver_comment(mdcver) ?: "",
+					buf2,
+					omfu_mdcver_comment(omfu_mdcver_cur()));
 
 				err = merr(EPERM);
 				mp_pr_err("%s superblock content upgrade from version %d to %d required",

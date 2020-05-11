@@ -134,26 +134,27 @@ struct omf_logblock_header {
 };
 
 /**
- * struct omf_mdccver - version of an mpool MDC content.
- * @mv_mdccver:
- *  mv_mdccver[0]: major version number
- *  mv_mdccver[1]: minor version number
- *  mv_mdccver[2]: patch version number
- *  mv_mdccver[3]:   development version number. Used during development
- *	cycle when the above numbers don't change.
+ * struct omf_mdcver - version of an mpool MDC content.
+ * @mdcver:
+ *
+ * mdcver[0]: major version number
+ * mdcver[1]: minor version number
+ * mdcver[2]: patch version number
+ * mdcver[3]: development version number. Used during development cycle when
+ *            the above numbers don't change.
  *
  * This is not the version of the message framing used for the MDC.
  * This the version of the binary that introduced that version of the MDC
  * content.
  */
-struct omf_mdccver {
-	u16    mv_mdccver[4];
+struct omf_mdcver {
+	u16    mdcver[4];
 };
 
-#define mv_mdccver_major mv_mdccver[0]
-#define mv_mdccver_minor mv_mdccver[1]
-#define mv_mdccver_patch mv_mdccver[2]
-#define mv_mdccver_dev   mv_mdccver[3]
+#define mdcv_major    mdcver[0]
+#define mdcv_minor    mdcver[1]
+#define mdcv_patch    mdcver[2]
+#define mdcv_dev      mdcver[3]
 
 /*
  * struct omf_mdcrec_data -
@@ -184,7 +185,7 @@ struct omf_mdccver {
  */
 struct omf_mdcrec_data {
 	union ustruct {
-		struct omf_mdccver omd_version;
+		struct omf_mdcver omd_version;
 
 		struct object {
 			u64                             omd_objid;
@@ -361,11 +362,11 @@ omf_mdcrec_pack_htole(
 
 /**
  * omf_mdcrec_unpack_letoh() - unpack mdc record
- * @mdccver: mdc content version of the mdc from which this data comes.
- *	NULL means latest MDC content version known by this binary.
- * @mp: struct mpool_descriptor *
- * @cdr: struct omf_mdcrec_data *
- * @inbuf: char *
+ * @mdcver: mdc content version of the mdc from which this data comes.
+ *          NULL means latest MDC content version known by this binary.
+ * @mp:     struct mpool_descriptor *
+ * @cdr:    struct omf_mdcrec_data *
+ * @inbuf:  char *
  *
  * Unpack little-endian mdc record from inbuf into cdr.
  *
@@ -373,7 +374,7 @@ omf_mdcrec_pack_htole(
  */
 merr_t
 omf_mdcrec_unpack_letoh(
-	struct omf_mdccver         *mdccver,
+	struct omf_mdcver          *mdcver,
 	struct mpool_descriptor    *mp,
 	struct omf_mdcrec_data     *cdr,
 	const char                 *inbuf);
@@ -387,12 +388,11 @@ omf_mdcrec_unpack_letoh(
 int omf_mdcrec_isobj_le(const char *inbuf);
 
 /**
- * omf_mdccver_unpack_letoh() - Unpack little-endian mdc version
- *	record from inbuf.
+ * omf_mdcver_unpack_letoh() - Unpack le mdc version record from inbuf.
  * @cdr:
  * @inbuf:
  */
-void omf_mdccver_unpack_letoh(struct omf_mdcrec_data *cdr, const char *inbuf);
+void omf_mdcver_unpack_letoh(struct omf_mdcrec_data *cdr, const char *inbuf);
 
 /**
  * omf_mdcrec_unpack_type_letoh() - extract the record type from a
@@ -410,10 +410,10 @@ u8 omf_mdcrec_unpack_type_letoh(const char *inbuf);
 bool logrec_type_datarec(enum logrec_type_omf rtype);
 
 /**
- * omf_sbver_to_mdccver() - Returns the matching mdc version for a given
+ * omf_sbver_to_mdcver() - Returns the matching mdc version for a given
  *                          superblock version
  * @sbver: superblock version
  */
-struct omf_mdccver *omf_sbver_to_mdccver(enum sb_descriptor_ver_omf sbver);
+struct omf_mdcver *omf_sbver_to_mdcver(enum sb_descriptor_ver_omf sbver);
 
 #endif /* MPOOL_OMF_IF_PRIV_H */

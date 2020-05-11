@@ -334,10 +334,10 @@ static void pmd_mda_init(struct mpool_descriptor *mp)
 		/*
 		 * Initial mpool metadata content version.
 		 */
-		pmi->mmi_mdccver.mv_mdccver_major = 1;
-		pmi->mmi_mdccver.mv_mdccver_minor = 0;
-		pmi->mmi_mdccver.mv_mdccver_patch = 0;
-		pmi->mmi_mdccver.mv_mdccver_dev   = 0;
+		pmi->mmi_mdcver.mdcv_major = 1;
+		pmi->mmi_mdcver.mdcv_minor = 0;
+		pmi->mmi_mdcver.mdcv_patch = 0;
+		pmi->mmi_mdcver.mdcv_dev   = 0;
 
 		pmi->mmi_credit.ci_slot = i;
 
@@ -514,7 +514,7 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 		if (omf_mdcrec_isobj_le(cinfo->mmi_recbuf))
 			continue;
 
-		err = omf_mdcrec_unpack_letoh(&(cinfo->mmi_mdccver), mp, &cdr,
+		err = omf_mdcrec_unpack_letoh(&(cinfo->mmi_mdcver), mp, &cdr,
 			cinfo->mmi_recbuf);
 		if (err) {
 			mp_pr_err("mpool %s, MDC0 property unpack failed",
@@ -544,17 +544,16 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 				break;
 			}
 		} else if (cdr.omd_rtype == OMF_MDR_VERSION) {
-			cinfo->mmi_mdccver = cdr.u.omd_version;
-			if (upg_ver_cmp(&cinfo->mmi_mdccver, ">",
-					upg_mdccver_latest())) {
+			cinfo->mmi_mdcver = cdr.u.omd_version;
+			if (omfu_mdcver_cmp(&cinfo->mmi_mdcver, ">",
+					    omfu_mdcver_cur())) {
+				char   buf1[MAX_MDCVERSTR];
+				char   buf2[MAX_MDCVERSTR];
 
-				char	buf1[MAX_MDCCVERSTR];
-				char	buf2[MAX_MDCCVERSTR];
-
-				upg_mdccver2str(&cinfo->mmi_mdccver,
-						buf1, sizeof(buf1));
-				upg_mdccver2str(upg_mdccver_latest(),
-						buf2, sizeof(buf2));
+				omfu_mdcver_to_str(&cinfo->mmi_mdcver,
+						   buf1, sizeof(buf1));
+				omfu_mdcver_to_str(omfu_mdcver_cur(),
+						   buf2, sizeof(buf2));
 
 				mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 					     "binary too old for metadata %s",
@@ -1020,19 +1019,19 @@ pmd_objs_load(
 		 * Version record, if present, must be first.
 		 */
 		if (omf_mdcrec_unpack_type_letoh(recbuf) == OMF_MDR_VERSION) {
-			omf_mdccver_unpack_letoh(&cdr, recbuf);
-			cinfo->mmi_mdccver = cdr.u.omd_version;
+			omf_mdcver_unpack_letoh(&cdr, recbuf);
+			cinfo->mmi_mdcver = cdr.u.omd_version;
 
-			if (upg_ver_cmp(&cinfo->mmi_mdccver, ">",
-					upg_mdccver_latest())) {
+			if (omfu_mdcver_cmp(&cinfo->mmi_mdcver, ">",
+					    omfu_mdcver_cur())) {
 
-				char	buf1[MAX_MDCCVERSTR];
-				char	buf2[MAX_MDCCVERSTR];
+				char	buf1[MAX_MDCVERSTR];
+				char	buf2[MAX_MDCVERSTR];
 
-				upg_mdccver2str(&cinfo->mmi_mdccver,
-						buf1, sizeof(buf1));
-				upg_mdccver2str(upg_mdccver_latest(),
-						buf2, sizeof(buf2));
+				omfu_mdcver_to_str(&cinfo->mmi_mdcver,
+						   buf1, sizeof(buf1));
+				omfu_mdcver_to_str(omfu_mdcver_cur(),
+						   buf2, sizeof(buf2));
 
 				mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 					     "binary too old for metadata %s",
@@ -1053,7 +1052,7 @@ pmd_objs_load(
 		if (!cslot && !omf_mdcrec_isobj_le(recbuf))
 			continue;
 
-		err = omf_mdcrec_unpack_letoh(&(cinfo->mmi_mdccver), mp, &cdr,
+		err = omf_mdcrec_unpack_letoh(&cinfo->mmi_mdcver, mp, &cdr,
 					      recbuf);
 		if (ev(err)) {
 			msg = "mlog record unpack failed";
@@ -1704,7 +1703,7 @@ static merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 		if (ev(err))
 			continue;
 
-		if (upg_ver_cmp2(upg_mdccver_latest(), ">=", 1, 0, 0, 1)) {
+		if (omfu_mdcver_cmp2(omfu_mdcver_cur(), ">=", 1, 0, 0, 1)) {
 			err = pmd_mdc_addrec_version(mp, cslot);
 			if (ev(err)) {
 				mp_mdc_close(cinfo->mmi_mdc);
@@ -2470,7 +2469,7 @@ pmd_mdc_alloc(
 	/*
 	 * Append the version record.
 	 */
-	if (upg_ver_cmp2(upg_mdccver_latest(), ">=", 1, 0, 0, 1)) {
+	if (omfu_mdcver_cmp2(omfu_mdcver_cur(), ">=", 1, 0, 0, 1)) {
 		err = pmd_mdc_addrec_version(mp, mdcslot);
 		if (ev(err)) {
 			msg = "error adding the version record";
@@ -3811,8 +3810,8 @@ pmd_write_meta_to_latest_version(
 	struct pmd_mdc_info *cinfo;
 	struct pmd_mdc_info *cinfo_converted = NULL;
 
-	char   buf1[MAX_MDCCVERSTR] __maybe_unused;
-	char   buf2[MAX_MDCCVERSTR] __maybe_unused;
+	char   buf1[MAX_MDCVERSTR] __maybe_unused;
+	char   buf2[MAX_MDCVERSTR] __maybe_unused;
 	merr_t err;
 	u32    cslot;
 
@@ -3828,19 +3827,19 @@ pmd_write_meta_to_latest_version(
 		 * equal to the latest version supported by this binary.
 		 * If it is not the case, the activate fails earlier.
 		 */
-		if (upg_ver_cmp(&(cinfo->mmi_mdccver), "==",
-				upg_mdccver_latest()))
+		if (omfu_mdcver_cmp(&cinfo->mmi_mdcver, "==",
+				    omfu_mdcver_cur()))
 			continue;
 
-		upg_mdccver2str(&cinfo->mmi_mdccver, buf1, sizeof(buf1));
-		upg_mdccver2str(upg_mdccver_latest(), buf2, sizeof(buf2));
+		omfu_mdcver_to_str(&cinfo->mmi_mdcver, buf1, sizeof(buf1));
+		omfu_mdcver_to_str(omfu_mdcver_cur(), buf2, sizeof(buf2));
 
 		if (!permitted) {
 			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-				     "metadata upgrade needed from version %s (%s) to %s (%s)",
-				     buf1,
-				     upg_mdccver_comment(&cinfo->mmi_mdccver),
-				     buf2, upg_mdccver_latest_comment());
+				"metadata upgrade needed from version %s (%s) to %s (%s)",
+				buf1, omfu_mdcver_comment(&cinfo->mmi_mdcver),
+				buf2,
+				omfu_mdcver_comment(omfu_mdcver_cur()));
 
 			err = merr(EPERM);
 			mp_pr_err("mpool %s, MDC%u upgrade needed from version %s to %s",
@@ -3867,20 +3866,23 @@ pmd_write_meta_to_latest_version(
 	if (cinfo_converted != NULL)
 		mp_pr_info("mpool %s, converted MDC from version %s to %s",
 			   mp->pds_name,
-			   upg_mdccver2str(&(cinfo_converted->mmi_mdccver),
-					   buf1, sizeof(buf1)),
-			   upg_mdccver2str(upg_mdccver_latest(),
-					   buf2, sizeof(buf2)));
+			   omfu_mdcver_to_str(&cinfo_converted->mmi_mdcver,
+					      buf1, sizeof(buf1)),
+			   omfu_mdcver_to_str(omfu_mdcver_cur(),
+					      buf2, sizeof(buf2)));
 
 	return 0;
 }
 
 merr_t pmd_mdc_addrec_version(struct mpool_descriptor *mp, u8 cslot)
 {
-	struct omf_mdcrec_data cdr;
+	struct omf_mdcrec_data  cdr;
+	struct omf_mdcver      *ver;
 
 	cdr.omd_rtype = OMF_MDR_VERSION;
-	upg_mdccver_latest2(&(cdr.u.omd_version));
+
+	ver = omfu_mdcver_cur();
+	cdr.u.omd_version = *ver;
 
 	return pmd_mdc_addrec(mp, cslot, &cdr);
 }

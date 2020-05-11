@@ -17,43 +17,42 @@
  * Latest mpool MDC content version understood by this binary.
  * Also version used to write MDC content by this binary.
  */
-#define MDCCVER_MAJOR 1
-#define MDCCVER_MINOR 0
-#define MDCCVER_PATCH 0
-#define MDCCVER_DEV   0
+#define MDCVER_MAJOR       1
+#define MDCVER_MINOR       0
+#define MDCVER_PATCH       0
+#define MDCVER_DEV         0
 
 /**
- * struct mdccver_info - mpool MDC content version and its information.
+ * struct mdcver_info - mpool MDC content version and its information.
  *
  * Such a structure instance is added each time the mpool MDCs content
  * semantic/format changes (making it incompatible with earlier binary
  * versions).
  *
- * @vco_mdccver: version of a mpool MDC content. It is the version
- * of the first binary that introduced that content semantic/format.
- * @vco_types: types used by this release (when writing MDC0-N content)
- *	The number of elements is vco_nbtypes. In increasing order.
- * @vco_nbtypes: how many different types are used by this release.
- * @vco_comment: comment about that version
+ * @mi_mdcver:  version of a mpool MDC content. It is the version of the
+ *              first binary that introduced that content semantic/format.
+ * @mi_types:   types used by this release (when writing MDC0-N content)
+ * @mi_ntypes:  no. of types are used by this release.
+ * @mi_comment: comment about that version
  */
-struct mdccver_info {
-	struct omf_mdccver  vco_mdccver;
-	uint8_t            *vco_types;
-	uint8_t             vco_nbtypes;
-	const char         *vco_comment;
+struct mdcver_info {
+	struct omf_mdcver   mi_mdcver;
+	uint8_t            *mi_types;
+	uint8_t             mi_ntypes;
+	const char         *mi_comment;
 };
 
 /*
  * mpool MDC types used when MDC content is written at version 1.0.0.0.
  */
-uint8_t mdccver_1_0_0_0_types[] = {
+uint8_t mdcver_1_0_0_0_types[] = {
 	OMF_MDR_OCREATE, OMF_MDR_OUPDATE, OMF_MDR_ODELETE, OMF_MDR_OIDCKPT,
 	OMF_MDR_OERASE, OMF_MDR_MCCONFIG, OMF_MDR_MCSPARE, OMF_MDR_VERSION,
 	OMF_MDR_MPCONFIG};
 
 
 /*
- * mdccver_info mdcc_ver[] - table of versions of mpool MDCs content.
+ * mdcver_info mdcvtab[] - table of versions of mpool MDCs content.
  *
  * Each time MDC content semantic/format changes (making it incompatible
  * with earlier binary versions) an entry is added in this table.
@@ -65,7 +64,7 @@ uint8_t mdccver_1_0_0_0_types[] = {
  *
  * Example:
  * - Initial binary 1.0.0.0 generates first ever MDCs content.
- *   There is one entry in the table with its vco_mdccver being 1.0.0.0.
+ *   There is one entry in the table with its mi_mdcver being 1.0.0.0.
  * - binary 1.0.0.1 is released and changes mpool MDC content semantic (for
  *   example chenge the meaning of media class enum). This release adds the
  *   entry 1.0.0.1 in this table.
@@ -74,76 +73,52 @@ uint8_t mdccver_1_0_0_0_types[] = {
  *   1.0.0.1 binary reading it.
  *   No entry is added in the table.
  * - binary 2.0.0.0 is released and it changes MDCs content semantic.
- *   A third entry is added in the table with its vco_mdccver being 2.0.0.0.
+ *   A third entry is added in the table with its mi_mdcver being 2.0.0.0.
  */
-struct mdccver_info mdcc_ver[] = {
-	{{ {MDCCVER_MAJOR, MDCCVER_MINOR, MDCCVER_PATCH, MDCCVER_DEV} },
-	mdccver_1_0_0_0_types, sizeof(mdccver_1_0_0_0_types),
+struct mdcver_info mdcvtab[] = {
+	{{ {MDCVER_MAJOR, MDCVER_MINOR, MDCVER_PATCH, MDCVER_DEV} },
+	mdcver_1_0_0_0_types, sizeof(mdcver_1_0_0_0_types),
 	"Initial mpool MDCs content"},
 };
 
-#define _STR(x) #x
-#define STR(x)  _STR(x)
-static const char mpool_mdccver[] = "MPOOL_MDCCVER_" STR(MDCCVER_MAJOR) "." \
-		STR(MDCCVER_MINOR) "." STR(MDCCVER_PATCH) "." STR(MDCCVER_DEV);
-
-#pragma push_macro("upg_mdccver_latest")
-#undef upg_mdccver_latest
-struct omf_mdccver *
-upg_mdccver_latest(void)
+struct omf_mdcver *omfu_mdcver_cur(void)
 {
-	return &(mdcc_ver[ARRAY_SIZE(mdcc_ver) - 1].vco_mdccver);
-}
-#pragma pop_macro("upg_mdccver_latest")
-
-void upg_mdccver_latest2(struct omf_mdccver *mdccver)
-{
-	struct omf_mdccver *mdccver_latest;
-
-	mdccver_latest = upg_mdccver_latest();
-	*mdccver = *mdccver_latest;
+	return &mdcvtab[ARRAY_SIZE(mdcvtab) - 1].mi_mdcver;
 }
 
-const char *upg_mdccver_latest_comment(void)
-{
-	return mdcc_ver[ARRAY_SIZE(mdcc_ver) - 1].vco_comment;
-}
-
-const char *upg_mdccver_comment(struct omf_mdccver *mdccver)
+const char *omfu_mdcver_comment(struct omf_mdcver *mdcver)
 {
 	int i;
 
-	for (i = 0; i < ARRAY_SIZE(mdcc_ver); i++)
-		if (upg_ver_cmp(mdccver, "==", &(mdcc_ver[i].vco_mdccver)))
-			return mdcc_ver[i].vco_comment;
+	for (i = 0; i < ARRAY_SIZE(mdcvtab); i++)
+		if (omfu_mdcver_cmp(mdcver, "==", &mdcvtab[i].mi_mdcver))
+			return mdcvtab[i].mi_comment;
 
 	return NULL;
 }
 
-char *upg_mdccver2str(struct omf_mdccver *mdccver, char *buf, size_t sz)
+char *omfu_mdcver_to_str(struct omf_mdcver *mdcver, char *buf, size_t sz)
 {
-	snprintf(buf, sz, "%u.%u.%u.%u", mdccver->mv_mdccver_major,
-		 mdccver->mv_mdccver_minor, mdccver->mv_mdccver_patch,
-		 mdccver->mv_mdccver_dev);
+	snprintf(buf, sz, "%u.%u.%u.%u", mdcver->mdcv_major,
+		 mdcver->mdcv_minor, mdcver->mdcv_patch, mdcver->mdcv_dev);
 
 	return buf;
 }
 
-bool upg_ver_cmp(struct omf_mdccver *a, char *op, struct omf_mdccver *b)
+bool omfu_mdcver_cmp(struct omf_mdcver *a, char *op, struct omf_mdcver *b)
 {
-	size_t cnt = ARRAY_SIZE(a->mv_mdccver);
+	size_t cnt = ARRAY_SIZE(a->mdcver);
 	int    i;
 	int    res = 0;
 
 	for (i = 0; i < cnt; i++) {
-		if (a->mv_mdccver[i] == b->mv_mdccver[i])
-			continue;
-		res = (a->mv_mdccver[i] > b->mv_mdccver[i]) ? 1 : -1;
-		break;
+		if (a->mdcver[i] != b->mdcver[i]) {
+			res = (a->mdcver[i] > b->mdcver[i]) ? 1 : -1;
+			break;
+		}
 	}
 
-	if (((op[1] == '=') && (res == 0)) ||
-	    ((op[0] == '>') && (res > 0)) ||
+	if (((op[1] == '=') && (res == 0)) || ((op[0] == '>') && (res > 0)) ||
 	    ((op[0] == '<') && (res < 0)))
 		return true;
 
@@ -151,20 +126,20 @@ bool upg_ver_cmp(struct omf_mdccver *a, char *op, struct omf_mdccver *b)
 }
 
 bool
-upg_ver_cmp2(
-	struct omf_mdccver *a,
+omfu_mdcver_cmp2(
+	struct omf_mdcver  *a,
 	char               *op,
-	u16		    major,
-	u16		    minor,
-	u16		    patch,
-	u16		    dev)
+	u16                 major,
+	u16                 minor,
+	u16                 patch,
+	u16                 dev)
 {
-	struct omf_mdccver b;
+	struct omf_mdcver  b;
 
-	b.mv_mdccver_major = major;
-	b.mv_mdccver_minor = minor;
-	b.mv_mdccver_patch = patch;
-	b.mv_mdccver_dev   = dev;
+	b.mdcv_major = major;
+	b.mdcv_minor = minor;
+	b.mdcv_patch = patch;
+	b.mdcv_dev   = dev;
 
-	return upg_ver_cmp(a, op, &b);
+	return omfu_mdcver_cmp(a, op, &b);
 }

@@ -326,35 +326,35 @@ enum mdcrec_type_omf {
 };
 
 /**
- * struct mdccver_omf - version of an mpool MDC content.
+ * struct mdcver_omf - version of an mpool MDC content.
  *
  * This is not the version of the message framing used for the MDC. This is
  * version of the binary that introduced that version of the MDC content.
  * "pv_"= packed mdc version.
  *
- * @pv_rtype: OMF_MDR_VERSION
- * @pv_mdccver_major: to compare with MAJOR in binary version.
- * @pv_mdccver_minor: to compare with MINOR in binary version.
- * @pv_mdccver_patch: to compare with PATCH in binary version.
- * @pv_mdccver_dev:   used during development cycle when the above
- *	numbers don't change.
+ * @pv_rtype:      OMF_MDR_VERSION
+ * @pv_mdcv_major: to compare with MAJOR in binary version.
+ * @pv_mdcv_minor: to compare with MINOR in binary version.
+ * @pv_mdcv_patch: to compare with PATCH in binary version.
+ * @pv_mdcv_dev:   used during development cycle when the above
+ *                 numbers don't change.
  *
  */
-struct mdccver_omf {
+struct mdcver_omf {
 	u8     pv_rtype;
 	u8     pv_pad;
-	__le16 pv_mdccver_major;
-	__le16 pv_mdccver_minor;
-	__le16 pv_mdccver_patch;
-	__le16 pv_mdccver_dev;
+	__le16 pv_mdcv_major;
+	__le16 pv_mdcv_minor;
+	__le16 pv_mdcv_patch;
+	__le16 pv_mdcv_dev;
 } __packed;
 
 /* Define set/get methods for mdcrec_version_omf */
-OMF_SETGET(struct mdccver_omf, pv_rtype, 8)
-OMF_SETGET(struct mdccver_omf, pv_mdccver_major, 16)
-OMF_SETGET(struct mdccver_omf, pv_mdccver_minor, 16)
-OMF_SETGET(struct mdccver_omf, pv_mdccver_patch, 16)
-OMF_SETGET(struct mdccver_omf, pv_mdccver_dev,   16)
+OMF_SETGET(struct mdcver_omf, pv_rtype, 8)
+OMF_SETGET(struct mdcver_omf, pv_mdcv_major, 16)
+OMF_SETGET(struct mdcver_omf, pv_mdcv_minor, 16)
+OMF_SETGET(struct mdcver_omf, pv_mdcv_patch, 16)
+OMF_SETGET(struct mdcver_omf, pv_mdcv_dev,   16)
 
 
 /**

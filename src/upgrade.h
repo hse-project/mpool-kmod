@@ -15,9 +15,9 @@
 
 /*
  * Size of version converted to string.
- * 4*(5 bytes for a u16) + 3*(1 byte for the '.') + 1 byte for \0
+ * 4 * (5 bytes for a u16) + 3 * (1 byte for the '.') + 1 byte for \0
  */
-#define MAX_MDCCVERSTR 24
+#define MAX_MDCVERSTR          24
 
 /**
  * Naming conventions:
@@ -33,7 +33,9 @@
  * ---------------------
  * They are named like:
  * omf_convert_<blabla>_<maj>_<min>_<patch>_<dev>to<maj>_<min>_<patch>_<dev>()
+ *
  * For example: omf_convert_sb_1_0_0_0to1_0_0_1()
+ *
  * They are not named like omf_convert_<blabla>_v1tov2() because sometimes the
  * input and output structures are exactly the same and the conversion is
  * related to some subtle interpretation of structure filed[s] content.
@@ -43,11 +45,13 @@
  * They are named like:
  * omf_<blabla>_unpack_letoh_v<version number>()
  * <version number> being the version of the structure.
+ *
  * For example: omf_layout_unpack_letoh_v1()
  * Note that for the latest/current version of the structure we cannot
  * name the unpack function omf_<blabla>_unpack_letoh() because that would
  * introduce a name conflict with the top unpack function that calls
  * omf_unpack_letoh_and_convert()
+ *
  * For example for layout we have:
  * omf_layout_unpack_letoh_v1() unpacks layout_descriptor_omf_v1
  * omf_layout_unpack_letoh_v2() unpacks layout_descriptor_omf
@@ -68,7 +72,7 @@
  * @uh_sbver:   corresponding superblock version since which the change has
  *              been introduced. If this structure is not used by superblock
  *              set uh_sbver =  OMF_SB_DESC_UNDEF.
- * @uh_mdccver: corresponding mdc ver since which the change has been
+ * @uh_mdcver: corresponding mdc ver since which the change has been
  *              introduced
  */
 struct upgrade_history {
@@ -76,75 +80,63 @@ struct upgrade_history {
 	merr_t (*uh_unpack)(void *out, const char *inbuf);
 	merr_t (*uh_conv)(const void *pre, void *cur);
 	enum sb_descriptor_ver_omf  uh_sbver;
-	struct omf_mdccver          uh_mdccver;
+	struct omf_mdcver          uh_mdcver;
 };
 
 /**
- * upg_mdccver_latest() - return the latest mpool MDC content version
- *	understood by this binary.
+ * omfu_mdcver_cur() -
+ *
+ * Returns the latest mpool MDC content version understood by this binary.
  */
-struct omf_mdccver *upg_mdccver_latest(void);
+struct omf_mdcver *omfu_mdcver_cur(void);
 
 /**
- * upg_mdccver_latest2() - write in "mdccver" the latest mpool MDC content
- *      version understood by this binary.
- * @mdccver:
+ * omfu_mdcver_comment() -
+ * @mdcver:
+ *
+ * Returns the comment on the mpool MDC content version passed in via "mdcver".
  */
-void upg_mdccver_latest2(struct omf_mdccver *mdccver);
+const char *omfu_mdcver_comment(struct omf_mdcver *mdcver);
 
 /**
- * upg_mdccver_latest_comment() - returns the comment on the latest mpool MDC
- *	content version understood by this binary.
- */
-const char *upg_mdccver_latest_comment(void);
-
-/**
- * upg_mdccver_comment() - returns the comment on the mpool MDC
- *	content version passed in via "mdccver".
- * @mdccver:
- */
-const char *upg_mdccver_comment(struct omf_mdccver *mdccver);
-
-/**
- * upg_mdccver2str() - convert a version into a string.
+ * omfu_mdcver_to_str() - convert a version into a string.
+ *
  * @mdcver: version to convert
- * @buf: buffer in which to place the conversion.
- * @sz: size of "buf" in bytes.
+ * @buf:    buffer in which to place the conversion.
+ * @sz:     size of "buf" in bytes.
  *
  * Returns "buf"
  */
-char *upg_mdccver2str(struct omf_mdccver *mdccver, char *buf, size_t sz);
+char *omfu_mdcver_to_str(struct omf_mdcver *mdcver, char *buf, size_t sz);
 
 /**
- * upg_ver_cmp() - compare two versions a and b
- * @a: a version
- * @op: compare operator (C syntax)
- *	can be "<", "<=", ">", ">=", "==".
- * @b: a version
+ * omfu_mdcver_cmp() - compare two versions a and b
+ * @a:  first version
+ * @op: compare operator (C syntax), can be "<", "<=", ">", ">=", "==".
+ * @b:  second version
  *
  * Return (a op b)
  */
-bool upg_ver_cmp(struct omf_mdccver *a, char *op, struct omf_mdccver *b);
+bool omfu_mdcver_cmp(struct omf_mdcver *a, char *op, struct omf_mdcver *b);
 
 /**
- * upg_ver_cmp2() - compare two versions
- * @a: a version
- * @op: compare operator (C syntax)
- *	can be "<", "<=", ">", ">=", "==".
- * @major: major, minor, patch and dev compose the version "b" to compare
- * @minor: with "a".
+ * omfu_mdcver_cmp2() - compare two versions
+ * @a:     first version
+ * @op:    compare operator (C syntax), can be "<", "<=", ">", ">=", "==".
+ * @major: major, minor, patch and dev which composes the second version
+ * @minor:
  * @patch:
  * @dev:
  *
  * Return true (a op b)
  */
 bool
-upg_ver_cmp2(
-	struct omf_mdccver *a,
-	char		   *op,
-	u16		    major,
-	u16		    minor,
-	u16		    patch,
-	u16		    dev);
+omfu_mdcver_cmp2(
+	struct omf_mdcver  *a,
+	char               *op,
+	u16                 major,
+	u16                 minor,
+	u16                 patch,
+	u16                 dev);
 
 #endif /* MPOOL_UPGRADE_PRIV_H */

@@ -304,24 +304,23 @@ struct pmd_mdc_stats {
 
 /**
  * struct pmd_mdc_info - Metadata container (mdc) info.
- * @mmi_compactlock:    compaction lock
- * @mmi_uc_lock:        uncommitted objects tree lock
- * @mmi_uc_root:        uncommitted objects tree root
- * @mmi_co_lock:        committed objects tree lock
- * @mmi_co_root:        committed objects tree root
- * @mmi_uqlock:         uniquifier lock
- * @mmi_luniq:          uniquifier of last object assigned to container
- * @mmi_mdc:            MDC implementing container
- * @mmi_recbuf:         buffer for (un)packing log records
- * @mmi_lckpt:          last objid checkpointed
- * @mmi_stats:          per-MDC usage stats
- * @mmi_stats_lock:     lock for protecting mmi_stats
- * @mmi_pco_cnt:        counters used by the pre compaction of MDC1/255.
- * @mmi_mdccver:        version of the mdc content on media when the mpool
- *			was activated. That may not be the current version
- *			on media if a MDC metadata conversion took place
- *			during activate.
- * @mmi_credit          MDC credit info
+ * @mmi_compactlock: compaction lock
+ * @mmi_uc_lock:     uncommitted objects tree lock
+ * @mmi_uc_root:     uncommitted objects tree root
+ * @mmi_co_lock:     committed objects tree lock
+ * @mmi_co_root:     committed objects tree root
+ * @mmi_uqlock:      uniquifier lock
+ * @mmi_luniq:       uniquifier of last object assigned to container
+ * @mmi_mdc:         MDC implementing container
+ * @mmi_recbuf:      buffer for (un)packing log records
+ * @mmi_lckpt:       last objid checkpointed
+ * @mmi_stats:       per-MDC usage stats
+ * @mmi_stats_lock:  lock for protecting mmi_stats
+ * @mmi_pco_cnt:     counters used by the pre compaction of MDC1/255.
+ * @mmi_mdcver:      version of the mdc content on media when the mpool was
+ *                   activated. That may not be the current version on media
+ *                   if a MDC metadata conversion took place during activate.
+ * @mmi_credit       MDC credit info
  *
  * LOCKING:
  * + mmi_luniq: protected by uqlock
@@ -369,7 +368,7 @@ struct pmd_mdc_info {
 
 	____cacheline_aligned
 	struct credit_info      mmi_credit;
-	struct omf_mdccver      mmi_mdccver;
+	struct omf_mdcver       mmi_mdcver;
 
 	____cacheline_aligned
 	struct mutex            mmi_stats_lock;
