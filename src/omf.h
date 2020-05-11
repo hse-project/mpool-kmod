@@ -89,26 +89,6 @@
 #define OMF_UUID_PACKLEN 16
 
 /**
- * enum cksum_type_omf - on media checksum types
- *
- * @OMF_CK_UNDEF:
- * @OMF_CK_NONE:
- * @OMF_CK_DIF:
- *
- * The values below are never written on media.
- * @OMF_CK_NUMBER: number of checksum types.
- * @OMF_CK_INVALID:
- */
-enum cksum_type_omf {
-	OMF_CK_UNDEF  = 0,
-	OMF_CK_NONE   = 1,
-	OMF_CK_DIF    = 2,
-	OMF_CK_NUMBER,
-	OMF_CK_INVALID = OMF_CK_NUMBER
-};
-
-
-/**
  * enum mc_features_omf - Drive features that participate in media classes
  *	                  definition. These values are ored in a 64 bits field.
  */

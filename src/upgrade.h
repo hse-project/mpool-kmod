@@ -55,26 +55,28 @@
  */
 
 /**
- * struct upg_history:
- *      Every time we update a nested structure in superblock or MDC,
- *      we need to save the following information about this update,
- *      such that we can keep the update history of this structure
- * @upgh_size: size of the current version in-memory structure
- * @upgh_unpack: unpacking function from on-media format to in-memory format
- * @upgh_conv: conversion function from previous version to current version,
+ * struct upgrade_history -
+ *
+ * Every time we update a nested structure in superblock or MDC, we need to
+ * save the following information about this update, such that we can keep the
+ * update history of this structure
+ *
+ * @uh_size:    size of the current version in-memory structure
+ * @uh_unpack:  unpacking function from on-media format to in-memory format
+ * @uh_conv:    conversion function from previous version to current version,
  *              set to NULL for the first version
- * @upgh_sbver: corresponding superblock version since which the change has
+ * @uh_sbver:   corresponding superblock version since which the change has
  *              been introduced. If this structure is not used by superblock
- *              set upgh_sbver =  OMF_SB_DESC_UNDEF.
- * @upgh_mdccver: corresponding mdc ver since which the change has been
+ *              set uh_sbver =  OMF_SB_DESC_UNDEF.
+ * @uh_mdccver: corresponding mdc ver since which the change has been
  *              introduced
  */
-struct upg_history {
-	size_t                      upgh_size;
-	merr_t (*upgh_unpack)(void *out, const char *inbuf);
-	merr_t (*upgh_conv)(const void *pre, void *cur);
-	enum sb_descriptor_ver_omf  upgh_sbver;
-	struct omf_mdccver          upgh_mdccver;
+struct upgrade_history {
+	size_t                      uh_size;
+	merr_t (*uh_unpack)(void *out, const char *inbuf);
+	merr_t (*uh_conv)(const void *pre, void *cur);
+	enum sb_descriptor_ver_omf  uh_sbver;
+	struct omf_mdccver          uh_mdccver;
 };
 
 /**

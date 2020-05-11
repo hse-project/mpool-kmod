@@ -379,46 +379,6 @@ omf_mdcrec_unpack_letoh(
 	const char                 *inbuf);
 
 /**
- * omf_logblock_header_cksum_le() - add checksum to log block buffer
- * @mp: struct mpool_descriptor *
- * @layout: struct pmd_layout *
- * @sidx: u8
- * @lpoff: u64
- * @lbuf: char *
- *
- * Add checksum to little-endian log block buffer lbuf in prep for write.
- *
- * Return: 0 if successful, merr_t otherwise.
- */
-merr_t
-omf_logblock_header_cksum_le(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	u8                          sidx,
-	u64                         lpoff,
-	char                       *lbuf);
-
-/**
- * omf_logblock_header_validate_le() - validate cksum on log block buffer
- * @mp: struct mpool_descriptor *
- * @layout: struct pmd_layout *
- * @sidx: u8
- * @lpoff: u64
- * @lbuf: char *
- *
- * Validate checksum in little-endian log block buffer lbuf.
- *
- * Return: 0 if successful, merr_t otherwise
- */
-merr_t
-omf_logblock_header_validate_le(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	u8                          sidx,
-	u64                         lpoff,
-	char                       *lbuf);
-
-/**
  * omf_mdcrec_isobj_le() - determine if mdc recordis object-related
  * @inbuf: char *
  *
@@ -448,9 +408,6 @@ u8 omf_mdcrec_unpack_type_letoh(const char *inbuf);
  * Return: true if the log record type is related to a data record.
  */
 bool logrec_type_datarec(enum logrec_type_omf rtype);
-
-extern struct shash_desc *mpool_shash_desc_crc32c;
-extern struct shash_desc *mpool_shash_desc_sha256;
 
 /**
  * omf_sbver_to_mdccver() - Returns the matching mdc version for a given

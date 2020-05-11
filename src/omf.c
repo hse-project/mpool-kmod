@@ -16,19 +16,29 @@
 #include <crypto/hash.h>
 
 #include "mpcore_defs.h"
-#include "omf_int.h"
+
+#define _STR(x) #x
+#define STR(x)  _STR(x)
+static const char mpool_sbver[] = "MPOOL_SBVER_" STR(OMF_SB_DESC_VER_LAST);
+
+enum unpack_only {
+	UNPACKONLY    = 0,
+	UNPACKCONVERT = 1,
+};
 
 /*
  * Forward declarations.
  */
+static merr_t omf_layout_unpack_letoh_v1(void *out, const char *inbuf);
 static merr_t omf_dparm_unpack_letoh_v1(void *out, const char *inbuf);
 static merr_t omf_mdcrec_mcspare_unpack_letoh_v1(void *out, const char *inbuf);
+static merr_t omf_sb_unpack_letoh_v1(void *out, const char *inbuf);
 static merr_t omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf);
 
 /*
  * layout_descriptor_table: track changes in OMF and in-memory layout descriptor
  */
-struct upg_history layout_descriptor_table[] = {
+struct upgrade_history layout_descriptor_table[] = {
 	{
 		sizeof(struct omf_layout_descriptor),
 		omf_layout_unpack_letoh_v1,
@@ -37,13 +47,11 @@ struct upg_history layout_descriptor_table[] = {
 		{ {1, 0, 0, 0} }
 	},
 };
-_Static_assert(ARRAY_SIZE(layout_descriptor_table) == OMF_LAYOUT_DESC_TABLE_SZ,
-	       "Incorrect no. of entries in layout desc. table");
 
 /*
  * devparm_descriptor_table: track changes in dev parm descriptor
  */
-struct upg_history devparm_descriptor_table[] = {
+struct upgrade_history devparm_descriptor_table[] = {
 	{
 		sizeof(struct omf_devparm_descriptor),
 		omf_dparm_unpack_letoh_v1,
@@ -52,14 +60,11 @@ struct upg_history devparm_descriptor_table[] = {
 		{ {1, 0, 0, 0} }
 	},
 };
-_Static_assert(
-	ARRAY_SIZE(devparm_descriptor_table) == OMF_DEVPARM_DESC_TABLE_SZ,
-	"Incorrect no. of entries in devparm desc. table");
 
 /*
  * mdcrec_data_mcspare_table: track changes in spare % record.
  */
-struct upg_history mdcrec_data_mcspare_table[]
+struct upgrade_history mdcrec_data_mcspare_table[]
 	= {
 	{
 		sizeof(struct omf_mdcrec_data),
@@ -69,14 +74,11 @@ struct upg_history mdcrec_data_mcspare_table[]
 		{ {1, 0, 0, 0} },
 	},
 };
-_Static_assert(ARRAY_SIZE(mdcrec_data_mcspare_table) ==
-	       OMF_MDCREC_DATA_MCSPARE_TABLE_SZ,
-	       "Incorrect no. of entries in mcspare table");
 
 /*
  * sb_descriptor_table: track changes in mpool superblock descriptor
  */
-struct upg_history sb_descriptor_table[] = {
+struct upgrade_history sb_descriptor_table[] = {
 	{
 		sizeof(struct omf_sb_descriptor),
 		omf_sb_unpack_letoh_v1,
@@ -85,18 +87,11 @@ struct upg_history sb_descriptor_table[] = {
 		{ {1, 0, 0, 0} }
 	},
 };
-_Static_assert(ARRAY_SIZE(sb_descriptor_table) ==
-	       OMF_SB_DESC_TABLE_SZ,
-	       "Incorrect no. of entries in sb desc. table");
-
-#define _STR(x) #x
-#define STR(x)  _STR(x)
-static const char mpool_sbver[] = "MPOOL_SBVER_" STR(OMF_SB_DESC_VER_LAST);
 
 /*
  * mdcrec_data_ocreate_table: track changes in OCREATE mdc record.
  */
-struct upg_history mdcrec_data_ocreate_table[]
+struct upgrade_history mdcrec_data_ocreate_table[]
 	= {
 	{
 		sizeof(struct omf_mdcrec_data),
@@ -106,43 +101,80 @@ struct upg_history mdcrec_data_ocreate_table[]
 		{ {1, 0, 0, 0} }
 	},
 };
-_Static_assert(ARRAY_SIZE(mdcrec_data_ocreate_table) ==
-	       OMF_MDCREC_DATA_OCREATE_TABLE_SZ,
-	       "Incorrect no. of entries in mdcrec create table");
 
 
 /*
  * Generic routines
  */
-struct upg_history *
+
+/**
+ * omf_find_upgrade_hist() -
+ *
+ * @uhtab:
+ * @tabsz:   NELEM of upgrade_table
+ * @sbver:   superblock version
+ * @mdccver: mdc version
+ *
+ * Given a superblock version or a mpool MDC content version, find the
+ * corresponding upgrade history entry which matches the given sb or mdc
+ * version.  That is the entry with the highest version such as
+ * entry version <= the version passed in.
+ *
+ * Note that caller of this routine can pass in either a valid superblock
+ * version or a valid mdc verison. If a valid superblock version is passed in,
+ * mdccver need to be set to NULL. If a mdc version is passed in, sbver
+ * need to set to 0.
+ *
+ * For example,
+ * We update a structure "struct abc" three times, which is part of mpool
+ * superblock or MDC. when superblock version is  1, 3 and 5 respectively.
+ * Each time we add an entry in the upgrade table for this structure.
+ * The upgrade history table looks like:
+ *
+ * struct upgrade_history abc_hist[] =
+ * {{sizeof(struct abc_v1), abc_unpack_v1, NULL, OMF_SB_DESC_V1, NULL},
+ *  {sizeof(struct abc_v2), abc_unpack_v2, NULL, OMF_SB_DESC_V3, NULL},
+ *  {sizeof(struct abc_v3), abc_unpack_v3, NULL, OMF_SB_DESC_V5, NULL}}
+ *
+ * if caller needs to find the upgrade history entry matches
+ * sb version 3(OMF_SB_DESC_V3), this routine finds the exact match and
+ * returns &abc_hist[1].
+ *
+ * if caller needs to find the upgrade history entry which matches
+ * sb version 4 (OMF_SB_DESC_V4), since we don't update this structure
+ * in sb version 4, this routine finds the prior entry which matches
+ * the sb version 3, return &abc_hist[1]
+ *
+ */
+struct upgrade_history *
 omf_find_upgrade_hist(
-	struct upg_history         *upgrade_table,
-	size_t                      table_sz,
+	struct upgrade_history     *uhtab,
+	size_t                      tabsz,
 	enum sb_descriptor_ver_omf  sbver,
 	struct omf_mdccver         *mdccver)
 {
-	struct upg_history *cur = NULL;
+	struct upgrade_history *cur = NULL;
 
 	int    beg = 0;
-	int    end = table_sz;
+	int    end = tabsz;
 	int    mid;
 
 	while (beg < end) {
 		mid = (beg + end) / 2;
-		cur = &upgrade_table[mid];
+		cur = &uhtab[mid];
 		if (mdccver) {
 			assert(sbver == 0);
-			if (upg_ver_cmp(mdccver, "==", &cur->upgh_mdccver))
+			if (upg_ver_cmp(mdccver, "==", &cur->uh_mdccver))
 				return cur;
-			else if (upg_ver_cmp(mdccver, ">", &cur->upgh_mdccver))
+			else if (upg_ver_cmp(mdccver, ">", &cur->uh_mdccver))
 				beg = mid + 1;
 			else
 				end = mid;
 		} else {
 			assert(sbver <= OMF_SB_DESC_VER_LAST);
-			if (sbver == cur->upgh_sbver)
+			if (sbver == cur->uh_sbver)
 				return cur;
-			else if (sbver > cur->upgh_sbver)
+			else if (sbver > cur->uh_sbver)
 				beg = mid + 1;
 			else
 				end = mid;
@@ -152,29 +184,49 @@ omf_find_upgrade_hist(
 	if (end == 0)
 		return NULL; /* not found */
 
-	return &upgrade_table[end-1];
+	return &uhtab[end - 1];
 }
 
+/**
+ * omf_upgrade_convert_only()-
+ *
+ * @out:        v2 in-memory metadata structure
+ * @outsz:      size of v2 in-memory metadata structure
+ * @in:         v1 in-memory metadata structure
+ * @uhtab:      upgrade history table for this structure
+ * @tabsz:      NELEM(uhtab)
+ * @sbver_v1:   superblock version converting from
+ * @sbver_v2:   superblock version converting to
+ * @mdccver_v1: mdc version converting from
+ * @mdccver_v1: mdc version converting to
+ *
+ * Convert a nested metadata structure in mpool superblock or
+ * MDC from v1 to v2 (v1 <= v2)
+ *
+ * Note that callers can pass in either mdc beg/end ver (mdccver_v1/mdccver_v2),
+ * or superblock beg/end versions (sbver_v1/sbver_v2). Set both mdccver_v1 and
+ * mdccver_v2 to NULL, if caller wants to use superblock versions
+ */
 merr_t
 omf_upgrade_convert_only(
 	void                       *out,
 	size_t                      outsz,
 	const void                 *in,
-	struct upg_history         *upg_hist_tbl,
-	size_t                      tblsz,
+	struct upgrade_history     *uhtab,
+	size_t                      tabsz,
 	enum sb_descriptor_ver_omf  sbver_v1,
 	enum sb_descriptor_ver_omf  sbver_v2,
 	struct omf_mdccver         *mdccver_v1,
 	struct omf_mdccver         *mdccver_v2)
 {
-	struct upg_history *v1, *v2, *cur;
+	struct upgrade_history *v1, *v2, *cur;
 
 	void   *new, *old;
 	size_t newsz;
 
-	v1 = omf_find_upgrade_hist(upg_hist_tbl, tblsz, sbver_v1, mdccver_v1);
+	v1 = omf_find_upgrade_hist(uhtab, tabsz, sbver_v1, mdccver_v1);
 	assert(v1);
-	v2 = omf_find_upgrade_hist(upg_hist_tbl, tblsz, sbver_v2, mdccver_v2);
+	v2 = omf_find_upgrade_hist(uhtab, tabsz, sbver_v2, mdccver_v2);
 	assert(v2);
 	assert(v1 <= v2);
 
@@ -187,8 +239,8 @@ omf_upgrade_convert_only(
 		 * Single step conversion, Don't need to allocate/free
 		 * buffers for intermediate conversion states
 		 */
-		if (v2->upgh_conv != NULL)
-			v2->upgh_conv(in, out);
+		if (v2->uh_conv != NULL)
+			v2->uh_conv(in, out);
 		return 0;
 	}
 
@@ -196,24 +248,24 @@ omf_upgrade_convert_only(
 	 * Make a local copy of input buffer, we won't free it
 	 * in the for loop below
 	 */
-	old = kmalloc(v1->upgh_size, GFP_KERNEL);
+	old = kmalloc(v1->uh_size, GFP_KERNEL);
 	if (!old)
 		return merr(ENOMEM);
-	memcpy(old, in, v1->upgh_size);
+	memcpy(old, in, v1->uh_size);
 
 	new = old;
-	newsz = v1->upgh_size;
+	newsz = v1->uh_size;
 
 	for (cur = v1 + 1; cur <= v2; cur++) {
-		if (!cur->upgh_conv)
+		if (!cur->uh_conv)
 			continue;
-		new = kzalloc(cur->upgh_size, GFP_KERNEL);
+		new = kzalloc(cur->uh_size, GFP_KERNEL);
 		if (!new) {
 			kfree(old);
 			return merr(ENOMEM);
 		}
-		newsz = cur->upgh_size;
-		cur->upgh_conv(old, new);
+		newsz = cur->uh_size;
+		cur->uh_conv(old, new);
 		kfree(old);
 		old = new;
 	}
@@ -224,76 +276,101 @@ omf_upgrade_convert_only(
 	return 0;
 }
 
+/**
+ * omf_upgrade_unpack_only() - unpack OMF meta data
+ * @out:     output buffer for in-memory structure
+ * @outsz:   size of output buffer
+ * @inbuf:   OMF structure
+ * @uhtab:   upgrade history table
+ * @tabsz:   NELEM of uhtab
+ * @sbver:   superblock version
+ * @mdccver: mpool MDC content version
+ */
 merr_t
 omf_upgrade_unpack_only(
 	void                       *out,
 	size_t                      outsz,
 	const char                 *inbuf,
-	struct upg_history         *upg_hist_tbl,
-	size_t                      tblsz,
+	struct upgrade_history     *uhtab,
+	size_t                      tabsz,
 	enum sb_descriptor_ver_omf  sbver,
 	struct omf_mdccver         *mdccver)
 {
-	struct upg_history *upg_hist;
+	struct upgrade_history *res;
 
 	merr_t err;
 
-	upg_hist = omf_find_upgrade_hist(upg_hist_tbl, tblsz, sbver, mdccver);
-	err = upg_hist->upgh_unpack(out, inbuf);
+	res = omf_find_upgrade_hist(uhtab, tabsz, sbver, mdccver);
+
+	err = res->uh_unpack(out, inbuf);
 
 	return ev(err);
 }
 
+/**
+ * omf_unpack_letoh_and_convert() -
+ *
+ * Unpack OMF meta data and convert it to the latest version.
+ *
+ * @out:     in-memory structure
+ * @outsz:   size of in-memory structure
+ * @inbuf:   OMF structure
+ * @uhtab:   upgrade history table
+ * @tabsz:   number of elements in uhtab
+ * @sbver:   superblock version
+ * @mdccver: mdc version. if set to NULL, use sbver to find the corresponding
+ *           nested structure upgrade table
+ */
 merr_t
 omf_unpack_letoh_and_convert(
 	void                       *out,
 	size_t                      outsz,
 	const char                 *inbuf,
-	struct upg_history         *upg_hist_tbl,
-	size_t                      tblsz,
+	struct upgrade_history     *uhtab,
+	size_t                      tabsz,
 	enum sb_descriptor_ver_omf  sbver,
 	struct omf_mdccver         *mdccver)
 {
-	struct upg_history *cur, *omf;
+	struct upgrade_history *cur, *omf;
 
 	void   *old, *new;
 	size_t  newsz;
 	merr_t  err;
 
-	omf = omf_find_upgrade_hist(upg_hist_tbl, tblsz, sbver, mdccver);
+	omf = omf_find_upgrade_hist(uhtab, tabsz, sbver, mdccver);
 	assert(omf);
-	if (omf == &upg_hist_tbl[tblsz - 1]) {
+	if (omf == &uhtab[tabsz - 1]) {
 		/*
 		 * Current version is the latest version.
 		 * Don't need to do any conversion
 		 */
-		err = omf->upgh_unpack(out, inbuf);
+		err = omf->uh_unpack(out, inbuf);
 		return ev(err);
 	}
 
-	old = kzalloc(omf->upgh_size, GFP_KERNEL);
+	old = kzalloc(omf->uh_size, GFP_KERNEL);
 	if (!old)
 		return merr(ENOMEM);
 
-	err = omf->upgh_unpack(old, inbuf);
+	err = omf->uh_unpack(old, inbuf);
 	if (ev(err)) {
 		kfree(old);
 		return err;
 	}
 
 	new = old;
-	newsz = omf->upgh_size;
+	newsz = omf->uh_size;
 
-	for (cur = omf + 1; cur <= &upg_hist_tbl[tblsz - 1]; cur++) {
-		if (!cur->upgh_conv)
+	for (cur = omf + 1; cur <= &uhtab[tabsz - 1]; cur++) {
+		if (!cur->uh_conv)
 			continue;
-		new = kzalloc(cur->upgh_size, GFP_KERNEL);
+		new = kzalloc(cur->uh_size, GFP_KERNEL);
 		if (!new) {
 			kfree(old);
 			return merr(ENOMEM);
 		}
-		newsz = cur->upgh_size;
-		cur->upgh_conv(old, new);
+		newsz = cur->uh_size;
+		cur->uh_conv(old, new);
 		kfree(old);
 		old = new;
 	}
@@ -365,17 +442,13 @@ omf_dparm_unpack_letoh(
 	merr_t err;
 
 	if (unpackonly == UNPACKONLY)
-		err = omf_upgrade_unpack_only(
-			dp, sizeof(*dp), inbuf,
+		err = omf_upgrade_unpack_only(dp, sizeof(*dp), inbuf,
 			devparm_descriptor_table,
-			ARRAY_SIZE(devparm_descriptor_table),
-			sbver, mdccver);
+			ARRAY_SIZE(devparm_descriptor_table), sbver, mdccver);
 	else
-		err = omf_unpack_letoh_and_convert(
-			dp, sizeof(*dp), inbuf,
+		err = omf_unpack_letoh_and_convert(dp, sizeof(*dp), inbuf,
 			devparm_descriptor_table,
-			ARRAY_SIZE(devparm_descriptor_table),
-			sbver, mdccver);
+			ARRAY_SIZE(devparm_descriptor_table), sbver, mdccver);
 
 	return ev(err);
 }
@@ -425,13 +498,11 @@ omf_layout_unpack_letoh(
 	if (unpackonly == UNPACKONLY)
 		err = omf_upgrade_unpack_only(ld, sizeof(*ld), inbuf,
 			layout_descriptor_table,
-			ARRAY_SIZE(layout_descriptor_table),
-			sbver, mdccver);
+			ARRAY_SIZE(layout_descriptor_table), sbver, mdccver);
 	else
 		err = omf_unpack_letoh_and_convert(ld, sizeof(*ld), inbuf,
 			layout_descriptor_table,
-			ARRAY_SIZE(layout_descriptor_table),
-			sbver, mdccver);
+			ARRAY_SIZE(layout_descriptor_table), sbver, mdccver);
 
 	return ev(err);
 }
@@ -518,8 +589,8 @@ static merr_t omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf)
 		       OMF_UUID_PACKLEN);
 
 	err = omf_layout_unpack_letoh(&cdr->u.obj.omd_old,
-		(char *)&(ocre_omf->pdrc_ld), OMF_SB_DESC_V1, NULL,
-		UNPACKONLY);
+				      (char *)&(ocre_omf->pdrc_ld),
+				      OMF_SB_DESC_V1, NULL, UNPACKONLY);
 	if (ev(err))
 		return err;
 
@@ -609,15 +680,46 @@ omf_pmd_layout_unpack_letoh(
 /*
  * sb_descriptor
  */
+
+/*
+ * omf_cksum_crc32c_le() -
+ *
+ * Compute 4-byte checksum of type CRC32C for data buffer dbuf with length dlen
+ * and store in obuf little-endian; CRC32C is the only crypto algorithm we
+ * currently support
+ *
+ * @dbuf: data buf
+ * @dlen: data length
+ * @obuf: output buf
+ *
+ * Return: 0 if successful, merr_t(EINVAL) otherwise
+ */
+merr_t omf_cksum_crc32c_le(const char *dbuf, u64 dlen, u8 *obuf)
+{
+	SHASH_DESC_ON_STACK(desc, mpool_tfm);
+
+	int rc;
+
+	memset(obuf, 0, 4);
+
+	desc->tfm = mpool_tfm;
+	desc->flags = 0;
+
+	rc = crypto_shash_digest(desc, (u8 *)dbuf, dlen, obuf);
+
+	return merr(rc);
+}
+
 struct omf_mdccver *omf_sbver_to_mdccver(enum sb_descriptor_ver_omf sbver)
 {
-	struct upg_history *upg_tbl;
+	struct upgrade_history *uhtab;
 
-	upg_tbl = omf_find_upgrade_hist(sb_descriptor_table,
-		ARRAY_SIZE(sb_descriptor_table), sbver, NULL);
-	if (upg_tbl) {
-		assert(upg_tbl->upgh_sbver == sbver);
-		return &upg_tbl->upgh_mdccver;
+	uhtab = omf_find_upgrade_hist(sb_descriptor_table,
+				      ARRAY_SIZE(sb_descriptor_table),
+				      sbver, NULL);
+	if (uhtab) {
+		assert(uhtab->uh_sbver == sbver);
+		return &uhtab->uh_mdccver;
 	}
 
 	return NULL;
@@ -686,21 +788,6 @@ merr_t omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf)
 	return 0;
 }
 
-merr_t omf_cksum_crc32c_le(const char *dbuf, u64 dlen, u8 *obuf)
-{
-	SHASH_DESC_ON_STACK(desc, mpool_tfm);
-
-	int rc;
-
-	memset(obuf, 0, 4);
-
-	desc->tfm = mpool_tfm;
-	desc->flags = 0;
-
-	rc = crypto_shash_digest(desc, (u8 *)dbuf, dlen, obuf);
-
-	return merr(rc);
-}
 
 /**
  * omf_sb_unpack_letoh_v1()- unpack version 1 omf sb descriptor into
