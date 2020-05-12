@@ -1367,8 +1367,9 @@ pmd_objs_load_parallel(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 		 * queue_work_node() would be preferable, but
 		 * it's not available on older kernels.
 		 */
+		cpu = (cpu + inc) % nr_cpumask_bits;
 		cpu = cpumask_next_wrap(
-			cpu + inc, cpu_online_mask, nr_cpumask_bits, false);
+			cpu, cpu_online_mask, nr_cpumask_bits, false);
 		queue_work_on(cpu, mp->pds_workq, &olwv[i].olw_work);
 	}
 

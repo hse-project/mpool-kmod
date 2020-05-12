@@ -123,16 +123,13 @@ static bool sb_parm_valid(struct mpool_dev_info *pd)
  */
 static merr_t sb_write_sbx(struct mpool_dev_info *pd, char *outbuf, u32 idx)
 {
+	struct iovec iov = { outbuf, SB_AREA_SZ };
 	merr_t       err;
-	struct iovec iovbuf;
 	u64          woff;
-
-	iovbuf.iov_base = outbuf;
-	iovbuf.iov_len = SB_AREA_SZ;
 
 	woff = sb_idx2woff(pd, idx);
 
-	err = pd_zone_pwritev_sync(pd, &iovbuf, 1, 0, woff);
+	err = pd_zone_pwritev_sync(pd, &iov, 1, 0, woff);
 	/* reset the rval as per api */
 	if (err >= 0)
 		err = 0;
@@ -150,15 +147,13 @@ static merr_t sb_write_sbx(struct mpool_dev_info *pd, char *outbuf, u32 idx)
  */
 static merr_t sb_read_sbx(struct mpool_dev_info *pd, char *inbuf, u32 idx)
 {
-	struct iovec iovbuf;
+	struct iovec iov = { inbuf, SB_AREA_SZ };
 	u64          woff;
 	merr_t       err;
 
-	iovbuf.iov_base = inbuf;
-	iovbuf.iov_len = SB_AREA_SZ;
-
 	woff = sb_idx2woff(pd, idx);
-	err = pd_zone_preadv(pd, &iovbuf, 1, 0, woff);
+
+	err = pd_zone_preadv(pd, &iov, 1, 0, woff);
 	/* Reset rval as per api */
 	if (err >= 0)
 		err = 0;
@@ -184,8 +179,6 @@ static merr_t sb_read_sbx(struct mpool_dev_info *pd, char *inbuf, u32 idx)
  */
 int sb_magic_check(struct mpool_dev_info *pd)
 {
-	struct iovec    iovbuf;
-
 	int     rval = 0, i;
 	char   *inbuf;
 	merr_t  err;
@@ -200,7 +193,7 @@ int sb_magic_check(struct mpool_dev_info *pd)
 
 	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
-	inbuf = kcalloc(SB_AREA_SZ, sizeof(char), GFP_KERNEL);
+	inbuf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!inbuf) {
 		err = merr(ENOMEM);
 		mp_pr_err("sb(%s) magic check: buffer alloc failed",
@@ -208,13 +201,13 @@ int sb_magic_check(struct mpool_dev_info *pd)
 		return -merr_errno(err);
 	}
 
-	iovbuf.iov_base = inbuf;
-	iovbuf.iov_len = SB_AREA_SZ;
-
 	for (i = 0; i < SB_SB_COUNT; i++) {
+		struct iovec iov = { inbuf, SB_AREA_SZ };
 		u64 woff = sb_idx2woff(pd, i);
 
-		err = pd_zone_preadv(pd, &iovbuf, 1, 0, woff);
+		memset(inbuf, 0, SB_AREA_SZ);
+
+		err = pd_zone_preadv(pd, &iov, 1, 0, woff);
 		if (err) {
 			rval = merr_errno(err);
 			mp_pr_err("sb(%s, %d) magic: read failed, woff %lu",
@@ -239,28 +232,25 @@ int sb_magic_check(struct mpool_dev_info *pd)
  */
 merr_t sb_write_new(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 {
-	/*
-	 * since pd is not yet a pool member only succeed if write all sb
-	 * copies.
-	 */
-	merr_t err;
-	char  *outbuf = NULL;
-	int    i = 0;
+	merr_t  err;
+	char   *outbuf;
+	int     i;
 
 	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
-
-	outbuf = kcalloc(SB_AREA_SZ, sizeof(char), GFP_KERNEL);
-	if (!outbuf)
-		return merr(ENOMEM);
 
 	if (!sb_parm_valid(pd)) {
 		err = merr(EINVAL);
 		mp_pr_err("sb(%s) invalid param, zonepg %u zonetot %u",
 			  err, pd->pdi_name, pd->pdi_parm.dpr_zonepg,
 			  pd->pdi_parm.dpr_zonetot);
-		kfree(outbuf);
 		return err;
 	}
+
+	outbuf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
+	if (!outbuf)
+		return merr(ENOMEM);
+
+	memset(outbuf, 0, SB_AREA_SZ);
 
 	err = omf_sb_pack_htole(sb, outbuf);
 	if (err) {
@@ -269,18 +259,21 @@ merr_t sb_write_new(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 		return err;
 	}
 
+	/*
+	 * since pd is not yet a pool member only succeed if write all sb
+	 * copies.
+	 */
 	for (i = 0; i < SB_SB_COUNT; i++) {
 		err = sb_write_sbx(pd, outbuf, i);
 		if (err) {
 			mp_pr_err("sb(%s, %d): write sbx failed",
 				  err, pd->pdi_name, i);
-			kfree(outbuf);
-			return err;
+			break;
 		}
 	}
 
 	kfree(outbuf);
-	return 0;
+	return err;
 }
 
 /*
@@ -293,15 +286,11 @@ merr_t sb_write_new(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
  */
 merr_t sb_write_update(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 {
-	merr_t  err = 0;
-	char   *outbuf = NULL;
+	merr_t  err;
+	char   *outbuf;
 	int     i;
 
 	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
-
-	outbuf = kcalloc(SB_AREA_SZ, sizeof(char), GFP_KERNEL);
-	if (!outbuf)
-		return merr(ENOMEM);
 
 	if (!sb_parm_valid(pd)) {
 		err = merr(EINVAL);
@@ -310,9 +299,14 @@ merr_t sb_write_update(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 			  pd->pdi_parm.dpr_zonepg,
 			  pd->pdi_parm.dpr_zonetot,
 			  (ulong)PD_LEN(&pd->pdi_prop));
-		kfree(outbuf);
 		return err;
 	}
+
+	outbuf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
+	if (!outbuf)
+		return merr(ENOMEM);
+
+	memset(outbuf, 0, SB_AREA_SZ);
 
 	err = omf_sb_pack_htole(sb, outbuf);
 	if (ev(err)) {
@@ -348,8 +342,6 @@ merr_t sb_write_update(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
  */
 merr_t sb_erase(struct mpool_dev_info *pd)
 {
-	struct iovec    iovbuf;
-
 	merr_t  err = 0;
 	char   *buf;
 	int     i;
@@ -364,17 +356,17 @@ merr_t sb_erase(struct mpool_dev_info *pd)
 
 	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
-	buf = kcalloc(SB_AREA_SZ, sizeof(char), GFP_KERNEL);
+	buf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!buf)
 		return merr(EINVAL);
 
-	iovbuf.iov_base = buf;
-	iovbuf.iov_len = SB_AREA_SZ;
+	memset(buf, 0, SB_AREA_SZ);
 
 	for (i = 0; i < SB_SB_COUNT; i++) {
+		struct iovec iov = { buf, SB_AREA_SZ };
 		u64 woff = sb_idx2woff(pd, i);
 
-		err = pd_zone_pwritev_sync(pd, &iovbuf, 1, 0, woff);
+		err = pd_zone_pwritev_sync(pd, &iov, 1, 0, woff);
 		if (err) {
 			mp_pr_err("sb(%s, %d): erase failed",
 				  err, pd->pdi_name, i);
@@ -480,7 +472,7 @@ sb_read(
 
 	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
-	buf = kcalloc(SB_AREA_SZ, sizeof(char), GFP_KERNEL);
+	buf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!buf) {
 		kfree(sbtmp);
 		return merr(ENOMEM);
@@ -492,6 +484,8 @@ sb_read(
 	 * SB1 only used for debugging.
 	 */
 	for (i = 0; i < SB_SB_COUNT; i++) {
+		memset(buf, 0, SB_AREA_SZ);
+
 		err = sb_read_sbx(pd, buf, i);
 		if (err)
 			mp_pr_err("sb(%s, %d) read sbx failed",
@@ -558,9 +552,11 @@ sb_read_debug(
 
 	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
-	buf = kcalloc(SB_AREA_SZ, sizeof(char), GFP_KERNEL);
+	buf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!buf)
 		return merr(ENOMEM);
+
+	memset(buf, 0, SB_AREA_SZ);
 
 	err = sb_read_sbx(pd, buf, posn);
 	if (!ev(err)) {
