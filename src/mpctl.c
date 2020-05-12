@@ -44,7 +44,7 @@
 #include "mpctl_reap.h"
 #include "init.h"
 
-#ifndef vm_fault_t
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
 typedef int vm_fault_t;
 #endif
 
