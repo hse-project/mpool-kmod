@@ -3558,19 +3558,17 @@ static merr_t mpioc_test(struct mpc_unit *unit, struct mpioc_test *test)
  */
 static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 {
-	union mpioc_union   argbuf;
-	struct mpc_unit    *unit;
+	char argbuf[256] __aligned(16);
+	struct mpc_unit *unit;
 
-	void       *argp, *stkbuf = NULL;
-	size_t      stkbufsz = 0;
-	merr_t      err;
-	ulong       iosz;
-	int         rc;
-
-	unit = fp->private_data;
+	size_t  argbufsz, stkbufsz;
+	void   *argp, *stkbuf;
+	merr_t  err;
+	ulong   iosz;
+	int     rc;
 
 	if (_IOC_TYPE(cmd) != MPIOC_MAGIC)
-		return ev(-ENOTTY);
+		return -ENOTTY;
 
 	if ((fp->f_flags & O_ACCMODE) == O_RDONLY) {
 		switch (cmd) {
@@ -3586,33 +3584,51 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			break;
 
 		default:
-			return ev(-EBADF);
+			return -EBADF;
 		}
 	}
 
+	unit = fp->private_data;
+	argbufsz = sizeof(argbuf);
 	iosz = _IOC_SIZE(cmd);
 	argp = (void *)arg;
 
-	if (iosz > sizeof(argbuf))
+	if (iosz > sizeof(union mpioc_union))
 		return -EINVAL;
 
-	/* Copy in write requests, and reject requests that won't
-	 * fit comfortably on the stack (i.e., larger than argbuf).
+	/* Set up argp/argbuf for read/write requests.
 	 */
 	if (_IOC_DIR(cmd) & (_IOC_READ | _IOC_WRITE)) {
-		if (iosz < sizeof(struct mpioc_cmn))
+		struct mpioc_cmn *cmn;
+
+		if (iosz < sizeof(*cmn))
 			return -EINVAL;
 
-		argp = &argbuf;
+		argp = argbuf;
+		if (iosz > argbufsz) {
+			argbufsz = roundup_pow_of_two(iosz);
+
+			argp = kzalloc(argbufsz, GFP_KERNEL);
+			if (!argp)
+				return -ENOMEM;
+		}
+
+		cmn = argp;
 
 		if (_IOC_DIR(cmd) & _IOC_WRITE) {
-			if (copy_from_user(argp, (void *)arg, iosz))
-				return ev(-EFAULT);
+			if (copy_from_user(argp, (void *)arg, iosz)) {
+				if (argp != argbuf)
+					kfree(argp);
+				return -EFAULT;
+			}
 
-			if (argbuf.mpu_cmn.mc_rcode || argbuf.mpu_cmn.mc_err)
+			if (cmn->mc_rcode || cmn->mc_err) {
+				if (argp != argbuf)
+					kfree(argp);
 				return -EINVAL;
+			}
 		} else {
-			memset(&argbuf.mpu_cmn, 0, sizeof(argbuf.mpu_cmn));
+			memset(cmn, 0, sizeof(*cmn));
 		}
 	}
 
@@ -3672,9 +3688,9 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 	case MPIOC_MB_READ:
 	case MPIOC_MB_WRITE:
-		assert(roundup(iosz, 16) < sizeof(argbuf));
-		stkbufsz = sizeof(argbuf) - roundup(iosz, 16);
-		stkbuf = (char *)&argbuf + roundup(iosz, 16);
+		assert(roundup(iosz, 16) < argbufsz);
+		stkbufsz = argbufsz - roundup(iosz, 16);
+		stkbuf = argbuf + roundup(iosz, 16);
 
 		err = mpioc_mb_rw(unit, cmd, argp, stkbuf, stkbufsz);
 		break;
@@ -3697,9 +3713,9 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 	case MPIOC_MLOG_READ:
 	case MPIOC_MLOG_WRITE:
-		assert(roundup(iosz, 16) < sizeof(argbuf));
-		stkbufsz = sizeof(argbuf) - roundup(iosz, 16);
-		stkbuf = (char *)&argbuf + roundup(iosz, 16);
+		assert(roundup(iosz, 16) < argbufsz);
+		stkbufsz = argbufsz - roundup(iosz, 16);
+		stkbuf = argbuf + roundup(iosz, 16);
 
 		err = mpioc_mlog_rw(unit, argp, stkbuf, stkbufsz);
 		break;
@@ -3730,9 +3746,9 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 	default:
 		err = merr(ENOTTY);
-		mp_pr_err("invalid command %x: dir=%u type=%c nr=%u size=%u",
-			  err, cmd, _IOC_DIR(cmd), _IOC_TYPE(cmd),
-			  _IOC_NR(cmd), _IOC_SIZE(cmd));
+		mp_pr_rl("invalid command %x: dir=%u type=%c nr=%u size=%u",
+			 err, cmd, _IOC_DIR(cmd), _IOC_TYPE(cmd),
+			 _IOC_NR(cmd), _IOC_SIZE(cmd));
 		break;
 	}
 
@@ -3750,6 +3766,9 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		if (copy_to_user((void *)arg, argp, iosz))
 			rc = ev(-EFAULT);
 	}
+
+	if (argp != argbuf)
+		kfree(argp);
 
 	return rc;
 }
