@@ -130,10 +130,10 @@ mc_set_spzone(
 	u8                       spzone);
 
 /**
- * mclassp_valid() - Return true if the media class is valid.
+ * mclass_isvalid() - Return true if the media class is valid.
  * @mclass:
  */
-static inline bool mclassp_valid(enum mp_media_classp mclass)
+static inline bool mclass_isvalid(enum mp_media_classp mclass)
 {
 	return (mclass >= 0 && mclass < MP_MED_NUMBER);
 };

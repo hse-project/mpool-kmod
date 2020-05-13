@@ -41,7 +41,7 @@ pmd_obj_alloc_cmn(
 	u64                         objid,
 	enum obj_type_omf           otype,
 	struct pmd_obj_capacity    *ocap,
-	enum mp_media_classp        mclassp,
+	enum mp_media_classp        mclass,
 	int                         realloc,
 	bool                        needref,
 	struct pmd_layout         **layoutp);
@@ -544,7 +544,7 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 			mp_pr_debug("Found spare record for mclassp %u",
 				    0, cdr.u.mcs.omd_mclassp);
 			mclassp = cdr.u.mcs.omd_mclassp;
-			if (mclassp_valid(mclassp)) {
+			if (mclass_isvalid(mclassp)) {
 				spzone[mclassp] = cdr.u.mcs.omd_spzone;
 			} else {
 				err = merr(EINVAL);
@@ -2631,7 +2631,7 @@ pmd_prop_mcspare(
 	merr_t                  err = 0;
 	struct omf_mdcrec_data  cdr;
 
-	if (!mclassp_valid(mclassp) || spzone > 100) {
+	if (!mclass_isvalid(mclassp) || spzone > 100) {
 		err = merr(EINVAL);
 		mp_pr_err("persisting %s spare zone info, invalid arguments %d %u",
 			  err, mp->pds_name, mclassp, spzone);
@@ -3008,7 +3008,7 @@ pmd_alloc_argcheck(
 	if (!mp)
 		return merr(EINVAL);
 
-	if (!objtype_user(otype) || !mpool_mc_isvalid(mclassp)) {
+	if (!objtype_user(otype) || !mclass_isvalid(mclassp)) {
 		err = merr(EINVAL);
 		mp_pr_err("mpool %s, unknown object type or media class %d %d",
 			  err, mp->pds_name, otype, mclassp);
@@ -3031,7 +3031,7 @@ pmd_obj_alloc_cmn(
 	u64                         objid,
 	enum obj_type_omf           otype,
 	struct pmd_obj_capacity    *ocap,
-	enum mp_media_classp        mclassp,
+	enum mp_media_classp        mclass,
 	int                         realloc,
 	bool                        needref,
 	struct pmd_layout         **layoutp)
@@ -3042,13 +3042,13 @@ pmd_obj_alloc_cmn(
 	struct media_class     *mc;
 
 	int     retries, flush;
-	bool    beffort, fallback;
+	u64     zcnt = 0;
 	u8      cslot;
 	merr_t  err;
 
 	*layoutp = NULL;
 
-	err = pmd_alloc_argcheck(mp, objid, otype, ocap, mclassp);
+	err = pmd_alloc_argcheck(mp, objid, otype, ocap, mclass);
 	if (ev(err))
 		return err;
 
@@ -3063,63 +3063,42 @@ pmd_obj_alloc_cmn(
 		/* realloc: validate objid */
 		err = pmd_realloc_idvalidate(mp, objid);
 	}
-
 	if (err)
 		return ev(err);
-
-	beffort = mpool_mc_isbe(mclassp);
-	mclassp = mpool_mc_first_get(mclassp);
-
-	/*
-	 * Retry from 1 to 2ms if fallback is requested, and if no fallback,
-	 * retry from 128 to 256ms with a flush every 1/8th of the retries.
-	 * This is a workaround for the async mblock trim problem.
-	 */
-	fallback = (beffort && (mclassp < MP_MED_NUMBER - 1));
-	retries  = fallback ? 8 : 1024;
-	flush    = fallback ? 0 : retries >> 3;
-
-retry:
-	down_read(&mp->pds_pdvlock);
-
-	do {
-		mc = &mp->pds_mc[mclassp];
-		if (mc->mc_pdmc >= 0)
-			break;
-
-		if (ev(!beffort || ++mclassp >= MP_MED_NUMBER)) {
-			up_read(&mp->pds_pdvlock);
-
-			return merr(ENOENT);
-		}
-	} while (beffort);
-
-	assert(mclassp < MP_MED_NUMBER);
 
 	if (otype == OMF_OBJ_MLOG)
 		mpool_generate_uuid(&uuid);
 
-	while (true) {
-		u64 zcnt = 0;
+	/*
+	 * Retry from 128 to 256ms with a flush every 1/8th of the retries.
+	 * This is a workaround for the async mblock trim problem.
+	 */
+	retries = 1024;
+	flush   = retries >> 3;
 
-		/*
-		 * Calculate the height (zcnt) of layout.
-		 */
-		pmd_layout_calculate(mp, ocap, mc, &zcnt, otype);
+retry:
+	down_read(&mp->pds_pdvlock);
 
-		layout = pmd_layout_alloc(mp, &uuid, objid, 0, 0, zcnt);
-		if (!layout) {
-			up_read(&mp->pds_pdvlock);
-			return merr(ENOMEM);
-		}
-
-		/* Try to allocate zones from drives in media class */
-		err = pmd_layout_provision(mp, ocap, layout, mc, zcnt);
-		if (!err)
-			break;
-
+	mc = &mp->pds_mc[mclass];
+	if (mc->mc_pdmc < 0) {
 		up_read(&mp->pds_pdvlock);
+		return merr(ENOENT);
+	}
 
+	/* Calculate the height (zcnt) of layout. */
+	pmd_layout_calculate(mp, ocap, mc, &zcnt, otype);
+
+	layout = pmd_layout_alloc(mp, &uuid, objid, 0, 0, zcnt);
+	if (!layout) {
+		up_read(&mp->pds_pdvlock);
+		return merr(ENOMEM);
+	}
+
+	/* Try to allocate zones from drives in media class */
+	err = pmd_layout_provision(mp, ocap, layout, mc, zcnt);
+	up_read(&mp->pds_pdvlock);
+
+	if (err) {
 		kref_put(&layout->eld_ref, pmd_layout_release);
 
 		/* TODO: Retry only if mperasewq is busy... */
@@ -3132,23 +3111,11 @@ retry:
 			goto retry;
 		}
 
-		if (beffort && ++mclassp < MP_MED_NUMBER) {
-			if (mclassp == MP_MED_NUMBER - 1) {
-				retries = 1024;
-				flush = retries >> 3;
-			}
-			goto retry;
-		}
-
 		mp_pr_rl("mpool %s, layout alloc failed: objid 0x%lx %lu %u",
 			 err, mp->pds_name, (ulong)objid, (ulong)zcnt, otype);
 
 		return err;
 	}
-
-	assert(!err);
-
-	up_read(&mp->pds_pdvlock);
 
 	cslot = objid_slot(objid);
 	cinfo = &mp->pds_mda.mdi_slotv[cslot];

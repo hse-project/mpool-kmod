@@ -410,26 +410,6 @@ mpool_get_usage(
 	enum mp_media_classp        mclassp,
 	struct mp_usage            *usage);
 
-
-/**
- * mpool_mc_isbe() - Check whether mclassp is a best effort media classes.
- * @mclassp:
- */
-bool mpool_mc_isbe(enum mp_media_classp mclassp);
-
-/**
- * mpool_mc_first_get() - Get the first media class in the specified best
- *                        effort type.
- * @mclassp:
- */
-enum mp_media_classp mpool_mc_first_get(enum mp_media_classp mclassp);
-
-/**
- * mpool_mc_isvalid() - Check whether mclassp is valid.
- * @mclassp:
- */
-bool mpool_mc_isvalid(enum mp_media_classp mclassp);
-
 /**
  * mpool_config_store() - store a config record in MDC0
  * @mp:

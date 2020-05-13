@@ -136,7 +136,7 @@ smap_drive_spares(
 	merr_t                 err;
 	u8                     i;
 
-	if (!mclassp_valid(mclassp) || spzone > 100) {
+	if (!mclass_isvalid(mclassp) || spzone > 100) {
 		err = merr(EINVAL);
 		mp_pr_err("smap mpool %s: smap drive spares failed mclassp %d spzone %u",
 			  err, mp->pds_name, mclassp, spzone);

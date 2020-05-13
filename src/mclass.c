@@ -101,7 +101,7 @@ mc_smap_parms_get_internal(
 	struct mc_smap_parms       *mcsp)
 {
 	mcsp->mcsp_spzone = mp->pds_params.mp_spare;
-	mcsp->mcsp_rgnc   = mp->pds_params.mp_smaprgnc;
+	mcsp->mcsp_rgnc = mp->pds_params.mp_smaprgnc;
 	mcsp->mcsp_align = mp->pds_params.mp_smapalign;
 }
 
@@ -123,22 +123,4 @@ mc_smap_parms_get(
 		mc_smap_parms_get_internal(mp, mcsp);
 
 	return 0;
-}
-
-enum mp_media_classp mpool_mc_first_get(enum mp_media_classp mclass)
-{
-	return (mclass < MP_MED_BEST_EFFORT) ? mclass :
-		mclass - MP_MED_BEST_EFFORT;
-}
-
-bool mpool_mc_isbe(enum mp_media_classp mclass)
-{
-	return mclass >= MP_MED_BEST_EFFORT &&
-		mclass < MP_MED_BEST_EFFORT + MP_MED_NUMBER;
-}
-
-bool mpool_mc_isvalid(enum mp_media_classp mclass)
-{
-	return (mclass >= 0 &&
-		(mclass < MP_MED_NUMBER || mpool_mc_isbe(mclass)));
 }

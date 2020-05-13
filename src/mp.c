@@ -361,7 +361,7 @@ mpool_desc_pdmc_add(
 	else
 		mc_omf_devparm2mc_parms(omf_devparm, &mc_parms);
 
-	if (!mclassp_valid(mc_parms.mcp_classp)) {
+	if (!mclass_isvalid(mc_parms.mcp_classp)) {
 		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 			     "media class %u of %s is undefined",
 			     mc_parms.mcp_classp, pd->pdi_name);
@@ -607,8 +607,7 @@ mpool_create(
 
 	mpool_devrpt_init(devrpt);
 
-	if (!mpname || !*mpname || (mdparm->mdp_mclassp != MP_MED_ANY &&
-	     !mclassp_valid(mdparm->mdp_mclassp))) {
+	if (!mpname || !*mpname || !mclass_isvalid(mdparm->mdp_mclassp)) {
 		err = merr(EINVAL);
 		mp_pr_err("mpool %s, class perf %u",
 			  err, mpname ? mpname : "?", mdparm->mdp_mclassp);
@@ -1927,7 +1926,7 @@ mpool_drive_spares(
 
 	merr_t   err;
 
-	if (!mclassp_valid(mclassp) || drive_spares > 100) {
+	if (!mclass_isvalid(mclassp) || drive_spares > 100) {
 		err = merr(EINVAL);
 		mp_pr_err("mpool %s, setting percent %u spare for drives in media class %d failed",
 			  err, mp->pds_name, drive_spares, mclassp);

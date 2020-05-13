@@ -2736,7 +2736,7 @@ mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop, int cmd)
 	 */
 	xprops = &kprop->pr_xprops;
 	mpool_get_xprops(desc, xprops);
-	mpool_get_usage(desc, MCLASS_ALL, &kprop->pr_usage);
+	mpool_get_usage(desc, MP_MED_ALL, &kprop->pr_usage);
 
 	params->mp_spare_cap = xprops->ppx_drive_spares[MP_MED_CAPACITY];
 	params->mp_spare_stg = xprops->ppx_drive_spares[MP_MED_STAGING];
