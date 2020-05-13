@@ -134,23 +134,23 @@ static void mpc_reap_meminfo(ulong *freep, ulong *availp, uint shift)
 		*availp = (si_mem_available() * si.mem_unit) >> shift;
 }
 
-static void mpc_reap_evict_vma(struct mpc_vma *meta)
+static void mpc_reap_evict_vma(struct mpc_xvm *meta)
 {
-	struct address_space   *mapping = meta->mcm_mapping;
-	struct mpc_reap        *reap = meta->mcm_reap;
+	struct address_space   *mapping = meta->xvm_mapping;
+	struct mpc_reap        *reap = meta->xvm_reap;
 
 	pgoff_t off, bktsz, len;
 	u64     ttl, xtime, now;
 	int     i;
 
-	bktsz = meta->mcm_bktsz >> PAGE_SHIFT;
-	off = mpc_vma_pgoff(meta);
+	bktsz = meta->xvm_bktsz >> PAGE_SHIFT;
+	off = mpc_xvm_pgoff(meta);
 
 	ttl = atomic_read(&reap->reap_ttl_cur) * 1000ul;
 	now = local_clock();
 
-	for (i = 0; i < meta->mcm_mbinfoc; ++i, off += bktsz) {
-		struct mpc_mbinfo *mbinfo = meta->mcm_mbinfov + i;
+	for (i = 0; i < meta->xvm_mbinfoc; ++i, off += bktsz) {
+		struct mpc_mbinfo *mbinfo = meta->xvm_mbinfov + i;
 
 		xtime = now - (ttl * mbinfo->mbmult);
 		len = mbinfo->mblen >> PAGE_SHIFT;
@@ -162,7 +162,7 @@ static void mpc_reap_evict_vma(struct mpc_vma *meta)
 
 		invalidate_inode_pages2_range(mapping, off, off + len);
 
-		if (atomic64_read(&meta->mcm_nrpages) < 32)
+		if (atomic64_read(&meta->xvm_nrpages) < 32)
 			break;
 
 		if (need_resched())
@@ -179,13 +179,13 @@ static void mpc_reap_evict_vma(struct mpc_vma *meta)
  */
 static void mpc_reap_evict(struct list_head *process)
 {
-	struct mpc_vma *meta, *next;
+	struct mpc_xvm *meta, *next;
 
-	list_for_each_entry_safe(meta, next, process, mcm_list) {
-		if (atomic_read(&meta->mcm_reap->reap_lwm))
+	list_for_each_entry_safe(meta, next, process, xvm_list) {
+		if (atomic_read(&meta->xvm_reap->reap_lwm))
 			mpc_reap_evict_vma(meta);
 
-		atomic_cmpxchg(&meta->mcm_evicting, 1, 0);
+		atomic_cmpxchg(&meta->xvm_evicting, 1, 0);
 	}
 }
 
@@ -197,7 +197,7 @@ static void mpc_reap_evict(struct list_head *process)
 static void mpc_reap_scan(struct mpc_reap_elem *elem)
 {
 	struct list_head   *list, process;
-	struct mpc_vma     *meta, *next;
+	struct mpc_xvm     *meta, *next;
 	u64                 nrpages, n;
 
 	INIT_LIST_HEAD(&process);
@@ -206,20 +206,20 @@ static void mpc_reap_scan(struct mpc_reap_elem *elem)
 	list = &elem->reap_list;
 	n = 0;
 
-	list_for_each_entry_safe(meta, next, list, mcm_list) {
-		nrpages = atomic64_read(&meta->mcm_nrpages);
+	list_for_each_entry_safe(meta, next, list, xvm_list) {
+		nrpages = atomic64_read(&meta->xvm_nrpages);
 
 		if (nrpages < 32)
 			continue;
 
-		if (atomic_read(&meta->mcm_reapref) == 1)
+		if (atomic_read(&meta->xvm_reapref) == 1)
 			continue;
 
-		if (atomic_cmpxchg(&meta->mcm_evicting, 0, 1))
+		if (atomic_cmpxchg(&meta->xvm_evicting, 0, 1))
 			continue;
 
-		list_del(&meta->mcm_list);
-		list_add(&meta->mcm_list, &process);
+		list_del(&meta->xvm_list);
+		list_add(&meta->xvm_list, &process);
 
 		if (++n > 4)
 			break;
@@ -330,7 +330,7 @@ static void mpc_reap_tune(struct mpc_reap *reap)
 
 static void mpc_reap_prune(struct work_struct *work)
 {
-	struct mpc_vma         *meta, *next;
+	struct mpc_xvm         *meta, *next;
 	struct mpc_reap_elem   *elem;
 	struct mpc_reap        *reap;
 	struct list_head        freeme;
@@ -368,20 +368,20 @@ static void mpc_reap_prune(struct work_struct *work)
 		struct list_head   *list = &elem->reap_list;
 		uint                npruned = 0;
 
-		list_for_each_entry_safe(meta, next, list, mcm_list) {
-			if (atomic_read(&meta->mcm_reapref) > 1)
+		list_for_each_entry_safe(meta, next, list, xvm_list) {
+			if (atomic_read(&meta->xvm_reapref) > 1)
 				continue;
 
-			list_del(&meta->mcm_list);
-			list_add_tail(&meta->mcm_list, &freeme);
+			list_del(&meta->xvm_list);
+			list_add_tail(&meta->xvm_list, &freeme);
 
 			if (++npruned >= nfreed)
 				break;
 		}
 		mutex_unlock(&elem->reap_lock);
 
-		list_for_each_entry_safe(meta, next, &freeme, mcm_list)
-			mpc_vma_free(meta);
+		list_for_each_entry_safe(meta, next, &freeme, xvm_list)
+			mpc_xvm_free(meta);
 
 		atomic_sub(npruned, &elem->reap_nfreed);
 	}
@@ -572,7 +572,7 @@ void mpc_reap_destroy(struct mpc_reap *reap)
 	kfree(reap);
 }
 
-void mpc_reap_vma_add(struct mpc_reap *reap, struct mpc_vma *meta)
+void mpc_reap_vma_add(struct mpc_reap *reap, struct mpc_xvm *meta)
 {
 	struct mpc_reap_elem   *elem;
 	uint                    idx;
@@ -581,48 +581,48 @@ void mpc_reap_vma_add(struct mpc_reap *reap, struct mpc_vma *meta)
 	if (!reap || !meta)
 		return;
 
-	if (meta->mcm_advice == MPC_VMA_PINNED)
+	if (meta->xvm_advice == MPC_VMA_PINNED)
 		return;
 
 	mult = 1;
-	if (meta->mcm_advice == MPC_VMA_WARM)
+	if (meta->xvm_advice == MPC_VMA_WARM)
 		mult = 10;
-	else if (meta->mcm_advice == MPC_VMA_HOT)
+	else if (meta->xvm_advice == MPC_VMA_HOT)
 		mult = 30;
 
 	/* Acquire a reference on meta for the reaper...
 	 */
-	atomic_inc(&meta->mcm_reapref);
-	meta->mcm_reap = reap;
+	atomic_inc(&meta->xvm_reapref);
+	meta->xvm_reap = reap;
 
 	idx = (get_cycles() >> 1) % REAP_ELEM_MAX;
 
 	elem = &reap->reap_elem[idx];
 
 	mutex_lock(&elem->reap_lock);
-	meta->mcm_freedp = &elem->reap_nfreed;
+	meta->xvm_freedp = &elem->reap_nfreed;
 
-	if (meta->mcm_advice == MPC_VMA_HOT)
-		meta->mcm_hcpagesp = &elem->reap_hpages;
-	else if (meta->mcm_advice == MPC_VMA_WARM)
-		meta->mcm_hcpagesp = &elem->reap_wpages;
+	if (meta->xvm_advice == MPC_VMA_HOT)
+		meta->xvm_hcpagesp = &elem->reap_hpages;
+	else if (meta->xvm_advice == MPC_VMA_WARM)
+		meta->xvm_hcpagesp = &elem->reap_wpages;
 	else
-		meta->mcm_hcpagesp = &elem->reap_cpages;
+		meta->xvm_hcpagesp = &elem->reap_cpages;
 
-	list_add_tail(&meta->mcm_list, &elem->reap_list);
+	list_add_tail(&meta->xvm_list, &elem->reap_list);
 	mutex_unlock(&elem->reap_lock);
 }
 
-void mpc_reap_vma_evict(struct mpc_vma *meta)
+void mpc_reap_vma_evict(struct mpc_xvm *meta)
 {
 	pgoff_t start, end, bktsz;
 
-	if (atomic_cmpxchg(&meta->mcm_evicting, 0, 1))
+	if (atomic_cmpxchg(&meta->xvm_evicting, 0, 1))
 		return;
 
-	start = mpc_vma_pgoff(meta);
-	end = mpc_vma_pglen(meta) + start;
-	bktsz = meta->mcm_bktsz >> PAGE_SHIFT;
+	start = mpc_xvm_pgoff(meta);
+	end = mpc_xvm_pglen(meta) + start;
+	bktsz = meta->xvm_bktsz >> PAGE_SHIFT;
 
 	if (bktsz < 1024)
 		bktsz = end - start;
@@ -631,12 +631,12 @@ void mpc_reap_vma_evict(struct mpc_vma *meta)
 	 */
 	for (; start < end; start += bktsz)
 		invalidate_inode_pages2_range(
-			meta->mcm_mapping, start, start + bktsz);
+			meta->xvm_mapping, start, start + bktsz);
 
-	atomic_cmpxchg(&meta->mcm_evicting, 1, 0);
+	atomic_cmpxchg(&meta->xvm_evicting, 1, 0);
 }
 
-void mpc_reap_vma_touch(struct mpc_vma *meta, int index)
+void mpc_reap_vma_touch(struct mpc_xvm *meta, int index)
 {
 	struct mpc_reap    *reap;
 	atomic64_t         *atimep;
@@ -646,14 +646,14 @@ void mpc_reap_vma_touch(struct mpc_vma *meta, int index)
 	uint                lwm;
 	u64                 now;
 
-	reap = meta->mcm_reap;
+	reap = meta->xvm_reap;
 	if (!reap)
 		return;
 
-	offset = (index << PAGE_SHIFT) % (1ul << mpc_vma_size_max);
-	mbnum = offset / meta->mcm_bktsz;
+	offset = (index << PAGE_SHIFT) % (1ul << mpc_xvm_size_max);
+	mbnum = offset / meta->xvm_bktsz;
 
-	atimep = &meta->mcm_mbinfov[mbnum].mbatime;
+	atimep = &meta->xvm_mbinfov[mbnum].mbatime;
 	now = local_clock();
 
 	/* Don't update atime too frequently.  If we set atime to
@@ -676,15 +676,15 @@ void mpc_reap_vma_touch(struct mpc_vma *meta, int index)
 	usleep_range(delay, delay * 2);
 }
 
-bool mpc_reap_vma_duress(struct mpc_vma *meta)
+bool mpc_reap_vma_duress(struct mpc_xvm *meta)
 {
 	struct mpc_reap    *reap;
 	uint                lwm;
 
-	if (meta->mcm_advice == MPC_VMA_HOT)
+	if (meta->xvm_advice == MPC_VMA_HOT)
 		return false;
 
-	reap = meta->mcm_reap;
+	reap = meta->xvm_reap;
 	if (!reap)
 		return false;
 
@@ -695,5 +695,5 @@ bool mpc_reap_vma_duress(struct mpc_vma *meta)
 	if (lwm > 3000)
 		return true;
 
-	return (meta->mcm_advice == MPC_VMA_COLD);
+	return (meta->xvm_advice == MPC_VMA_COLD);
 }

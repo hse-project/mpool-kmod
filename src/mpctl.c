@@ -136,7 +136,7 @@ struct mpc_mpool {
  * not alter the given iovec.
  */
 struct readpage_args {
-	void                       *a_meta;
+	void                       *a_xvm;
 	struct mblock_descriptor   *a_mbdesc;
 	u64                         a_mboffset;
 	int                         a_pagec;
@@ -151,7 +151,7 @@ struct readpage_work {
 /**
  * struct mpc_metamap -
  * @mm_rgnlock: serializes region alloc/free
- * @mm_rgnmap:  vma region allocator
+ * @mm_rgnmap:  extended VMA region allocator
  * @mm_refcnt;  metamap reference count
  */
 struct mpc_metamap {
@@ -160,7 +160,7 @@ struct mpc_metamap {
 	atomic_t        mm_refcnt;
 };
 
-static void mpc_vma_put(struct mpc_vma *vma);
+static void mpc_xvm_put(struct mpc_xvm *xvm);
 
 static merr_t mpc_cf_journal(struct mpc_unit *unit);
 
@@ -176,7 +176,7 @@ mpc_physio(
 	void                       *stkbuf,
 	size_t                      stkbufsz);
 
-static int mpc_readpage_impl(struct page *page, struct mpc_vma *map);
+static int mpc_readpage_impl(struct page *page, struct mpc_xvm *map);
 
 #define ITERCB_NEXT     (0)
 #define ITERCB_DONE     (1)
@@ -206,8 +206,8 @@ static struct workqueue_struct *mpc_wq_trunc __read_mostly;
 static struct workqueue_struct *mpc_wq_rav[4] __read_mostly;
 static struct mpc_reap *mpc_reap __read_mostly;
 
-static size_t mpc_vma_cachesz[2] __read_mostly;
-static struct kmem_cache *mpc_vma_cache[2] __read_mostly;
+static size_t mpc_xvm_cachesz[2] __read_mostly;
+static struct kmem_cache *mpc_xvm_cache[2] __read_mostly;
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
 static struct backing_dev_info mpc_bdi = {
@@ -247,13 +247,13 @@ static unsigned int mpc_maxunits __read_mostly = 1024;
 module_param(mpc_maxunits, uint, 0444);
 MODULE_PARM_DESC(mpc_maxunits, " max mpools");
 
-static unsigned int mpc_vma_max __read_mostly = 1048576 * 128;
-module_param(mpc_vma_max, uint, 0444);
-MODULE_PARM_DESC(mpc_vma_max, " max vma regions");
+static unsigned int mpc_xvm_max __read_mostly = 1048576 * 128;
+module_param(mpc_xvm_max, uint, 0444);
+MODULE_PARM_DESC(mpc_xvm_max, " max extended VMA regions");
 
-unsigned int mpc_vma_size_max __read_mostly = 30;
-module_param(mpc_vma_size_max, uint, 0444);
-MODULE_PARM_DESC(mpc_vma_size_max, " max vma size log2");
+unsigned int mpc_xvm_size_max __read_mostly = 30;
+module_param(mpc_xvm_size_max, uint, 0444);
+MODULE_PARM_DESC(mpc_xvm_size_max, " max extended VMA size log2");
 
 unsigned int mpc_rwsz_max __read_mostly = 32;
 module_param(mpc_rwsz_max, uint, 0444);
@@ -402,7 +402,7 @@ static void mpool_params_merge_defaults(struct mpool_params *params)
 	if (params->mp_mode != -1)
 		params->mp_mode &= 0777;
 
-	params->mp_vma_size_max = mpc_vma_size_max;
+	params->mp_vma_size_max = mpc_xvm_size_max;
 
 	params->mp_rsvd1 = 0;
 	params->mp_rsvd2 = 0;
@@ -902,16 +902,16 @@ static merr_t mpc_metamap_create(struct mpc_metamap **mmp)
 	return 0;
 }
 
-static int mpc_metamap_destroy_cb(int rn, void *item, void *data)
+static int mpc_metamap_destroy_cb(int rgn, void *item, void *data)
 {
-	struct mpc_vma *vma = item;
+	struct mpc_xvm *xvm = item;
 	void          **headp = data;
 
-	if (vma && kref_read(&vma->mcm_ref) == 1 &&
-	    !atomic_read(&vma->mcm_opened)) {
-		idr_replace(&vma->mcm_metamap->mm_rgnmap, NULL, vma->mcm_rgn);
-		vma->mcm_next = *headp;
-		*headp = vma;
+	if (xvm && kref_read(&xvm->xvm_ref) == 1 &&
+	    !atomic_read(&xvm->xvm_opened)) {
+		idr_replace(&xvm->xvm_metamap->mm_rgnmap, NULL, rgn);
+		xvm->xvm_next = *headp;
+		*headp = xvm;
 	}
 
 	return 0;
@@ -919,28 +919,28 @@ static int mpc_metamap_destroy_cb(int rn, void *item, void *data)
 
 static void mpc_metamap_destroy(struct mpc_metamap *mm)
 {
-	struct mpc_vma *head = NULL, *vma;
+	struct mpc_xvm *head = NULL, *xvm;
 
 	if (!mm)
 		return;
 
-	/* Wait for all mpc_vma_free_cb() callbacks to complete...
+	/* Wait for all mpc_xvm_free_cb() callbacks to complete...
 	 */
 	flush_workqueue(mpc_wq_trunc);
 
-	/* Build a list of all orphaned VMAs and release their birth
-	 * references (i.e., VMAs that were created but never mmapped).
+	/* Build a list of all orphaned XVMAs and release their birth
+	 * references (i.e., XVMAs that were created but never mmapped).
 	 */
 	mutex_lock(&mm->mm_rgnlock);
 	idr_for_each(&mm->mm_rgnmap, mpc_metamap_destroy_cb, &head);
 	mutex_unlock(&mm->mm_rgnlock);
 
-	while ((vma = head)) {
-		head = vma->mcm_next;
-		mpc_vma_put(vma);
+	while ((xvm = head)) {
+		head = xvm->xvm_next;
+		mpc_xvm_put(xvm);
 	}
 
-	/* Wait for all mpc_vma_free_cb() callbacks to complete...
+	/* Wait for all mpc_xvm_free_cb() callbacks to complete...
 	 */
 	flush_workqueue(mpc_wq_trunc);
 
@@ -953,97 +953,96 @@ static void mpc_metamap_destroy(struct mpc_metamap *mm)
 	kfree(mm);
 }
 
-static struct mpc_vma *mpc_vma_lookup(struct mpc_metamap *mm, uint key)
+static struct mpc_xvm *mpc_xvm_lookup(struct mpc_metamap *mm, uint key)
 {
-	struct mpc_vma *vma;
+	struct mpc_xvm *xvm;
 
 	mutex_lock(&mm->mm_rgnlock);
-	vma = idr_find(&mm->mm_rgnmap, key);
-	if (vma && !kref_get_unless_zero(&vma->mcm_ref))
-		vma = NULL;
+	xvm = idr_find(&mm->mm_rgnmap, key);
+	if (xvm && !kref_get_unless_zero(&xvm->xvm_ref))
+		xvm = NULL;
 	mutex_unlock(&mm->mm_rgnlock);
 
-	return vma;
+	return xvm;
 }
 
-void mpc_vma_free(struct mpc_vma *meta)
+void mpc_xvm_free(struct mpc_xvm *xvm)
 {
 	struct mpc_metamap *mm;
 
-	assert((u32)(uintptr_t)meta == meta->mcm_magic);
-	assert(atomic_read(&meta->mcm_reapref) > 0);
+	assert((u32)(uintptr_t)xvm == xvm->xvm_magic);
+	assert(atomic_read(&xvm->xvm_reapref) > 0);
 
 again:
-	mpc_reap_vma_evict(meta);
+	mpc_reap_vma_evict(xvm);
 
-	if (atomic_dec_return(&meta->mcm_reapref) > 0) {
-		atomic_inc(meta->mcm_freedp);
+	if (atomic_dec_return(&xvm->xvm_reapref) > 0) {
+		atomic_inc(xvm->xvm_freedp);
 		return;
 	}
 
-	if (atomic64_read(&meta->mcm_nrpages) > 0) {
-		atomic_cmpxchg(&meta->mcm_evicting, 1, 0);
-		atomic_inc(&meta->mcm_reapref);
+	if (atomic64_read(&xvm->xvm_nrpages) > 0) {
+		atomic_cmpxchg(&xvm->xvm_evicting, 1, 0);
+		atomic_inc(&xvm->xvm_reapref);
 		usleep_range(10000, 30000);
 		goto again;
 	}
 
-	mm = meta->mcm_metamap;
+	mm = xvm->xvm_metamap;
 
 	mutex_lock(&mm->mm_rgnlock);
-	idr_remove(&mm->mm_rgnmap, meta->mcm_rgn);
+	idr_remove(&mm->mm_rgnmap, xvm->xvm_rgn);
 	mutex_unlock(&mm->mm_rgnlock);
 
-	meta->mcm_magic = 0xbadcafe;
-	meta->mcm_rgn = -1;
+	xvm->xvm_magic = 0xbadcafe;
+	xvm->xvm_rgn = -1;
 
-	kmem_cache_free(meta->mcm_cache, meta);
+	kmem_cache_free(xvm->xvm_cache, xvm);
 
 	atomic_dec(&mm->mm_refcnt);
 }
 
-static void mpc_vma_free_cb(struct work_struct *work)
+static void mpc_xvm_free_cb(struct work_struct *work)
 {
-	struct mpc_vma *vma = container_of(work, typeof(*vma), mcm_work);
+	struct mpc_xvm *xvm = container_of(work, typeof(*xvm), xvm_work);
 
-	mpc_vma_free(vma);
+	mpc_xvm_free(xvm);
 }
 
-static void mpc_vma_get(struct mpc_vma *vma)
+static void mpc_xvm_get(struct mpc_xvm *xvm)
 {
-	kref_get(&vma->mcm_ref);
+	kref_get(&xvm->xvm_ref);
 }
 
-static void mpc_vma_release(struct kref *kref)
+static void mpc_xvm_release(struct kref *kref)
 {
-	struct mpc_vma *vma = container_of(kref, struct mpc_vma, mcm_ref);
-	struct mpc_metamap *mm = vma->mcm_metamap;
+	struct mpc_xvm *xvm = container_of(kref, struct mpc_xvm, xvm_ref);
+	struct mpc_metamap *mm = xvm->xvm_metamap;
 	int  i;
 
-	assert(vma);
-	assert((u32)(uintptr_t)vma == vma->mcm_magic);
+	assert((u32)(uintptr_t)xvm == xvm->xvm_magic);
 
 	mutex_lock(&mm->mm_rgnlock);
 	assert(kref_read(kref) == 0);
-	idr_replace(&mm->mm_rgnmap, NULL, vma->mcm_rgn);
+	idr_replace(&mm->mm_rgnmap, NULL, xvm->xvm_rgn);
 	mutex_unlock(&mm->mm_rgnlock);
 
 	/* Wait for all in-progress readaheads to complete
 	 * before we drop our mblock references.
 	 */
-	if (atomic_add_return(WQ_MAX_ACTIVE, &vma->mcm_rabusy) > WQ_MAX_ACTIVE)
-		flush_workqueue(mpc_rgn2wq(vma->mcm_rgn));
+	if (atomic_add_return(WQ_MAX_ACTIVE, &xvm->xvm_rabusy) > WQ_MAX_ACTIVE)
+		flush_workqueue(mpc_rgn2wq(xvm->xvm_rgn));
 
-	for (i = 0; i < vma->mcm_mbinfoc; ++i)
-		mblock_put(vma->mcm_mpdesc, vma->mcm_mbinfov[i].mbdesc);
+	for (i = 0; i < xvm->xvm_mbinfoc; ++i)
+		mblock_put(xvm->xvm_mpdesc, xvm->xvm_mbinfov[i].mbdesc);
 
-	INIT_WORK(&vma->mcm_work, mpc_vma_free_cb);
-	queue_work(mpc_wq_trunc, &vma->mcm_work);
+	INIT_WORK(&xvm->xvm_work, mpc_xvm_free_cb);
+	queue_work(mpc_wq_trunc, &xvm->xvm_work);
 }
 
-static void mpc_vma_put(struct mpc_vma *vma)
+static void mpc_xvm_put(struct mpc_xvm *xvm)
 {
-	kref_put(&vma->mcm_ref, mpc_vma_release);
+	kref_put(&xvm->xvm_ref, mpc_xvm_release);
 }
 
 /*
@@ -1052,12 +1051,12 @@ static void mpc_vma_put(struct mpc_vma *vma)
 
 static void mpc_vm_open(struct vm_area_struct *vma)
 {
-	mpc_vma_get(vma->vm_private_data);
+	mpc_xvm_get(vma->vm_private_data);
 }
 
 static void mpc_vm_close(struct vm_area_struct *vma)
 {
-	mpc_vma_put(vma->vm_private_data);
+	mpc_xvm_put(vma->vm_private_data);
 }
 
 static int
@@ -1229,7 +1228,7 @@ static vm_fault_t mpc_vm_fault(VM_FAULT_ARGS)
  * MPCTL address-space operations.
  */
 
-static int mpc_readpage_impl(struct page *page, struct mpc_vma *meta)
+static int mpc_readpage_impl(struct page *page, struct mpc_xvm *xvm)
 {
 	struct mpc_mbinfo  *mbinfo;
 	struct iovec        iov[1];
@@ -1238,16 +1237,16 @@ static int mpc_readpage_impl(struct page *page, struct mpc_vma *meta)
 	merr_t              err;
 
 	offset  = page->index << PAGE_SHIFT;
-	offset %= (1ul << mpc_vma_size_max);
+	offset %= (1ul << mpc_xvm_size_max);
 
-	mbnum = offset / meta->mcm_bktsz;
-	if (ev(mbnum >= meta->mcm_mbinfoc)) {
+	mbnum = offset / xvm->xvm_bktsz;
+	if (ev(mbnum >= xvm->xvm_mbinfoc)) {
 		unlock_page(page);
 		return -EINVAL;
 	}
 
-	mbinfo = meta->mcm_mbinfov + mbnum;
-	offset %= meta->mcm_bktsz;
+	mbinfo = xvm->xvm_mbinfov + mbnum;
+	offset %= xvm->xvm_bktsz;
 
 	if (ev(offset >= mbinfo->mblen)) {
 		unlock_page(page);
@@ -1257,18 +1256,18 @@ static int mpc_readpage_impl(struct page *page, struct mpc_vma *meta)
 	iov[0].iov_base = page_address(page);
 	iov[0].iov_len = PAGE_SIZE;
 
-	err = mblock_read(meta->mcm_mpdesc, mbinfo->mbdesc, iov, 1, offset);
+	err = mblock_read(xvm->xvm_mpdesc, mbinfo->mbdesc, iov, 1, offset);
 	if (ev(err)) {
 		unlock_page(page);
 		return -merr_errno(err);
 	}
 
-	if (meta->mcm_hcpagesp)
-		atomic64_inc(meta->mcm_hcpagesp);
-	atomic64_inc(&meta->mcm_nrpages);
+	if (xvm->xvm_hcpagesp)
+		atomic64_inc(xvm->xvm_hcpagesp);
+	atomic64_inc(&xvm->xvm_nrpages);
 
 	SetPagePrivate(page);
-	set_page_private(page, (ulong)meta);
+	set_page_private(page, (ulong)xvm);
 	SetPageUptodate(page);
 	unlock_page(page);
 
@@ -1291,7 +1290,7 @@ static void mpc_readpages_cb(struct work_struct *work)
 	struct readpage_args   *args = (void *)argsbuf;
 	struct iovec           iovbuf[MPC_RA_IOV_MAX];
 	struct iovec           *iov = iovbuf;
-	struct mpc_vma         *meta;
+	struct mpc_xvm         *xvm;
 	struct readpage_work   *w;
 
 	size_t  argssz;
@@ -1309,12 +1308,12 @@ static void mpc_readpages_cb(struct work_struct *work)
 	memcpy(args, &w->w_args, argssz);
 	w = NULL; /* Do not touch! */
 
-	meta = args->a_meta;
+	xvm = args->a_xvm;
 
-	/* Synchronize with mpc_vma_put() to prevent dropping our
+	/* Synchronize with mpc_xvm_put() to prevent dropping our
 	 * mblock references while there are reads in progress.
 	 */
-	if (ev(atomic_inc_return(&meta->mcm_rabusy) > WQ_MAX_ACTIVE)) {
+	if (ev(atomic_inc_return(&xvm->xvm_rabusy) > WQ_MAX_ACTIVE)) {
 		err = merr(ENXIO);
 		goto errout;
 	}
@@ -1324,21 +1323,21 @@ static void mpc_readpages_cb(struct work_struct *work)
 		iov[i].iov_len = PAGE_SIZE;
 	}
 
-	err = mblock_read(meta->mcm_mpdesc, args->a_mbdesc,
+	err = mblock_read(xvm->xvm_mpdesc, args->a_mbdesc,
 			  iov, pagec, args->a_mboffset);
 	if (ev(err))
 		goto errout;
 
-	if (meta->mcm_hcpagesp)
-		atomic64_add(pagec, meta->mcm_hcpagesp);
-	atomic64_add(pagec, &meta->mcm_nrpages);
-	atomic_dec(&meta->mcm_rabusy);
+	if (xvm->xvm_hcpagesp)
+		atomic64_add(pagec, xvm->xvm_hcpagesp);
+	atomic64_add(pagec, &xvm->xvm_nrpages);
+	atomic_dec(&xvm->xvm_rabusy);
 
 	for (i = 0; i < pagec; ++i) {
 		struct page *page = args->a_pagev[i];
 
 		SetPagePrivate(page);
-		set_page_private(page, (ulong)meta);
+		set_page_private(page, (ulong)xvm);
 		SetPageUptodate(page);
 
 		unlock_page(page);
@@ -1348,12 +1347,12 @@ static void mpc_readpages_cb(struct work_struct *work)
 	return;
 
 errout:
-	mp_pr_rl("mpool %s, vma %px, rgn %u, pagec %d, rabusy %d",
-		 err, meta->mcm_unit->un_name,
-		 meta, meta->mcm_rgn, pagec,
-		 atomic_read(&meta->mcm_rabusy));
+	mp_pr_rl("mpool %s, xvm %px, rgn %u, pagec %d, rabusy %d",
+		 err, xvm->xvm_unit->un_name,
+		 xvm, xvm->xvm_rgn, pagec,
+		 atomic_read(&xvm->xvm_rabusy));
 
-	atomic_dec(&meta->mcm_rabusy);
+	atomic_dec(&xvm->xvm_rabusy);
 
 	for (i = 0; i < pagec; ++i) {
 		unlock_page(args->a_pagev[i]);
@@ -1373,7 +1372,7 @@ mpc_readpages(
 	struct work_struct     *work;
 	struct mpc_mbinfo      *mbinfo;
 	struct mpc_unit        *unit;
-	struct mpc_vma         *meta;
+	struct mpc_xvm         *xvm;
 	struct page            *page;
 
 	off_t   offset, mbend;
@@ -1396,36 +1395,36 @@ mpc_readpages(
 	work   = NULL;
 	w      = NULL;
 
-	key = offset >> mpc_vma_size_max;
+	key = offset >> mpc_xvm_size_max;
 
-	/* The idr value here (meta) is pinned for the lifetime
+	/* The idr value here (xvm) is pinned for the lifetime
 	 * of the address map.  Therefore, we can exit the rcu
-	 * read-side critsec without worry that meta will be
+	 * read-side critsec without worry that xvm will be
 	 * destroyed before put_page() has been called on each
 	 * and every page in the given list of pages.
 	 */
 	rcu_read_lock();
-	meta = idr_find(&unit->un_metamap->mm_rgnmap, key);
+	xvm = idr_find(&unit->un_metamap->mm_rgnmap, key);
 	rcu_read_unlock();
 
-	if (ev(!meta))
+	if (ev(!xvm))
 		return 0;
 
-	offset %= (1ul << mpc_vma_size_max);
+	offset %= (1ul << mpc_xvm_size_max);
 
-	mbnum = offset / meta->mcm_bktsz;
-	if (ev(mbnum >= meta->mcm_mbinfoc))
+	mbnum = offset / xvm->xvm_bktsz;
+	if (ev(mbnum >= xvm->xvm_mbinfoc))
 		return 0;
 
-	mbinfo = meta->mcm_mbinfov + mbnum;
+	mbinfo = xvm->xvm_mbinfov + mbnum;
 
-	mbend = mbnum * meta->mcm_bktsz + mbinfo->mblen;
+	mbend = mbnum * xvm->xvm_bktsz + mbinfo->mblen;
 	iovmax = MPC_RA_IOV_MAX;
 
 	gfp = mapping_gfp_mask(mapping) & GFP_KERNEL;
-	wq = mpc_rgn2wq(meta->mcm_rgn);
+	wq = mpc_rgn2wq(xvm->xvm_rgn);
 
-	if (mpc_reap_vma_duress(meta))
+	if (mpc_reap_vma_duress(xvm))
 		nr_pages = min_t(uint, nr_pages, 8);
 
 	nr_pages = min_t(uint, nr_pages, ra_pages_max);
@@ -1433,7 +1432,7 @@ mpc_readpages(
 	for (i = 0; i < nr_pages; ++i) {
 		page    = lru_to_page(pages);
 		offset  = page->index << PAGE_SHIFT;
-		offset %= (1ul << mpc_vma_size_max);
+		offset %= (1ul << mpc_xvm_size_max);
 
 		/* Don't read past the end of the mblock.
 		 */
@@ -1465,9 +1464,9 @@ mpc_readpages(
 		if (!work) {
 			w = page_address(page);
 			INIT_WORK(&w->w_work, mpc_readpages_cb);
-			w->w_args.a_meta = meta;
+			w->w_args.a_xvm = xvm;
 			w->w_args.a_mbdesc = mbinfo->mbdesc;
-			w->w_args.a_mboffset = offset % meta->mcm_bktsz;
+			w->w_args.a_mboffset = offset % xvm->xvm_bktsz;
 			w->w_args.a_pagec = 0;
 			work = &w->w_work;
 
@@ -1503,23 +1502,23 @@ mpc_readpages(
  */
 int mpc_releasepage(struct page *page, gfp_t gfp)
 {
-	struct mpc_vma *meta;
+	struct mpc_xvm *xvm;
 
 	if (ev(!PagePrivate(page)))
 		return 0;
 
-	meta = (void *)page_private(page);
-	if (ev(!meta))
+	xvm = (void *)page_private(page);
+	if (ev(!xvm))
 		return 0;
 
 	ClearPagePrivate(page);
 	set_page_private(page, 0);
 
-	assert((u32)(uintptr_t)meta == meta->mcm_magic);
+	assert((u32)(uintptr_t)xvm == xvm->xvm_magic);
 
-	if (meta->mcm_hcpagesp)
-		atomic64_dec(meta->mcm_hcpagesp);
-	atomic64_dec(&meta->mcm_nrpages);
+	if (xvm->xvm_hcpagesp)
+		atomic64_dec(xvm->xvm_hcpagesp);
+	atomic64_dec(&xvm->xvm_nrpages);
 
 	return 1;
 }
@@ -1730,8 +1729,8 @@ errout:
 
 static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 {
-	struct mpc_vma     *meta;
 	struct mpc_unit    *unit;
+	struct mpc_xvm     *xvm;
 
 	off_t   off;
 	ulong   len;
@@ -1743,22 +1742,22 @@ static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 	 */
 	off = vma->vm_pgoff << PAGE_SHIFT;
 	len = vma->vm_end - vma->vm_start - 1;
-	if ((off >> mpc_vma_size_max) != ((off + len) >> mpc_vma_size_max))
+	if ((off >> mpc_xvm_size_max) != ((off + len) >> mpc_xvm_size_max))
 		return -EINVAL;
 
 	/* Acquire a reference on the metamap for this region.
 	 */
-	key = off >> mpc_vma_size_max;
+	key = off >> mpc_xvm_size_max;
 
-	meta = mpc_vma_lookup(unit->un_metamap, key);
-	if (!meta)
+	xvm = mpc_xvm_lookup(unit->un_metamap, key);
+	if (!xvm)
 		return -EINVAL;
 
 	/* Drop the birth ref on first open so that the final call
 	 * to mpc_vm_close() will cause the vma to be destroyed.
 	 */
-	if (atomic_inc_return(&meta->mcm_opened) == 1)
-		mpc_vma_put(meta);
+	if (atomic_inc_return(&xvm->xvm_opened) == 1)
+		mpc_xvm_put(xvm);
 
 	vma->vm_ops = &mpc_vops_default;
 
@@ -1768,11 +1767,11 @@ static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 	vma->vm_flags = (VM_DONTEXPAND | VM_DONTDUMP | VM_NORESERVE);
 	vma->vm_flags |= VM_MAYREAD | VM_READ | VM_RAND_READ;
 
-	vma->vm_private_data = meta;
+	vma->vm_private_data = xvm;
 
 	fp->f_ra.ra_pages = unit->un_ra_pages_max;
 
-	mpc_reap_vma_add(unit->un_ds_reap, meta);
+	mpc_reap_vma_add(unit->un_ds_reap, xvm);
 
 	return 0;
 }
@@ -1958,7 +1957,7 @@ mpioc_params_get(struct mpc_unit *unit, uint cmd, struct mpioc_params *get)
 	params->mp_oidv[0] = unit->un_ds_oidv[0];
 	params->mp_oidv[1] = unit->un_ds_oidv[1];
 	params->mp_ra_pages_max = unit->un_ra_pages_max;
-	params->mp_vma_size_max = mpc_vma_size_max;
+	params->mp_vma_size_max = mpc_xvm_size_max;
 	memcpy(&params->mp_utype, &unit->un_utype, sizeof(params->mp_utype));
 	strlcpy(params->mp_label, unit->un_label, sizeof(params->mp_label));
 	strlcpy(params->mp_name, unit->un_name, sizeof(params->mp_name));
@@ -2011,7 +2010,7 @@ mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_params *set)
 	cmn = &set->mps_cmn;
 	params = &set->mps_params;
 
-	params->mp_vma_size_max = mpc_vma_size_max;
+	params->mp_vma_size_max = mpc_xvm_size_max;
 
 	mutex_lock(&ss->ss_lock);
 	if (params->mp_uid != -1 || params->mp_gid != -1 ||
@@ -2156,8 +2155,8 @@ static merr_t mpc_params_register(struct mpc_unit *unit)
 	mpc_sysctl_oid(oid++, "label", 0444, &unit->un_label,
 		       sizeof(unit->un_label), proc_dostring);
 
-	mpc_sysctl_oid(oid++, "vma", 0444, &mpc_vma_size_max,
-		       sizeof(mpc_vma_size_max), proc_douintvec);
+	mpc_sysctl_oid(oid++, "vma", 0444, &mpc_xvm_size_max,
+		       sizeof(mpc_xvm_size_max), proc_douintvec);
 
 	mpc_sysctl_oid(oid++, "type", 0444, unit->un_utype.b,
 		       sizeof(unit->un_utype.b), mpc_uuid_proc_handler);
@@ -2759,7 +2758,7 @@ mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop, int cmd)
 	params->mp_oidv[0] = unit->un_ds_oidv[0];
 	params->mp_oidv[1] = unit->un_ds_oidv[1];
 	params->mp_ra_pages_max = unit->un_ra_pages_max;
-	params->mp_vma_size_max = mpc_vma_size_max;
+	params->mp_vma_size_max = mpc_xvm_size_max;
 	memcpy(&params->mp_utype, &unit->un_utype, sizeof(params->mp_utype));
 	strlcpy(params->mp_label, unit->un_label, sizeof(params->mp_label));
 	strlcpy(params->mp_name, unit->un_name, sizeof(params->mp_name));
@@ -3327,7 +3326,7 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 	struct mpc_metamap         *mm;
 	struct mpc_mbinfo          *mbinfov;
 	struct kmem_cache          *cache;
-	struct mpc_vma             *meta;
+	struct mpc_xvm             *xvm;
 
 	u64     *mbidv;
 	size_t  largest, sz;
@@ -3353,13 +3352,13 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 	mpdesc = unit->un_mpool->mp_desc;
 	mbidc = vma->im_mbidc;
 
-	sz = sizeof(*meta) + sizeof(*mbinfov) * mbidc;
-	if (sz > mpc_vma_cachesz[1])
+	sz = sizeof(*xvm) + sizeof(*mbinfov) * mbidc;
+	if (sz > mpc_xvm_cachesz[1])
 		return merr(EINVAL);
-	else if (sz > mpc_vma_cachesz[0])
-		cache = mpc_vma_cache[1];
+	else if (sz > mpc_xvm_cachesz[0])
+		cache = mpc_xvm_cache[1];
 	else
-		cache = mpc_vma_cache[0];
+		cache = mpc_xvm_cache[0];
 
 	sz = mbidc * sizeof(mbidv[0]);
 
@@ -3373,34 +3372,34 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 		return merr(EFAULT);
 	}
 
-	meta = kmem_cache_zalloc(cache, GFP_KERNEL);
-	if (!meta) {
+	xvm = kmem_cache_zalloc(cache, GFP_KERNEL);
+	if (!xvm) {
 		kfree(mbidv);
 		return merr(ENOMEM);
 	}
 
-	meta->mcm_magic = (u32)(uintptr_t)meta;
-	meta->mcm_mbinfoc = mbidc;
-	meta->mcm_mpdesc = unit->un_mpool->mp_desc;
+	xvm->xvm_magic = (u32)(uintptr_t)xvm;
+	xvm->xvm_mbinfoc = mbidc;
+	xvm->xvm_mpdesc = unit->un_mpool->mp_desc;
 
-	meta->mcm_mapping = unit->un_mapping;
-	meta->mcm_metamap = unit->un_metamap;
-	meta->mcm_unit = unit;
-	meta->mcm_advice = vma->im_advice;
-	kref_init(&meta->mcm_ref);
-	meta->mcm_cache = cache;
-	atomic_set(&meta->mcm_opened, 0);
+	xvm->xvm_mapping = unit->un_mapping;
+	xvm->xvm_metamap = unit->un_metamap;
+	xvm->xvm_unit = unit;
+	xvm->xvm_advice = vma->im_advice;
+	kref_init(&xvm->xvm_ref);
+	xvm->xvm_cache = cache;
+	atomic_set(&xvm->xvm_opened, 0);
 
-	INIT_LIST_HEAD(&meta->mcm_list);
-	atomic_set(&meta->mcm_evicting, 0);
-	atomic_set(&meta->mcm_reapref, 1);
-	atomic64_set(&meta->mcm_nrpages, 0);
-	atomic_set(&meta->mcm_rabusy, 0);
+	INIT_LIST_HEAD(&xvm->xvm_list);
+	atomic_set(&xvm->xvm_evicting, 0);
+	atomic_set(&xvm->xvm_reapref, 1);
+	atomic64_set(&xvm->xvm_nrpages, 0);
+	atomic_set(&xvm->xvm_rabusy, 0);
 
 	largest = 0;
 	err = 0;
 
-	mbinfov = meta->mcm_mbinfov;
+	mbinfov = xvm->xvm_mbinfov;
 
 	for (i = 0; i < mbidc; ++i) {
 		struct mpc_mbinfo *mbinfo = mbinfov + i;
@@ -3420,9 +3419,9 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 		largest = max_t(size_t, largest, mbinfo->mblen);
 	}
 
-	meta->mcm_bktsz = roundup_pow_of_two(largest);
+	xvm->xvm_bktsz = roundup_pow_of_two(largest);
 
-	if (meta->mcm_bktsz * mbidc > (1ul << mpc_vma_size_max)) {
+	if (xvm->xvm_bktsz * mbidc > (1ul << mpc_xvm_size_max)) {
 		err = merr(E2BIG);
 		goto errout;
 	}
@@ -3430,29 +3429,29 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 	mm = unit->un_metamap;
 
 	mutex_lock(&mm->mm_rgnlock);
-	meta->mcm_rgn = idr_alloc(&mm->mm_rgnmap, NULL, 1, -1, GFP_KERNEL);
-	if (meta->mcm_rgn < 1) {
+	xvm->xvm_rgn = idr_alloc(&mm->mm_rgnmap, NULL, 1, -1, GFP_KERNEL);
+	if (xvm->xvm_rgn < 1) {
 		mutex_unlock(&mm->mm_rgnlock);
 
-		err = merr(meta->mcm_rgn ?: EINVAL);
+		err = merr(xvm->xvm_rgn ?: EINVAL);
 		goto errout;
 	}
 
-	vma->im_offset = (ulong)meta->mcm_rgn << mpc_vma_size_max;
-	vma->im_bktsz = meta->mcm_bktsz;
-	vma->im_len = meta->mcm_bktsz * mbidc;
-	vma->im_len = ALIGN(vma->im_len, (1ul << mpc_vma_size_max));
+	vma->im_offset = (ulong)xvm->xvm_rgn << mpc_xvm_size_max;
+	vma->im_bktsz = xvm->xvm_bktsz;
+	vma->im_len = xvm->xvm_bktsz * mbidc;
+	vma->im_len = ALIGN(vma->im_len, (1ul << mpc_xvm_size_max));
 
 	atomic_inc(&mm->mm_refcnt);
 
-	idr_replace(&mm->mm_rgnmap, meta, meta->mcm_rgn);
+	idr_replace(&mm->mm_rgnmap, xvm, xvm->xvm_rgn);
 	mutex_unlock(&mm->mm_rgnlock);
 
 errout:
 	if (err) {
 		for (i = 0; i < mbidc; ++i)
 			mblock_put(mpdesc, mbinfov[i].mbdesc);
-		kmem_cache_free(cache, meta);
+		kmem_cache_free(cache, xvm);
 	}
 
 	kfree(mbidv);
@@ -3465,73 +3464,73 @@ errout:
  * @unit:
  * @arg:
  */
-static merr_t mpioc_vma_destroy(struct mpc_unit *unit, struct mpioc_vma *im)
+static merr_t mpioc_vma_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
 	struct mpc_metamap *mm;
-	struct mpc_vma     *vma;
+	struct mpc_xvm     *xvm;
 	u64                 rgn;
 
-	if (ev(!unit || !im))
+	if (ev(!unit || !ioc))
 		return merr(EINVAL);
 
-	rgn = im->im_offset >> mpc_vma_size_max;
+	rgn = ioc->im_offset >> mpc_xvm_size_max;
 	mm = unit->un_metamap;
 
 	mutex_lock(&mm->mm_rgnlock);
-	vma = idr_find(&mm->mm_rgnmap, rgn);
-	if (vma && kref_read(&vma->mcm_ref) == 1 &&
-	    !atomic_read(&vma->mcm_opened)) {
+	xvm = idr_find(&mm->mm_rgnmap, rgn);
+	if (xvm && kref_read(&xvm->xvm_ref) == 1 &&
+	    !atomic_read(&xvm->xvm_opened)) {
 		idr_remove(&mm->mm_rgnmap, rgn);
 	} else {
-		vma = NULL;
+		xvm = NULL;
 	}
 	mutex_unlock(&mm->mm_rgnlock);
 
-	if (vma)
-		mpc_vma_put(vma);
+	if (xvm)
+		mpc_xvm_put(xvm);
 
 	return 0;
 }
 
-static merr_t mpioc_vma_purge(struct mpc_unit *unit, struct mpioc_vma *vma)
+static merr_t mpioc_vma_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
-	struct mpc_vma *meta;
+	struct mpc_xvm *xvm;
 	u64             rgn;
 
-	if (ev(!unit || !vma))
+	if (ev(!unit || !ioc))
 		return merr(EINVAL);
 
-	rgn = vma->im_offset >> mpc_vma_size_max;
+	rgn = ioc->im_offset >> mpc_xvm_size_max;
 
-	meta = mpc_vma_lookup(unit->un_metamap, rgn);
-	if (!meta)
+	xvm = mpc_xvm_lookup(unit->un_metamap, rgn);
+	if (!xvm)
 		return merr(ENOENT);
 
-	mpc_reap_vma_evict(meta);
+	mpc_reap_vma_evict(xvm);
 
-	mpc_vma_put(meta);
+	mpc_xvm_put(xvm);
 
 	return 0;
 }
 
-static merr_t mpioc_vma_vrss(struct mpc_unit *unit, struct mpioc_vma *vma)
+static merr_t mpioc_vma_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
-	struct mpc_vma *meta;
+	struct mpc_xvm *xvm;
 	u64             rgn;
 
-	if (ev(!unit || !vma))
+	if (ev(!unit || !ioc))
 		return merr(EINVAL);
 
-	rgn = vma->im_offset >> mpc_vma_size_max;
+	rgn = ioc->im_offset >> mpc_xvm_size_max;
 
-	meta = mpc_vma_lookup(unit->un_metamap, rgn);
-	if (!meta)
+	xvm = mpc_xvm_lookup(unit->un_metamap, rgn);
+	if (!xvm)
 		return merr(ENOENT);
 
-	vma->im_vssp = mpc_vma_pglen(meta);
-	vma->im_rssp = atomic64_read(&meta->mcm_nrpages);
+	ioc->im_vssp = mpc_xvm_pglen(xvm);
+	ioc->im_rssp = atomic64_read(&xvm->xvm_nrpages);
 
-	mpc_vma_put(meta);
+	mpc_xvm_put(xvm);
 
 	return 0;
 }
@@ -4155,8 +4154,8 @@ static void mpc_exit_impl(void)
 
 	mpc_reap_destroy(mpc_reap);
 	destroy_workqueue(mpc_wq_trunc);
-	kmem_cache_destroy(mpc_vma_cache[1]);
-	kmem_cache_destroy(mpc_vma_cache[0]);
+	kmem_cache_destroy(mpc_xvm_cache[1]);
+	kmem_cache_destroy(mpc_xvm_cache[0]);
 	mpc_vcache_fini(&mpc_physio_vcache);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
@@ -4189,8 +4188,8 @@ static __init int mpc_init(void)
 	evc_init();
 
 	mpc_maxunits = clamp_t(uint, mpc_maxunits, 8, 8192);
-	mpc_vma_max = clamp_t(uint, mpc_vma_max, 1024, 1u << 30);
-	mpc_vma_size_max = clamp_t(ulong, mpc_vma_size_max, 27, 32);
+	mpc_xvm_max = clamp_t(uint, mpc_xvm_max, 1024, 1u << 30);
+	mpc_xvm_size_max = clamp_t(ulong, mpc_xvm_size_max, 27, 32);
 
 	mpc_rwsz_max = clamp_t(ulong, mpc_rwsz_max, 1, 128);
 	mpc_rwconc_max = clamp_t(ulong, mpc_rwconc_max, 1, 32);
@@ -4207,24 +4206,24 @@ static __init int mpc_init(void)
 	}
 
 	sz = sizeof(struct mpc_mbinfo) * 8;
-	mpc_vma_cachesz[0] = sizeof(struct mpc_vma) + sz;
+	mpc_xvm_cachesz[0] = sizeof(struct mpc_xvm) + sz;
 
-	mpc_vma_cache[0] = kmem_cache_create(
-		"mpool_vma_0", mpc_vma_cachesz[0], 0,
+	mpc_xvm_cache[0] = kmem_cache_create(
+		"mpool_vma_0", mpc_xvm_cachesz[0], 0,
 		SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
-	if (!mpc_vma_cache[0]) {
+	if (!mpc_xvm_cache[0]) {
 		errmsg = "mpc vma meta cache 0 create failed";
 		err = merr(ENOMEM);
 		goto errout;
 	}
 
 	sz = sizeof(struct mpc_mbinfo) * 32;
-	mpc_vma_cachesz[1] = sizeof(struct mpc_vma) + sz;
+	mpc_xvm_cachesz[1] = sizeof(struct mpc_xvm) + sz;
 
-	mpc_vma_cache[1] = kmem_cache_create(
-		"mpool_vma_1", mpc_vma_cachesz[1], 0,
+	mpc_xvm_cache[1] = kmem_cache_create(
+		"mpool_vma_1", mpc_xvm_cachesz[1], 0,
 		SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
-	if (!mpc_vma_cache[1]) {
+	if (!mpc_xvm_cache[1]) {
 		errmsg = "mpc vma meta cache 1 create failed";
 		err = merr(ENOMEM);
 		goto errout;

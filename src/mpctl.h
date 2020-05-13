@@ -21,52 +21,52 @@ struct mpc_mbinfo {
 	atomic64_t                  mbatime;
 } __aligned(32);
 
-struct mpc_vma {
-	size_t                      mcm_bktsz;
-	uint                        mcm_mbinfoc;
-	uint                        mcm_rgn;
-	struct kref                 mcm_ref;
-	u32                         mcm_magic;
-	struct mpool_descriptor    *mcm_mpdesc;
+struct mpc_xvm {
+	size_t                      xvm_bktsz;
+	uint                        xvm_mbinfoc;
+	uint                        xvm_rgn;
+	struct kref                 xvm_ref;
+	u32                         xvm_magic;
+	struct mpool_descriptor    *xvm_mpdesc;
 
-	atomic64_t                 *mcm_hcpagesp;
-	struct address_space       *mcm_mapping;
-	struct mpc_metamap         *mcm_metamap;
-	struct mpc_reap            *mcm_reap;
+	atomic64_t                 *xvm_hcpagesp;
+	struct address_space       *xvm_mapping;
+	struct mpc_metamap         *xvm_metamap;
+	struct mpc_reap            *xvm_reap;
 
-	struct mpc_unit            *mcm_unit;
-	enum mpc_vma_advice         mcm_advice;
-	atomic_t                    mcm_opened;
-	struct kmem_cache          *mcm_cache;
-	struct mpc_vma             *mcm_next;
-
-	____cacheline_aligned
-	struct list_head            mcm_list;
-	atomic_t                    mcm_evicting;
-	atomic_t                    mcm_reapref;
-	atomic_t                   *mcm_freedp;
+	struct mpc_unit            *xvm_unit;
+	enum mpc_vma_advice         xvm_advice;
+	atomic_t                    xvm_opened;
+	struct kmem_cache          *xvm_cache;
+	struct mpc_xvm             *xvm_next;
 
 	____cacheline_aligned
-	atomic64_t                  mcm_nrpages;
-	atomic_t                    mcm_rabusy;
-	struct work_struct          mcm_work;
+	struct list_head            xvm_list;
+	atomic_t                    xvm_evicting;
+	atomic_t                    xvm_reapref;
+	atomic_t                   *xvm_freedp;
 
 	____cacheline_aligned
-	struct mpc_mbinfo           mcm_mbinfov[];
+	atomic64_t                  xvm_nrpages;
+	atomic_t                    xvm_rabusy;
+	struct work_struct          xvm_work;
+
+	____cacheline_aligned
+	struct mpc_mbinfo           xvm_mbinfov[];
 };
 
-extern unsigned int mpc_vma_size_max;
+extern unsigned int mpc_xvm_size_max;
 
-static inline pgoff_t mpc_vma_pgoff(struct mpc_vma *meta)
+static inline pgoff_t mpc_xvm_pgoff(struct mpc_xvm *xvm)
 {
-	return ((ulong)meta->mcm_rgn << mpc_vma_size_max) >> PAGE_SHIFT;
+	return ((ulong)xvm->xvm_rgn << mpc_xvm_size_max) >> PAGE_SHIFT;
 }
 
-static inline size_t mpc_vma_pglen(struct mpc_vma *meta)
+static inline size_t mpc_xvm_pglen(struct mpc_xvm *xvm)
 {
-	return (meta->mcm_bktsz * meta->mcm_mbinfoc) >> PAGE_SHIFT;
+	return (xvm->xvm_bktsz * xvm->xvm_mbinfoc) >> PAGE_SHIFT;
 }
 
-void mpc_vma_free(struct mpc_vma *meta);
+void mpc_xvm_free(struct mpc_xvm *xvm);
 
 #endif /* MPOOL_MPCTL_H */
