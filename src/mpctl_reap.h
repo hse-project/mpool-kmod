@@ -24,21 +24,21 @@ merr_t mpc_reap_create(struct mpc_reap **reapp);
 void mpc_reap_destroy(struct mpc_reap *reap);
 
 /**
- * mpc_reap_vma_add() - Add a vma to the reap list
+ * mpc_reap_xvm_add() - Add an extended VMA to the reap list
  * @xvm: extended VMA
  */
-void mpc_reap_vma_add(struct mpc_reap *reap, struct mpc_xvm *xvm);
+void mpc_reap_xvm_add(struct mpc_reap *reap, struct mpc_xvm *xvm);
 
 /**
- * mpc_reap_vma_evict() - Evict all pages of given VMA
+ * mpc_reap_xvm_evict() - Evict all pages of given extended VMA
  * @xvm: extended VMA
  */
-void mpc_reap_vma_evict(struct mpc_xvm *xvm);
+void mpc_reap_xvm_evict(struct mpc_xvm *xvm);
 
 /**
- * mpc_reap_vma_touch() - Update vma mblock atime
+ * mpc_reap_xvm_touch() - Update extended VMA mblock atime
  * @xvm:    extended VMA
- * @index:  valid page index within the XVMA
+ * @index:  valid page index within the extended VMA
  *
  * Update the access time stamp of the mblock given by the valid
  * page %index within the VMA.  Might sleep for some number of
@@ -48,11 +48,11 @@ void mpc_reap_vma_evict(struct mpc_xvm *xvm);
  * This function is called only by mpc_vm_fault_impl(), once
  * for each successful page fault.
  */
-void mpc_reap_vma_touch(struct mpc_xvm *xvm, int index);
+void mpc_reap_xvm_touch(struct mpc_xvm *xvm, int index);
 
 /**
- * mpc_reap_vma_duress() - Check to see if reaper is under duress
- * @xvm:   extended vma
+ * mpc_reap_xvm_duress() - Check to see if reaper is under duress
+ * @xvm:   extended VMA
  *
  * Return: %false if the VMA is marked MPC_XVM_HOT.
  * Return: %false if reaper is not enabled nor under duress.
@@ -62,6 +62,6 @@ void mpc_reap_vma_touch(struct mpc_xvm *xvm, int index);
  * This function is called only by mpc_readpages() to decide whether
  * or not to reduce the size of a speculative readahead request.
  */
-bool mpc_reap_vma_duress(struct mpc_xvm *xvm);
+bool mpc_reap_xvm_duress(struct mpc_xvm *xvm);
 
 #endif /* MPOOL_MPCTL_REAP_H */

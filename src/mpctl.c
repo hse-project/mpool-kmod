@@ -974,7 +974,7 @@ void mpc_xvm_free(struct mpc_xvm *xvm)
 	assert(atomic_read(&xvm->xvm_reapref) > 0);
 
 again:
-	mpc_reap_vma_evict(xvm);
+	mpc_reap_xvm_evict(xvm);
 
 	if (atomic_dec_return(&xvm->xvm_reapref) > 0) {
 		atomic_inc(xvm->xvm_freedp);
@@ -1205,7 +1205,7 @@ retry_find:
 	/* page is locked with a ref. */
 	vmf->page = page;
 
-	mpc_reap_vma_touch(vma->vm_private_data, page->index);
+	mpc_reap_xvm_touch(vma->vm_private_data, page->index);
 
 	return vmfrc | VM_FAULT_LOCKED;
 }
@@ -1424,7 +1424,7 @@ mpc_readpages(
 	gfp = mapping_gfp_mask(mapping) & GFP_KERNEL;
 	wq = mpc_rgn2wq(xvm->xvm_rgn);
 
-	if (mpc_reap_vma_duress(xvm))
+	if (mpc_reap_xvm_duress(xvm))
 		nr_pages = min_t(uint, nr_pages, 8);
 
 	nr_pages = min_t(uint, nr_pages, ra_pages_max);
@@ -1771,7 +1771,7 @@ static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 
 	fp->f_ra.ra_pages = unit->un_ra_pages_max;
 
-	mpc_reap_vma_add(unit->un_ds_reap, xvm);
+	mpc_reap_xvm_add(unit->un_ds_reap, xvm);
 
 	return 0;
 }
@@ -3506,7 +3506,7 @@ static merr_t mpioc_vma_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	if (!xvm)
 		return merr(ENOENT);
 
-	mpc_reap_vma_evict(xvm);
+	mpc_reap_xvm_evict(xvm);
 
 	mpc_xvm_put(xvm);
 
