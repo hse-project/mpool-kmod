@@ -86,24 +86,36 @@ struct mpc_uinfo {
 	const char     *ui_subdirfmt;
 };
 
+/**
+ * struct mpc_rgnmap - xvm region management
+ * @rm_lock:    protects rm_root
+ * @rm_root:    root of the region map
+ * @rm_refcnt;  number of active regions
+ */
+struct mpc_rgnmap {
+	struct mutex    rm_lock;
+	struct idr      rm_root;
+	atomic_t        rm_refcnt;
+} ____cacheline_aligned;
+
 /* There is one unit object for each device object created by the driver.
  */
 struct mpc_unit {
 	struct kref                 un_ref;
-	struct semaphore            un_open_lock;   /* Protects un_open_* */
-	struct backing_dev_info    *un_saved_bdi;
-	bool                        un_open_excl;   /* Unit exclusively open */
 	int                         un_open_cnt;    /* Unit open count */
-	dev_t                       un_devno;
-	struct device              *un_device;
+	struct semaphore            un_open_lock;   /* Protects un_open_* */
+	bool                        un_open_excl;   /* Unit exclusively open */
 	uid_t                       un_uid;
 	gid_t                       un_gid;
 	mode_t                      un_mode;
+	struct mpc_rgnmap           un_rgnmap;
+	dev_t                       un_devno;
 	const struct mpc_uinfo     *un_uinfo;
 	struct mpc_mpool           *un_mpool;
-	struct mpc_metamap         *un_metamap;
 	struct address_space       *un_mapping;
 	struct mpc_reap            *un_ds_reap;
+	struct device              *un_device;
+	struct backing_dev_info    *un_saved_bdi;
 	struct ctl_table           *un_tab;
 	struct ctl_table_header    *un_hdr;
 	uint                        un_rawio;       /* log2(max_mblock_size) */
@@ -146,18 +158,6 @@ struct readpage_args {
 struct readpage_work {
 	struct work_struct      w_work;
 	struct readpage_args    w_args;
-};
-
-/**
- * struct mpc_metamap -
- * @mm_rgnlock: serializes region alloc/free
- * @mm_rgnmap:  extended VMA region allocator
- * @mm_refcnt;  metamap reference count
- */
-struct mpc_metamap {
-	struct mutex    mm_rgnlock;
-	struct idr      mm_rgnmap;
-	atomic_t        mm_refcnt;
 };
 
 static void mpc_xvm_put(struct mpc_xvm *xvm);
@@ -608,6 +608,10 @@ mpc_unit_create(
 	kref_get(&unit->un_ref);
 	unit->un_mpool = mpool;
 
+	mutex_init(&unit->un_rgnmap.rm_lock);
+	idr_init(&unit->un_rgnmap.rm_root);
+	atomic_set(&unit->un_rgnmap.rm_refcnt, 0);
+
 	err = 0;
 
 	/* Check to see if the desired name is in use.
@@ -649,6 +653,8 @@ static void mpc_unit_destroy(struct kref *refp)
 
 	if (unit->un_device)
 		device_destroy(ss->ss_class, unit->un_devno);
+
+	idr_destroy(&unit->un_rgnmap.rm_root);
 
 	kfree(unit);
 }
@@ -882,34 +888,14 @@ static struct workqueue_struct *mpc_rgn2wq(uint rgn)
 	return mpc_wq_rav[rgn % ARRAY_SIZE(mpc_wq_rav)];
 }
 
-static merr_t mpc_metamap_create(struct mpc_metamap **mmp)
-{
-	struct mpc_metamap *mm;
-	size_t              sz;
-
-	sz = roundup_pow_of_two(sizeof(*mm));
-
-	mm = kzalloc(sz, GFP_KERNEL);
-	if (ev(!mm))
-		return merr(ENOMEM);
-
-	mutex_init(&mm->mm_rgnlock);
-	idr_init(&mm->mm_rgnmap);
-	atomic_set(&mm->mm_refcnt, 0);
-
-	*mmp = mm;
-
-	return 0;
-}
-
-static int mpc_metamap_destroy_cb(int rgn, void *item, void *data)
+static int mpc_rgnmap_destroy_cb(int rgn, void *item, void *data)
 {
 	struct mpc_xvm *xvm = item;
 	void          **headp = data;
 
 	if (xvm && kref_read(&xvm->xvm_ref) == 1 &&
 	    !atomic_read(&xvm->xvm_opened)) {
-		idr_replace(&xvm->xvm_metamap->mm_rgnmap, NULL, rgn);
+		idr_replace(&xvm->xvm_rgnmap->rm_root, NULL, rgn);
 		xvm->xvm_next = *headp;
 		*headp = xvm;
 	}
@@ -917,11 +903,11 @@ static int mpc_metamap_destroy_cb(int rgn, void *item, void *data)
 	return 0;
 }
 
-static void mpc_metamap_destroy(struct mpc_metamap *mm)
+static void mpc_rgnmap_flush(struct mpc_rgnmap *rm)
 {
 	struct mpc_xvm *head = NULL, *xvm;
 
-	if (!mm)
+	if (!rm)
 		return;
 
 	/* Wait for all mpc_xvm_free_cb() callbacks to complete...
@@ -931,44 +917,37 @@ static void mpc_metamap_destroy(struct mpc_metamap *mm)
 	/* Build a list of all orphaned XVMAs and release their birth
 	 * references (i.e., XVMAs that were created but never mmapped).
 	 */
-	mutex_lock(&mm->mm_rgnlock);
-	idr_for_each(&mm->mm_rgnmap, mpc_metamap_destroy_cb, &head);
-	mutex_unlock(&mm->mm_rgnlock);
+	mutex_lock(&rm->rm_lock);
+	idr_for_each(&rm->rm_root, mpc_rgnmap_destroy_cb, &head);
+	mutex_unlock(&rm->rm_lock);
 
 	while ((xvm = head)) {
 		head = xvm->xvm_next;
 		mpc_xvm_put(xvm);
 	}
 
-	/* Wait for all mpc_xvm_free_cb() callbacks to complete...
-	 */
-	flush_workqueue(mpc_wq_trunc);
-
 	/* Wait for reaper to prune its lists...
 	 */
-	while (atomic_read(&mm->mm_refcnt) > 0)
+	while (atomic_read(&rm->rm_refcnt) > 0)
 		usleep_range(100000, 150000);
-
-	idr_destroy(&mm->mm_rgnmap);
-	kfree(mm);
 }
 
-static struct mpc_xvm *mpc_xvm_lookup(struct mpc_metamap *mm, uint key)
+static struct mpc_xvm *mpc_xvm_lookup(struct mpc_rgnmap *rm, uint key)
 {
 	struct mpc_xvm *xvm;
 
-	mutex_lock(&mm->mm_rgnlock);
-	xvm = idr_find(&mm->mm_rgnmap, key);
+	mutex_lock(&rm->rm_lock);
+	xvm = idr_find(&rm->rm_root, key);
 	if (xvm && !kref_get_unless_zero(&xvm->xvm_ref))
 		xvm = NULL;
-	mutex_unlock(&mm->mm_rgnlock);
+	mutex_unlock(&rm->rm_lock);
 
 	return xvm;
 }
 
 void mpc_xvm_free(struct mpc_xvm *xvm)
 {
-	struct mpc_metamap *mm;
+	struct mpc_rgnmap *rm;
 
 	assert((u32)(uintptr_t)xvm == xvm->xvm_magic);
 	assert(atomic_read(&xvm->xvm_reapref) > 0);
@@ -988,18 +967,18 @@ again:
 		goto again;
 	}
 
-	mm = xvm->xvm_metamap;
+	rm = xvm->xvm_rgnmap;
 
-	mutex_lock(&mm->mm_rgnlock);
-	idr_remove(&mm->mm_rgnmap, xvm->xvm_rgn);
-	mutex_unlock(&mm->mm_rgnlock);
+	mutex_lock(&rm->rm_lock);
+	idr_remove(&rm->rm_root, xvm->xvm_rgn);
+	mutex_unlock(&rm->rm_lock);
 
 	xvm->xvm_magic = 0xbadcafe;
 	xvm->xvm_rgn = -1;
 
 	kmem_cache_free(xvm->xvm_cache, xvm);
 
-	atomic_dec(&mm->mm_refcnt);
+	atomic_dec(&rm->rm_refcnt);
 }
 
 static void mpc_xvm_free_cb(struct work_struct *work)
@@ -1017,15 +996,15 @@ static void mpc_xvm_get(struct mpc_xvm *xvm)
 static void mpc_xvm_release(struct kref *kref)
 {
 	struct mpc_xvm *xvm = container_of(kref, struct mpc_xvm, xvm_ref);
-	struct mpc_metamap *mm = xvm->xvm_metamap;
+	struct mpc_rgnmap *rm = xvm->xvm_rgnmap;
 	int  i;
 
 	assert((u32)(uintptr_t)xvm == xvm->xvm_magic);
 
-	mutex_lock(&mm->mm_rgnlock);
+	mutex_lock(&rm->rm_lock);
 	assert(kref_read(kref) == 0);
-	idr_replace(&mm->mm_rgnmap, NULL, xvm->xvm_rgn);
-	mutex_unlock(&mm->mm_rgnlock);
+	idr_replace(&rm->rm_root, NULL, xvm->xvm_rgn);
+	mutex_unlock(&rm->rm_lock);
 
 	/* Wait for all in-progress readaheads to complete
 	 * before we drop our mblock references.
@@ -1347,11 +1326,6 @@ static void mpc_readpages_cb(struct work_struct *work)
 	return;
 
 errout:
-	mp_pr_rl("mpool %s, xvm %px, rgn %u, pagec %d, rabusy %d",
-		 err, xvm->xvm_unit->un_name,
-		 xvm, xvm->xvm_rgn, pagec,
-		 atomic_read(&xvm->xvm_rabusy));
-
 	atomic_dec(&xvm->xvm_rabusy);
 
 	for (i = 0; i < pagec; ++i) {
@@ -1367,13 +1341,13 @@ mpc_readpages(
 	struct list_head       *pages,
 	uint                    nr_pages)
 {
-	struct workqueue_struct *wq;
-	struct readpage_work   *w;
-	struct work_struct     *work;
-	struct mpc_mbinfo      *mbinfo;
-	struct mpc_unit        *unit;
-	struct mpc_xvm         *xvm;
-	struct page            *page;
+	struct workqueue_struct    *wq;
+	struct readpage_work       *w;
+	struct work_struct         *work;
+	struct mpc_mbinfo          *mbinfo;
+	struct mpc_unit            *unit;
+	struct mpc_xvm             *xvm;
+	struct page                *page;
 
 	off_t   offset, mbend;
 	uint    mbnum, iovmax, i;
@@ -1404,7 +1378,7 @@ mpc_readpages(
 	 * and every page in the given list of pages.
 	 */
 	rcu_read_lock();
-	xvm = idr_find(&unit->un_metamap->mm_rgnmap, key);
+	xvm = idr_find(&unit->un_rgnmap.rm_root, key);
 	rcu_read_unlock();
 
 	if (ev(!xvm))
@@ -1645,10 +1619,6 @@ static int mpc_open(struct inode *ip, struct file *fp)
 		goto unlock;
 	}
 
-	err = mpc_metamap_create(&unit->un_metamap);
-	if (ev(err))
-		goto unlock;
-
 	fp->f_op = &mpc_fops_default;
 	fp->f_mapping->a_ops = &mpc_aops_default;
 
@@ -1706,8 +1676,7 @@ static int mpc_release(struct inode *ip, struct file *fp)
 		goto errout;
 
 	if (mpc_unit_ismpooldev(unit)) {
-		mpc_metamap_destroy(unit->un_metamap);
-		unit->un_metamap = NULL;
+		mpc_rgnmap_flush(&unit->un_rgnmap);
 
 		unit->un_ds_reap = NULL;
 		unit->un_mapping = NULL;
@@ -1745,11 +1714,11 @@ static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 	if ((off >> mpc_xvm_size_max) != ((off + len) >> mpc_xvm_size_max))
 		return -EINVAL;
 
-	/* Acquire a reference on the metamap for this region.
+	/* Acquire a reference on the region map for this region.
 	 */
 	key = off >> mpc_xvm_size_max;
 
-	xvm = mpc_xvm_lookup(unit->un_metamap, key);
+	xvm = mpc_xvm_lookup(&unit->un_rgnmap, key);
 	if (!xvm)
 		return -EINVAL;
 
@@ -3323,7 +3292,7 @@ merr_t mpioc_mlog_erase(struct mpc_unit *unit, struct mpioc_mlog_id *mi)
 static merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
 	struct mpool_descriptor    *mpdesc;
-	struct mpc_metamap         *mm;
+	struct mpc_rgnmap          *rm;
 	struct mpc_mbinfo          *mbinfov;
 	struct kmem_cache          *cache;
 	struct mpc_xvm             *xvm;
@@ -3383,8 +3352,7 @@ static merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	xvm->xvm_mpdesc = unit->un_mpool->mp_desc;
 
 	xvm->xvm_mapping = unit->un_mapping;
-	xvm->xvm_metamap = unit->un_metamap;
-	xvm->xvm_unit = unit;
+	xvm->xvm_rgnmap = &unit->un_rgnmap;
 	xvm->xvm_advice = ioc->im_advice;
 	kref_init(&xvm->xvm_ref);
 	xvm->xvm_cache = cache;
@@ -3426,12 +3394,12 @@ static merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpioc_vma *ioc)
 		goto errout;
 	}
 
-	mm = unit->un_metamap;
+	rm = &unit->un_rgnmap;
 
-	mutex_lock(&mm->mm_rgnlock);
-	xvm->xvm_rgn = idr_alloc(&mm->mm_rgnmap, NULL, 1, -1, GFP_KERNEL);
+	mutex_lock(&rm->rm_lock);
+	xvm->xvm_rgn = idr_alloc(&rm->rm_root, NULL, 1, -1, GFP_KERNEL);
 	if (xvm->xvm_rgn < 1) {
-		mutex_unlock(&mm->mm_rgnlock);
+		mutex_unlock(&rm->rm_lock);
 
 		err = merr(xvm->xvm_rgn ?: EINVAL);
 		goto errout;
@@ -3442,10 +3410,10 @@ static merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	ioc->im_len = xvm->xvm_bktsz * mbidc;
 	ioc->im_len = ALIGN(ioc->im_len, (1ul << mpc_xvm_size_max));
 
-	atomic_inc(&mm->mm_refcnt);
+	atomic_inc(&rm->rm_refcnt);
 
-	idr_replace(&mm->mm_rgnmap, xvm, xvm->xvm_rgn);
-	mutex_unlock(&mm->mm_rgnlock);
+	idr_replace(&rm->rm_root, xvm, xvm->xvm_rgn);
+	mutex_unlock(&rm->rm_lock);
 
 errout:
 	if (err) {
@@ -3466,7 +3434,7 @@ errout:
  */
 static merr_t mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
-	struct mpc_metamap *mm;
+	struct mpc_rgnmap  *rm;
 	struct mpc_xvm     *xvm;
 	u64                 rgn;
 
@@ -3474,17 +3442,17 @@ static merr_t mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
 		return merr(EINVAL);
 
 	rgn = ioc->im_offset >> mpc_xvm_size_max;
-	mm = unit->un_metamap;
+	rm = &unit->un_rgnmap;
 
-	mutex_lock(&mm->mm_rgnlock);
-	xvm = idr_find(&mm->mm_rgnmap, rgn);
+	mutex_lock(&rm->rm_lock);
+	xvm = idr_find(&rm->rm_root, rgn);
 	if (xvm && kref_read(&xvm->xvm_ref) == 1 &&
 	    !atomic_read(&xvm->xvm_opened)) {
-		idr_remove(&mm->mm_rgnmap, rgn);
+		idr_remove(&rm->rm_root, rgn);
 	} else {
 		xvm = NULL;
 	}
-	mutex_unlock(&mm->mm_rgnlock);
+	mutex_unlock(&rm->rm_lock);
 
 	if (xvm)
 		mpc_xvm_put(xvm);
@@ -3502,7 +3470,7 @@ static merr_t mpioc_xvm_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
 
 	rgn = ioc->im_offset >> mpc_xvm_size_max;
 
-	xvm = mpc_xvm_lookup(unit->un_metamap, rgn);
+	xvm = mpc_xvm_lookup(&unit->un_rgnmap, rgn);
 	if (!xvm)
 		return merr(ENOENT);
 
@@ -3523,7 +3491,7 @@ static merr_t mpioc_xvm_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc)
 
 	rgn = ioc->im_offset >> mpc_xvm_size_max;
 
-	xvm = mpc_xvm_lookup(unit->un_metamap, rgn);
+	xvm = mpc_xvm_lookup(&unit->un_rgnmap, rgn);
 	if (!xvm)
 		return merr(ENOENT);
 
@@ -4132,6 +4100,7 @@ static void mpc_exit_impl(void)
 
 	if (ss->ss_inited) {
 		idr_for_each(&ss->ss_unitmap, mpc_exit_unit, NULL);
+		idr_destroy(&ss->ss_unitmap);
 
 		if (ss->ss_devno != NODEV) {
 			if (ss->ss_class) {
@@ -4209,10 +4178,10 @@ static __init int mpc_init(void)
 	mpc_xvm_cachesz[0] = sizeof(struct mpc_xvm) + sz;
 
 	mpc_xvm_cache[0] = kmem_cache_create(
-		"mpool_vma_0", mpc_xvm_cachesz[0], 0,
+		"mpool_xvm_0", mpc_xvm_cachesz[0], 0,
 		SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 	if (!mpc_xvm_cache[0]) {
-		errmsg = "mpc vma meta cache 0 create failed";
+		errmsg = "mpc xvm cache 0 create failed";
 		err = merr(ENOMEM);
 		goto errout;
 	}
@@ -4221,10 +4190,10 @@ static __init int mpc_init(void)
 	mpc_xvm_cachesz[1] = sizeof(struct mpc_xvm) + sz;
 
 	mpc_xvm_cache[1] = kmem_cache_create(
-		"mpool_vma_1", mpc_xvm_cachesz[1], 0,
+		"mpool_xvm_1", mpc_xvm_cachesz[1], 0,
 		SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 	if (!mpc_xvm_cache[1]) {
-		errmsg = "mpc vma meta cache 1 create failed";
+		errmsg = "mpc xvm cache 1 create failed";
 		err = merr(ENOMEM);
 		goto errout;
 	}

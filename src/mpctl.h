@@ -12,7 +12,7 @@
 #include <mpcore/mblock.h>
 
 struct mpc_unit;
-struct mpc_metamap;
+struct mpc_rgnmap;
 
 struct mpc_mbinfo {
 	struct mblock_descriptor   *mbdesc;
@@ -31,10 +31,9 @@ struct mpc_xvm {
 
 	atomic64_t                 *xvm_hcpagesp;
 	struct address_space       *xvm_mapping;
-	struct mpc_metamap         *xvm_metamap;
+	struct mpc_rgnmap          *xvm_rgnmap;
 	struct mpc_reap            *xvm_reap;
 
-	struct mpc_unit            *xvm_unit;
 	enum mpc_vma_advice         xvm_advice;
 	atomic_t                    xvm_opened;
 	struct kmem_cache          *xvm_cache;
