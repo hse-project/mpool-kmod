@@ -222,42 +222,6 @@ struct mpool_descriptor {
 };
 
 /**
- * pmd_mdc_lock() - wrapper to take a lock of an mpool MDC.
- * @lock:
- * @slot:
- *
- * Nesting levels for pmd_mdc_info mutex.
- */
-void pmd_mdc_lock(struct mutex *lock, u8 slot);
-
-/**
- * pmd_mdc_unlock() - wrapper to release a lock of an mpool MDC.
- * @lock:
- */
-void pmd_mdc_unlock(struct mutex *lock);
-
-#define PMD_MDC0_COMPACTLOCK(_mp) \
-	pmd_mdc_lock(&((_mp)->pds_mda.mdi_slotv[0].mmi_compactlock), 0)
-#define PMD_MDC0_COMPACTUNLOCK(_mp) \
-	pmd_mdc_unlock(&((_mp)->pds_mda.mdi_slotv[0].mmi_compactlock))
-
-/**
- * mpool_desc_alloc() - Allocate and initialize mpool descriptor.
- *
- * Return: Pointer to mpool_descriptor if successful, else NULL.
- */
-struct mpool_descriptor *mpool_desc_alloc(void);
-
-/**
- * mpool_desc_free() -
- * @mp:
- *
- * Remove mp from mpool_pools; close all dev; dealloc mp.*
- *
- */
-void mpool_desc_free(struct mpool_descriptor *mp);
-
-/**
  * mpool_desc_unavail_add() - Add unavailable drive to mpool descriptor.
  * @mp:
  * @omf_devparm:
@@ -273,11 +237,6 @@ merr_t
 mpool_desc_unavail_add(
 	struct mpool_descriptor       *mp,
 	struct omf_devparm_descriptor *devparm);
-
-/*
- * mpcore config params related interfaces
- */
-extern struct mpcore_params mp_pdef;
 
 /**
  * mpool_desc_pdmc_add() - Add a device in its media class.
@@ -323,32 +282,6 @@ extern struct mpcore_params mp_pdef;
  * b) All drives of a media class must checksummed or none, no mix allowed.
  * c) The STAGING and CAPACITY classes must be both checksummed or both not
  *    checksummed.
- * c) the PDs in a same media class must have the same "model". The "model"
- *    of a PD is obtained from the "model" file in sysfs.
- *    This restriction is ignored if the force option (-f) is used with the
- *    command "mpool create" or "mpool add".
- * d) the PDs of a same media class must have same:
- *    - enum mp_media_classp
- *    - zonepg (zone size)
- *    - logical sector size as defined by pd_prop.pdp_sectorsz
- *    - type (enum pd_devtype)
- *    - features (enum mp_mc_features)
- *
- * What is the impact of the force option on the PDs classification?
- * -----------------------------------------------------------------
- * The force option has an impact only if used for the mpool create or mpool add
- * commands (mpool creation or adding a PD in an mpool).
- * In that case, if -f is used, it relaxes only the one constraint that is:
- *   PDs of a same media class must have a same model.
- *
- * When the restrictions on PDs classification are applied?
- * --------------------------------------------------------
- * When a mpool is created and when a PD is added to mpool.
- * This function is also called when an mpool is activated or destroyed.
- * At that point the check of the restrictions that can be bypassed (with -f)
- * is not done.
- * Because mpool doesn't remember what restriction was bypassed with the -f
- * option at mpool creation or mpool PD addition time.
  *
  * Locking:
  * -------

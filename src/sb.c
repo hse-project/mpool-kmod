@@ -523,55 +523,6 @@ exit:
 	return rval;
 }
 
-/*
- * Read superblock number posn from drive pd without making repairs;
- * provided for debugging.
- *
- * Note: only pd.status and pd.parm must be set; no other pd fields accessed.
- *
- * Returns: 0 if successful; merr_t otherwise
- *
- */
-merr_t
-sb_read_debug(
-	struct mpool_dev_info    *pd,
-	struct omf_sb_descriptor *sb,
-	u32                       posn)
-{
-	merr_t  err;
-	char   *buf;
-	u16     omf_ver;
-
-	if (!sb_prop_valid(pd) || posn > 3) {
-		err = merr(EINVAL);
-		mp_pr_err("sb(%s, %d) invalid prop, zonepg %u zonetot %u",
-			  err, pd->pdi_name, posn, pd->pdi_parm.dpr_zonepg,
-			  pd->pdi_parm.dpr_zonetot);
-		return err;
-	}
-
-	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
-
-	buf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
-	if (!buf)
-		return merr(ENOMEM);
-
-	memset(buf, 0, SB_AREA_SZ);
-
-	err = sb_read_sbx(pd, buf, posn);
-	if (!ev(err)) {
-		err = omf_sb_unpack_letoh(sb, buf, &omf_ver, NULL);
-		if (err)
-			mp_pr_err("sb(%s, %d) bad magic/version/cksum",
-				  err, pd->pdi_name, posn);
-	} else {
-		mp_pr_err("sb(%s, %d) read failed", err, pd->pdi_name, posn);
-	}
-
-	kfree(buf);
-	return err;
-}
-
 u32
 sb_zones_for_sbs(struct pd_prop *pd_prop)
 {
@@ -609,22 +560,6 @@ void sbutil_mdc0_clear(struct omf_sb_descriptor *sb)
 	sb->osb_mdc0dev.odp_devtype = 0;
 	sb->osb_mdc0dev.odp_sectorsz = 0;
 	sb->osb_mdc0dev.odp_features = 0;
-}
-
-/**
- * sbutil_mdc0_isclear() - returns 1 if there is no MDC0 metadata in the
- *	                   mdc0 portion of the super block.
- * @sb:
- *
- * Some fields in the MDC0 portion of "sb" may not be 0 even if there is no
- * MDC0 metadata present. It is due to metadata upgrade.
- * Metadata upgrade may have to place a specific (non zero) value in a field
- * that was not existing in a previous metadata version to indicate that
- * the value is invalid.
- */
-int sbutil_mdc0_isclear(struct omf_sb_descriptor *sb)
-{
-	return sbutil_mdc0_eq(&SBCLEAR, sb);
 }
 
 /*
@@ -686,6 +621,22 @@ int sbutil_mdc0_eq(struct omf_sb_descriptor *sb1, struct omf_sb_descriptor *sb2)
 		return 0;
 
 	return 1;
+}
+
+/**
+ * sbutil_mdc0_isclear() - returns 1 if there is no MDC0 metadata in the
+ *	                   mdc0 portion of the super block.
+ * @sb:
+ *
+ * Some fields in the MDC0 portion of "sb" may not be 0 even if there is no
+ * MDC0 metadata present. It is due to metadata upgrade.
+ * Metadata upgrade may have to place a specific (non zero) value in a field
+ * that was not existing in a previous metadata version to indicate that
+ * the value is invalid.
+ */
+int sbutil_mdc0_isclear(struct omf_sb_descriptor *sb)
+{
+	return sbutil_mdc0_eq(&SBCLEAR, sb);
 }
 
 /*

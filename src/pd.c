@@ -538,8 +538,8 @@ pd_dev_set_unavail(
 
 	pd_prop->pdp_zparam.dvb_zonepg  = omf_devparm->odp_zonepg;
 	pd_prop->pdp_zparam.dvb_zonetot = omf_devparm->odp_zonetot;
-	pd_prop->pdp_mclassp		= omf_devparm->odp_mclassp;
-	pd_prop->pdp_phys_if		= DEVICE_PHYS_IF_UNKNOWN;
-	pd_prop->pdp_sectorsz		= omf_devparm->odp_sectorsz;
-	pd_prop->pdp_devsz		= omf_devparm->odp_devsz;
+	pd_prop->pdp_mclassp  = omf_devparm->odp_mclassp;
+	pd_prop->pdp_phys_if  = 0;
+	pd_prop->pdp_sectorsz = omf_devparm->odp_sectorsz;
+	pd_prop->pdp_devsz    = omf_devparm->odp_devsz;
 }

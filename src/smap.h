@@ -215,25 +215,6 @@ smap_drive_spares(
 	u8			 spzone);
 
 /**
- * smap_drive_badzone() - Report bad zone count for a drive
- * @mp:     struct mpool_descriptor *
- * @pdh:    drive number (within the mpool_descriptor)
- * @badcnt: u32 (number of bad zones)
- *
- * Report number of bad zones on drive pdh to factor into space
- * accounting; caller must hold mpool_s_lock.
- *
- * Note, this function does not identify the bad zones, it just makes sure
- * that they are accounted for in the mpool_dev_info structure of the mp.
- *
- * Locking: the caller should hold the pds_pdvlock at least in read to
- *	to be protected against media classes updates.
- *
- * Return: 0 if successful; merr_t otherwise
- */
-merr_t smap_drive_badzone(struct mpool_descriptor *mp, u16 pdh, u32 badcnt);
-
-/**
  * smap_drive_usage() - Fill in a given drive's portion of dprop struct.
  * @mp:    struct mpool_descriptor *
  * @pdh:   drive number within the mpool_descriptor
@@ -342,8 +323,6 @@ smap_drive_alloc(
 	struct mc_smap_parms       *mcsp,
 	u16                         pdh);
 
-merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh);
-
 /**
  * smap_mpool_usage() - Get the media class usage for a given mclass.
  * @mp:
@@ -359,30 +338,6 @@ smap_mclass_usage(
 	struct mpool_descriptor    *mp,
 	u8                          mclass,
 	struct mp_usage            *usage);
-
-merr_t
-smap_insert_byrgn(
-	struct mpool_dev_info  *pd,
-	u32                     rgn,
-	u64                     zoneaddr,
-	u16                     zonecnt);
-
-merr_t
-smap_free_byrgn(
-	struct mpool_dev_info  *pd,
-	u32                     rgn,
-	u64                     zoneaddr,
-	u32                     zonecnt);
-
-void
-smap_calc_znstats(struct mpool_dev_info *pd, struct smap_dev_znstats *zones);
-
-u32
-smap_addr2rgn(
-	struct mpool_descriptor  *mp,
-	struct mpool_dev_info    *pd,
-	u64                       zoneaddr);
-
 
 /**
  * smap_log_mpool_usage() - check drive mpool free usable space %, and log

@@ -105,11 +105,6 @@ struct mlog_stat {
 #define IS_SECPGA(lstat)    ((lstat)->lst_mfp.mfp_secpga)
 #define FORCE_4KA(lstat)    (!(IS_SECPGA(lstat)) && mlog_force_4ka)
 
-s64
-mlog_append_dmax(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout);
-
 void mlogutil_closeall(struct mpool_descriptor *mp);
 
 #endif /* MPOOL_MLOG_PRIV_H */

@@ -28,6 +28,8 @@ static DEFINE_MUTEX(mpool_s_lock);
 static struct rb_root mpool_pools = { NULL };
 
 static merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap);
+static struct mpool_descriptor *mpool_desc_alloc(void);
+static void mpool_desc_free(struct mpool_descriptor *mp);
 
 merr_t mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
 {
@@ -1455,14 +1457,6 @@ merr_t mpool_deactivate(struct mpool_descriptor *mp)
 	return 0;
 }
 
-merr_t mpool_queue_work(struct mpool_descriptor *mp, struct work_struct *work)
-{
-	if (!queue_work(mp->pds_workq, work))
-		return merr(EEXIST);
-
-	return 0;
-}
-
 merr_t
 mpool_destroy(
 	u64                         dcnt,
@@ -2052,16 +2046,6 @@ mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops)
 		ftmax ? MPOOL_STAT_FAULTED : MPOOL_STAT_OPTIMAL;
 }
 
-
-void mpool_get_props(struct mpool_descriptor *mp, struct mp_props *prop)
-{
-	struct mpool_xprops   xprops;
-
-	memset(&xprops, 0, sizeof(xprops));
-	mpool_get_xprops(mp, &xprops);
-	*prop = xprops.ppx_params;
-}
-
 static void
 fill_in_devprops(
 	struct mpool_descriptor    *mp,
@@ -2233,7 +2217,7 @@ mpool_devrpt(
 	}
 }
 
-struct mpool_descriptor *mpool_desc_alloc(void)
+static struct mpool_descriptor *mpool_desc_alloc(void)
 {
 	struct mpool_descriptor    *mp;
 	int                         i;
@@ -2260,7 +2244,7 @@ struct mpool_descriptor *mpool_desc_alloc(void)
 /*
  * remove mp from mpool_pools; close all dev; dealloc mp.
  */
-void mpool_desc_free(struct mpool_descriptor *mp)
+static void mpool_desc_free(struct mpool_descriptor *mp)
 {
 	struct mpool_descriptor    *found_mp = NULL;
 	struct mpool_uuid           uuid_zero;
@@ -2282,45 +2266,6 @@ void mpool_desc_free(struct mpool_descriptor *mp)
 	}
 
 	kfree(mp);
-}
-
-merr_t
-mpool_sb_erase(
-	int                   dcnt,
-	char                **dpaths,
-	struct pd_prop       *pd,
-	struct mpool_devrpt  *devrpt)
-{
-	struct mpool_dev_info *pdv;
-	merr_t                 err;
-	int                    i;
-
-	if (ev(!dpaths || !pd || !devrpt ||
-		   dcnt < 1 || dcnt > MPOOL_DRIVES_MAX))
-		return merr(EINVAL);
-
-	pdv = kcalloc(MPOOL_DRIVES_MAX, sizeof(*pdv), GFP_KERNEL);
-	if (!pdv)
-		return merr(ENOMEM);
-
-	err = mpool_dev_init_all(pdv, dcnt, dpaths, devrpt, pd);
-	if (ev(err))
-		goto exit;
-
-	for (i = 0; i < dcnt; i++) {
-		err = sb_erase(&pdv[i]);
-		if (err) {
-			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-				     "superblock erase of %s failed",
-				     dpaths[i]);
-			break;
-		}
-		pd_dev_close(&pdv[i].pdi_parm);
-	}
-exit:
-	kfree(pdv);
-
-	return err;
 }
 
 merr_t
@@ -2361,50 +2306,6 @@ mpool_desc_unavail_add(
 	mp->pds_pdvcnt = mp->pds_pdvcnt + 1;
 
 	return 0;
-}
-
-merr_t
-mpool_sb_magic_check(
-	char                   *dpath,
-	struct pd_prop         *pd_prop,
-	struct mpool_devrpt    *devrpt)
-{
-	struct mpool_dev_info *pd;
-	merr_t                 err;
-	int                    rval;
-
-	if (ev(!dpath || !pd_prop || !devrpt))
-		return merr(EINVAL);
-
-	pd = kzalloc(sizeof(*pd), GFP_KERNEL);
-	if (!pd) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-			     "mpool dev info alloc failed");
-		return merr(ENOMEM);
-	}
-
-	err = mpool_dev_init_all(pd, 1, &dpath, devrpt, pd_prop);
-	if (ev(err)) {
-		kfree(pd);
-		return err;
-	}
-
-	/* confirm drive does not contain mpool magic value */
-	rval = sb_magic_check(pd);
-	if (rval < 0) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-			     "superblock magic read from %s failed",
-			     pd->pdi_name);
-		err = merr(rval);
-	} else if (rval > 0) {
-		mpool_devrpt(devrpt, MPOOL_RC_MAGIC, 0, NULL);
-		err = merr(EBUSY);
-	}
-
-	pd_dev_close(&pd->pdi_parm);
-	kfree(pd);
-
-	return err;
 }
 
 merr_t

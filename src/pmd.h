@@ -507,6 +507,27 @@ static inline bool pmd_objid_isuser(u64 objid)
 }
 
 /**
+ * pmd_mdc_lock() - wrapper to take a lock of an mpool MDC.
+ * @lock:
+ * @slot:
+ *
+ * Nesting levels for pmd_mdc_info mutex.
+ */
+void pmd_mdc_lock(struct mutex *lock, u8 slot);
+
+/**
+ * pmd_mdc_unlock() - wrapper to release a lock of an mpool MDC.
+ * @lock:
+ */
+void pmd_mdc_unlock(struct mutex *lock);
+
+#define PMD_MDC0_COMPACTLOCK(_mp) \
+	pmd_mdc_lock(&((_mp)->pds_mda.mdi_slotv[0].mmi_compactlock), 0)
+
+#define PMD_MDC0_COMPACTUNLOCK(_mp) \
+	pmd_mdc_unlock(&((_mp)->pds_mda.mdi_slotv[0].mmi_compactlock))
+
+/**
  * pmd_mpool_activate() - Load all metadata for mpool mp.
  * @mp:
  * @mdc01:
@@ -655,33 +676,6 @@ pmd_obj_erase(
 	u64                         gen);
 
 /**
- * pmd_obj_erase_done() -
- * @mp:
- * @layout:
- *
- * Log completion of erase for object and set state flag in layout
- * accordingly; caller MUST hold pmd_obj_wrlock() on layout.
- *
- * Return: %0 if successful, merr_t otherwise
- */
-merr_t
-pmd_obj_erase_done(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout);
-
-/**
- * pmd_obj_get() - Get a reference on a known layout.
- * @mp:
- * @objid:
- *
- * Return: NULL on success, merr_t on failure
- */
-merr_t
-pmd_obj_get(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout);
-
-/**
  * pmd_obj_find_get() - Get a reference for a layout for objid.
  * @mp:
  * @objid:
@@ -732,25 +726,6 @@ void pmd_obj_wrlock(struct pmd_layout *layout);
  * @layout:
  */
 void pmd_obj_wrunlock(struct pmd_layout *layout);
-
-/**
- * pmd_objid_to_uhandle()
- *
- * Convert an objid to a uhandle.
- */
-u64 pmd_objid_to_uhandle(u64 objid);
-
-/**
- * pmd_uhandle_to_objid()
- *
- * Convert an uhandle to an objid.
- */
-u64 pmd_uhandle_to_objid(u64 handle);
-
-int pmd_objid_valid(u64 objid);
-
-int pmd_obj_uhandle_valid(u64 uhandle);
-
 
 /**
  * pmd_init_credit() - udpates available credit and setup mdc selector table
@@ -849,45 +824,6 @@ pmd_prop_mpconfig(
 	bool                        compacting);
 
 /**
- * pmd_obj_alloc_cmn() -
- * @mp:
- * @objid:
- * @otype:
- * @ocap:
- * @mclassp:    media class
- * @realloc:
- * @needref:    whether a ref is needed
- * @layoutp:    output, guaranteed to be not NULL if no error returned
- *
- * Allocate object of type otype with parameters and capacity as specified
- * by ocap on drives in media class mclassp; if objid is specified then it
- * is used to support realloc and mdc alloc; if successful returns object
- * layout.
- *
- * Return: %0 if successful, merr_t otherwise
- */
-merr_t
-pmd_obj_alloc_cmn(
-	struct mpool_descriptor    *mp,
-	u64                         objid,
-	enum obj_type_omf           otype,
-	struct pmd_obj_capacity    *ocap,
-	enum mp_media_classp        mclassp,
-	int                         realloc,
-	bool                        needref,
-	struct pmd_layout         **layoutp);
-
-/*
- * pmd_layout_shuffle_pds() -
- * @pdmc: pointer to an array of pd indices
- * @pdcnt: size of array
- *
- * Randomly shuffle an array of pd indices, such that we can
- * randomly select pd for new allocation.
- */
-void pmd_layout_shuffle_pds(u16 *pdmc, u16 pdcnt);
-
-/**
  * pmd_precompact_start() - start MDC1/255 precompaction
  * @mp:
  */
@@ -925,14 +861,6 @@ void pmd_mpool_usage(struct mpool_descriptor *mp, struct mp_usage *usage);
  * @cslot:
  */
 merr_t pmd_mdc_addrec_version(struct mpool_descriptor *mp, u8 cslot);
-
-/**
- * pmd_mdc_needed() - determines if new MDCns should be created
- * @mp: mpool descriptor
- */
-bool pmd_mdc_needed(struct mpool_descriptor *mp);
-
-void pmd_mdc_alloc_set(struct mpool_descriptor *mp);
 
 /**
  * pmd_layout_alloc() - create and initialize an pmd_layout

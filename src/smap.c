@@ -13,6 +13,7 @@
 
 #include "mpcore_defs.h"
 
+static merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh);
 
 /*
  * smap API functions
@@ -174,46 +175,25 @@ smap_drive_spares(
 	return 0;
 }
 
-merr_t smap_drive_badzone(struct mpool_descriptor *mp, u16 pdh, u32 badcnt)
+/*
+ * Compute zone stats for drive pd per comments in smap_dev_alloc.
+ */
+static void
+smap_calc_znstats(struct mpool_dev_info *pd, struct smap_dev_znstats *zones)
 {
-	/*
-	 * this function is intended to be called by a background thread that
-	 * periodically queries the number of bad zones on mpool drives
-	 */
-	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
-	struct media_class    *mc = &mp->pds_mc[pd->pdi_mclass];
-	u8                     spzone = mc->mc_sparms.mcsp_spzone;
-	merr_t                 err;
+	zones->sdv_total = pd->pdi_parm.dpr_zonetot;
+	zones->sdv_avail = pd->pdi_ds.sda_zoneeff;
+	zones->sdv_usable = pd->pdi_ds.sda_utgt;
 
-	if (badcnt > pd->pdi_parm.dpr_zonetot) {
-		err = merr(EINVAL);
-		mp_pr_err("smap(%s, %s): bad blocks %u > total blocks %u",
-			  err, mp->pds_name, pd->pdi_name, badcnt,
-			  pd->pdi_parm.dpr_zonetot);
+	if (pd->pdi_ds.sda_utgt > pd->pdi_ds.sda_uact)
+		zones->sdv_fusable = pd->pdi_ds.sda_utgt -
+				    pd->pdi_ds.sda_uact;
+	else
+		zones->sdv_fusable = 0;
 
-		return err;
-	}
-
-	spin_lock(&pd->pdi_ds.sda_dalock);
-
-	pd->pdi_ds.sda_zoneeff = pd->pdi_parm.dpr_zonetot - badcnt;
-	/*
-	 * adjust utgt but not uact; possible for uact > utgt due to zoneeff
-	 * change
-	 */
-	pd->pdi_ds.sda_utgt = (pd->pdi_ds.sda_zoneeff * (100 - spzone)) / 100;
-	/* adjust stgt and sact maintaining invariant that sact <= stgt */
-	pd->pdi_ds.sda_stgt = pd->pdi_ds.sda_zoneeff - pd->pdi_ds.sda_utgt;
-	if (pd->pdi_ds.sda_sact > pd->pdi_ds.sda_stgt) {
-		pd->pdi_ds.sda_uact =
-			pd->pdi_ds.sda_uact +
-			(pd->pdi_ds.sda_sact - pd->pdi_ds.sda_stgt);
-		pd->pdi_ds.sda_sact = pd->pdi_ds.sda_stgt;
-	}
-
-	spin_unlock(&pd->pdi_ds.sda_dalock);
-
-	return 0;
+	zones->sdv_spare = pd->pdi_ds.sda_stgt;
+	zones->sdv_fspare = pd->pdi_ds.sda_stgt - pd->pdi_ds.sda_sact;
+	zones->sdv_used = pd->pdi_ds.sda_uact;
 }
 
 /**
@@ -323,64 +303,6 @@ void smap_drive_free(struct mpool_descriptor *mp, u16 pdh)
 	pd->pdi_ds.sda_zoneeff = 0;
 	pd->pdi_ds.sda_utgt = 0;
 	pd->pdi_ds.sda_uact = 0;
-}
-
-/**
- * See smap.h.
- */
-merr_t
-smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonecnt)
-{
-	merr_t                 err = 0;
-	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
-	u32                    rstart = 0;
-	u32                    rend = 0;
-	u64                    zoneadded = 0; /* can this be u32 */
-	int                    rgn = 0;
-	u64                    raddr = 0;
-	u64                    rcnt = 0;
-
-	if (zoneaddr >= pd->pdi_parm.dpr_zonetot ||
-	    (zoneaddr + zonecnt) > pd->pdi_parm.dpr_zonetot) {
-		err = merr(EINVAL);
-		mp_pr_err("smap(%s, %s): insert failed, zoneaddr %lu zonecnt %u zonetot %u",
-			  err, mp->pds_name, pd->pdi_name, (ulong)zoneaddr,
-			  zonecnt, pd->pdi_parm.dpr_zonetot);
-		return err;
-	}
-
-	/*
-	 * smap_alloc() never crosses regions. however a previous instantiation
-	 * of this mpool might have used a different value of rgn count
-	 * so must handle inserts that cross regions.
-	 */
-	rstart = smap_addr2rgn(mp, pd, zoneaddr);
-	rend = smap_addr2rgn(mp, pd, zoneaddr + zonecnt - 1);
-	zoneadded = 0;
-
-	for (rgn = rstart; rgn < rend + 1; rgn++) {
-		/* compute zone address and count for this rgn */
-		if (rgn == rstart)
-			raddr = zoneaddr;
-		else
-			raddr = (u64)rgn * pd->pdi_ds.sda_rgnsz;
-
-		if (rgn < rend)
-			rcnt = ((rgn + 1) * pd->pdi_ds.sda_rgnsz) - raddr;
-		else
-			rcnt = zonecnt - zoneadded;
-
-		err = smap_insert_byrgn(pd, rgn, raddr, rcnt);
-		if (err) {
-			mp_pr_err("smap(%s, %s): insert byrgn failed, rgn %d raddr %lu rcnt %lu",
-				  err, mp->pds_name, pd->pdi_name, rgn,
-				  (ulong)raddr, (ulong)rcnt);
-			break;
-		}
-		zoneadded = zoneadded + rcnt;
-	}
-
-	return err;
 }
 
 static bool
@@ -597,68 +519,6 @@ smap_alloc(
 /**
  * See smap.h.
  */
-merr_t
-smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt)
-{
-	merr_t                 err      = 0;
-	struct mpool_dev_info *pd       = NULL;
-	u32                    rstart   = 0;
-	u32                    rend     = 0;
-	u32                    rgn     = 0;
-	u64                    zonefreed = 0;
-	u32                    raddr    = 0;
-	u64                    rcnt     = 0;
-
-	pd = &mp->pds_pdv[pdh];
-
-	if (zoneaddr >= pd->pdi_parm.dpr_zonetot ||
-	    zoneaddr + zonecnt > pd->pdi_parm.dpr_zonetot) {
-		err = merr(EINVAL);
-		mp_pr_err("smap(%s, %s): free failed, zoneaddr %lu zonecnt %u zonetot: %u",
-			  err, mp->pds_name, pd->pdi_name, (ulong)zoneaddr,
-			  zonecnt, pd->pdi_parm.dpr_zonetot);
-		return err;
-	}
-
-	if (!zonecnt)
-		/* Nothing to be returned */
-		return 0;
-
-	/*
-	 * smap_alloc() never crosses regions. however a previous instantiation
-	 * of this mpool might have used a different value of rgn count
-	 * so must handle frees that cross regions.
-	 */
-
-	rstart = smap_addr2rgn(mp, pd, zoneaddr);
-	rend = smap_addr2rgn(mp, pd, zoneaddr + zonecnt - 1);
-
-	for (rgn = rstart; rgn < rend + 1; rgn++) {
-		/* compute zone address and count for this rgn */
-		if (rgn == rstart)
-			raddr = zoneaddr;
-		else
-			raddr = rgn * pd->pdi_ds.sda_rgnsz;
-
-		if (rgn < rend)
-			rcnt = ((u64)(rgn + 1) * pd->pdi_ds.sda_rgnsz) -
-			       raddr;
-		else
-			rcnt = zonecnt - zonefreed;
-
-		err = smap_free_byrgn(pd, rgn, raddr, rcnt);
-		if (err) {
-			mp_pr_err("smap(%s, %s): free byrgn failed, rgn %d raddr %lu, rcnt %lu",
-				  err, mp->pds_name, pd->pdi_name, rgn,
-				  (ulong)raddr, (ulong)rcnt);
-			break;
-		}
-		zonefreed = zonefreed + rcnt;
-	}
-
-	return err;
-}
-
 /*
  * smap internal functions
  */
@@ -755,7 +615,7 @@ smap_drive_alloc(
  * Add entry to space map covering superblocks on drive pdh.
  * Returns: 0 if successful, merr_t otherwise
  */
-merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh)
+static merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh)
 {
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
 	merr_t err;
@@ -807,6 +667,22 @@ smap_mclass_usage(
 	usage->mpu_spare  += ((zones.sdv_spare * zonepg) << PAGE_SHIFT);
 	usage->mpu_fspare += ((zones.sdv_fspare * zonepg) << PAGE_SHIFT);
 	usage->mpu_fusable += ((zones.sdv_fusable * zonepg) << PAGE_SHIFT);
+}
+
+static u32
+smap_addr2rgn(
+	struct mpool_descriptor  *mp,
+	struct mpool_dev_info    *pd,
+	u64                       zoneaddr)
+{
+	struct mc_smap_parms   mcsp;
+
+	mc_smap_parms_get(mp, pd->pdi_mclass, &mcsp);
+
+	if (zoneaddr >= pd->pdi_ds.sda_rgnladdr)
+		return mcsp.mcsp_rgnc - 1;
+
+	return zoneaddr / pd->pdi_ds.sda_rgnsz;
 }
 
 /*
@@ -927,6 +803,65 @@ errout:
 }
 
 /**
+ * See smap.h.
+ */
+merr_t
+smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonecnt)
+{
+	merr_t                 err = 0;
+	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
+	u32                    rstart = 0;
+	u32                    rend = 0;
+	u64                    zoneadded = 0; /* can this be u32 */
+	int                    rgn = 0;
+	u64                    raddr = 0;
+	u64                    rcnt = 0;
+
+	if (zoneaddr >= pd->pdi_parm.dpr_zonetot ||
+	    (zoneaddr + zonecnt) > pd->pdi_parm.dpr_zonetot) {
+		err = merr(EINVAL);
+		mp_pr_err("smap(%s, %s): insert failed, zoneaddr %lu zonecnt %u zonetot %u",
+			  err, mp->pds_name, pd->pdi_name, (ulong)zoneaddr,
+			  zonecnt, pd->pdi_parm.dpr_zonetot);
+		return err;
+	}
+
+	/*
+	 * smap_alloc() never crosses regions. however a previous instantiation
+	 * of this mpool might have used a different value of rgn count
+	 * so must handle inserts that cross regions.
+	 */
+	rstart = smap_addr2rgn(mp, pd, zoneaddr);
+	rend = smap_addr2rgn(mp, pd, zoneaddr + zonecnt - 1);
+	zoneadded = 0;
+
+	for (rgn = rstart; rgn < rend + 1; rgn++) {
+		/* compute zone address and count for this rgn */
+		if (rgn == rstart)
+			raddr = zoneaddr;
+		else
+			raddr = (u64)rgn * pd->pdi_ds.sda_rgnsz;
+
+		if (rgn < rend)
+			rcnt = ((rgn + 1) * pd->pdi_ds.sda_rgnsz) - raddr;
+		else
+			rcnt = zonecnt - zoneadded;
+
+		err = smap_insert_byrgn(pd, rgn, raddr, rcnt);
+		if (err) {
+			mp_pr_err("smap(%s, %s): insert byrgn failed, rgn %d raddr %lu rcnt %lu",
+				  err, mp->pds_name, pd->pdi_name, rgn,
+				  (ulong)raddr, (ulong)rcnt);
+			break;
+		}
+		zoneadded = zoneadded + rcnt;
+	}
+
+	return err;
+}
+
+
+/**
  * smap_free_byrgn() - free the specified range of zones
  * @pd:         physical device object
  * @rgn:       allocation rgn specifier
@@ -939,7 +874,7 @@ errout:
  *
  * Return: 0 if successful, merr_t otherwise
  */
-merr_t
+static merr_t
 smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u32 zonecnt)
 {
 	const char             *msg __maybe_unused;
@@ -1064,41 +999,66 @@ unlock:
 	return err;
 }
 
-/*
- * Compute zone stats for drive pd per comments in smap_dev_alloc.
- */
-void
-smap_calc_znstats(struct mpool_dev_info *pd, struct smap_dev_znstats *zones)
+merr_t
+smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt)
 {
-	zones->sdv_total = pd->pdi_parm.dpr_zonetot;
-	zones->sdv_avail = pd->pdi_ds.sda_zoneeff;
-	zones->sdv_usable = pd->pdi_ds.sda_utgt;
+	merr_t                 err      = 0;
+	struct mpool_dev_info *pd       = NULL;
+	u32                    rstart   = 0;
+	u32                    rend     = 0;
+	u32                    rgn     = 0;
+	u64                    zonefreed = 0;
+	u32                    raddr    = 0;
+	u64                    rcnt     = 0;
 
-	if (pd->pdi_ds.sda_utgt > pd->pdi_ds.sda_uact)
-		zones->sdv_fusable = pd->pdi_ds.sda_utgt -
-				    pd->pdi_ds.sda_uact;
-	else
-		zones->sdv_fusable = 0;
+	pd = &mp->pds_pdv[pdh];
 
-	zones->sdv_spare = pd->pdi_ds.sda_stgt;
-	zones->sdv_fspare = pd->pdi_ds.sda_stgt - pd->pdi_ds.sda_sact;
-	zones->sdv_used = pd->pdi_ds.sda_uact;
-}
+	if (zoneaddr >= pd->pdi_parm.dpr_zonetot ||
+	    zoneaddr + zonecnt > pd->pdi_parm.dpr_zonetot) {
+		err = merr(EINVAL);
+		mp_pr_err("smap(%s, %s): free failed, zoneaddr %lu zonecnt %u zonetot: %u",
+			  err, mp->pds_name, pd->pdi_name, (ulong)zoneaddr,
+			  zonecnt, pd->pdi_parm.dpr_zonetot);
+		return err;
+	}
 
-u32
-smap_addr2rgn(
-	struct mpool_descriptor  *mp,
-	struct mpool_dev_info    *pd,
-	u64                       zoneaddr)
-{
-	struct mc_smap_parms   mcsp;
+	if (!zonecnt)
+		/* Nothing to be returned */
+		return 0;
 
-	mc_smap_parms_get(mp, pd->pdi_mclass, &mcsp);
+	/*
+	 * smap_alloc() never crosses regions. however a previous instantiation
+	 * of this mpool might have used a different value of rgn count
+	 * so must handle frees that cross regions.
+	 */
 
-	if (zoneaddr >= pd->pdi_ds.sda_rgnladdr)
-		return mcsp.mcsp_rgnc - 1;
+	rstart = smap_addr2rgn(mp, pd, zoneaddr);
+	rend = smap_addr2rgn(mp, pd, zoneaddr + zonecnt - 1);
 
-	return zoneaddr / pd->pdi_ds.sda_rgnsz;
+	for (rgn = rstart; rgn < rend + 1; rgn++) {
+		/* compute zone address and count for this rgn */
+		if (rgn == rstart)
+			raddr = zoneaddr;
+		else
+			raddr = rgn * pd->pdi_ds.sda_rgnsz;
+
+		if (rgn < rend)
+			rcnt = ((u64)(rgn + 1) * pd->pdi_ds.sda_rgnsz) -
+			       raddr;
+		else
+			rcnt = zonecnt - zonefreed;
+
+		err = smap_free_byrgn(pd, rgn, raddr, rcnt);
+		if (err) {
+			mp_pr_err("smap(%s, %s): free byrgn failed, rgn %d raddr %lu, rcnt %lu",
+				  err, mp->pds_name, pd->pdi_name, rgn,
+				  (ulong)raddr, (ulong)rcnt);
+			break;
+		}
+		zonefreed = zonefreed + rcnt;
+	}
+
+	return err;
 }
 
 void smap_wait_usage_done(struct mpool_descriptor *mp)

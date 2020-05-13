@@ -35,6 +35,17 @@ pmd_layout_unprovision(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *layout);
 
+static merr_t
+pmd_obj_alloc_cmn(
+	struct mpool_descriptor    *mp,
+	u64                         objid,
+	enum obj_type_omf           otype,
+	struct pmd_obj_capacity    *ocap,
+	enum mp_media_classp        mclassp,
+	int                         realloc,
+	bool                        needref,
+	struct pmd_layout         **layoutp);
+
 /*
  * lock for serializing certain pmd ops where required/desirable; could be per
  * mpool but no meaningful performance benefit in doing so for these rare ops
@@ -3014,7 +3025,7 @@ pmd_alloc_argcheck(
 	return 0;
 }
 
-merr_t
+static merr_t
 pmd_obj_alloc_cmn(
 	struct mpool_descriptor    *mp,
 	u64                         objid,
@@ -3207,7 +3218,7 @@ retry:
  *   garbage is < a threshold that would yield significant free space upon
  *   compaction.
  */
-bool pmd_mdc_needed(struct mpool_descriptor *mp)
+static bool pmd_mdc_needed(struct mpool_descriptor *mp)
 {
 	struct pmd_mdc_info        *cinfo;
 	struct pre_compact_ctrs    *pco_cnt;
@@ -3542,7 +3553,7 @@ void pmd_update_credit(struct mpool_descriptor *mp)
  * Locking: lock should not be held when calling this function.
  */
 
-void pmd_mdc_alloc_set(struct mpool_descriptor *mp)
+static void pmd_mdc_alloc_set(struct mpool_descriptor *mp)
 {
 	u8       mdc_cnt, sidx;
 	merr_t   err;

@@ -225,12 +225,4 @@ mblock_get_props_ex(
 
 bool mblock_objid(u64 objid);
 
-extern void
-free_pages_asyncio(
-	void           **p,
-	struct iovec    *iov_base,
-	int              iovcnt,
-	int              pagesc,
-	int              pagesvsz);
-
 #endif /* MPOOL_MBLOCK_H */

@@ -145,16 +145,6 @@ layout2mlog(struct pmd_layout *layout)
  * EBUSY = log is in erasing state; wait or retry erase
  */
 
-/**
- * mlog_aresame() - Check to see if the two logs passed in are the same.
- * @mlh1:
- * @mlh2:
- */
-bool mlog_aresame(struct mlog_descriptor *mlh1, struct mlog_descriptor *mlh2)
-{
-	return mlh1 == mlh2;
-}
-
 bool mlog_objid(u64 objid)
 {
 	return objid && pmd_objid_type(objid) == OMF_OBJ_MLOG;
@@ -757,34 +747,6 @@ mlog_stat_init_common(
 
 	lri = &lstat->lst_citr;
 	mlog_read_iter_init(layout, lstat, lri);
-}
-
-/**
- * mlog_stat_reinit() - Reinit log stat struct for mlog layout.
- *
- * Returns: 0 if successful, merr_t otherwise
- */
-merr_t
-mlog_stat_reinit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
-{
-	struct pmd_layout  *layout = mlog2layout(mlh);
-	struct mlog_stat   *lstat;
-
-	if (!layout)
-		return merr(EINVAL);
-
-	pmd_obj_wrlock(layout);
-
-	lstat = &layout->eld_lstat;
-
-	mlog_free_abuf(lstat, 0, lstat->lst_abidx);
-	mlog_free_rbuf(lstat, 0, MLOG_NLPGMB(lstat) - 1);
-
-	mlog_stat_init_common(layout, lstat);
-
-	pmd_obj_wrunlock(layout);
-
-	return 0;
 }
 
 /*
@@ -2098,43 +2060,6 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 }
 
 /**
- * mlog_flush()
- *
- * Flush mlog; no op if log is not open.
- *
- * Returns: 0 on success; merr_t otherwise
- */
-merr_t mlog_flush(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
-{
-	struct pmd_layout  *layout = mlog2layout(mlh);
-	struct mlog_stat   *lstat;
-
-	merr_t err  = 0;
-	bool   skip_ser = false;
-
-	if (!layout)
-		return merr(EINVAL);
-
-	pmd_obj_wrlock(layout);
-
-	lstat = &layout->eld_lstat;
-	if (!lstat->lst_abuf) {
-		pmd_obj_wrunlock(layout);
-		return merr(EINVAL);
-	}
-
-	/* flush log if potentially dirty */
-	if (lstat->lst_abdirty) {
-		err = mlog_logblocks_flush(mp, layout, skip_ser);
-		lstat->lst_abdirty = false;
-	}
-
-	pmd_obj_wrunlock(layout);
-
-	return err;
-}
-
-/**
  * mlog_gen()
  *
  * Get generation number for log; log can be open or closed.
@@ -2357,6 +2282,48 @@ mlog_update_append_idx(
 	}
 
 	return 0;
+}
+
+/**
+ * mlog_append_dmax()
+ *
+ * Max data record that can be appended to log in bytes; -1 if no room
+ * for a 0 byte data record due to record descriptor length.
+ */
+static s64
+mlog_append_dmax(struct mpool_descriptor *mp, struct pmd_layout *layout)
+{
+	struct mlog_stat *lstat = &layout->eld_lstat;
+
+	u64    lbmax;
+	u64    lbrest;
+	u32    sectsz;
+	u32    datalb;
+
+	sectsz = MLOG_SECSZ(lstat);
+	datalb = MLOG_TOTSEC(lstat);
+
+	if (lstat->lst_wsoff >= datalb) {
+		/* log already full */
+		ev(1);
+		return -1;
+	}
+
+	lbmax  = (sectsz - OMF_LOGBLOCK_HDR_PACKLEN - OMF_LOGREC_DESC_PACKLEN);
+	lbrest = (datalb - lstat->lst_wsoff - 1) * lbmax;
+
+	if ((sectsz - lstat->lst_aoff) < OMF_LOGREC_DESC_PACKLEN) {
+		/* current log block cannot hold even a record descriptor */
+		if (lbrest)
+			return lbrest;
+
+		ev(1);
+		return -1;
+	}
+	/*
+	 * can start in current log block and spill over to others (if any)
+	 */
+	return sectsz - lstat->lst_aoff - OMF_LOGREC_DESC_PACKLEN + lbrest;
 }
 
 /**
@@ -3434,59 +3401,6 @@ mlog_read_data_next(
 }
 
 /**
- * mlog_seek_read_data_next()
- *
- * Read next data record into buffer buf of length buflen bytes after skipping
- * bytes as required; log must open; skips non-data records (markers).
- *
- * Iterator lri must be re-init if returns any error except ENOMEM
- * in merr_t
- *
- * Returns:
- *   0 on success; merr_t with the following errno values on failure:
- *   EOVERFLOW if buflen is insufficient to hold data record; can retry
- *   errno otherwise
- *
- *   Bytes read on success in the ouput param rdlen (can be 0 if appended a
- *   zero-length data record)
- */
-merr_t
-mlog_seek_read_data_next(
-	struct mpool_descriptor *mp,
-	struct mlog_descriptor  *mlh,
-	u64                      seek,
-	char                    *buf,
-	u64                      buflen,
-	u64                     *rdlen)
-{
-	merr_t err;
-
-	if (seek > 0) {
-		u64 skip;
-
-		skip = 0;
-		err = mlog_read_data_next_impl(mp, mlh, true, NULL,
-					       seek, &skip);
-		if (ev(err))
-			return err;
-
-		if (skip != seek) {
-			err = merr(ERANGE);
-			*rdlen = skip;
-			return err;
-		}
-
-		if (!buf || buflen == 0) {
-			*rdlen = skip;
-
-			return 0;
-		}
-	}
-
-	return mlog_read_data_next_impl(mp, mlh, false, buf, buflen, rdlen);
-}
-
-/**
  * mlog_get_props()
  *
  * Return basic mlog properties in prop.
@@ -3543,50 +3457,6 @@ mlog_get_props_ex(
 	pmd_obj_rdunlock(layout);
 
 	return 0;
-}
-
-/**
- * mlog_append_dmax()
- *
- * Max data record that can be appended to log in bytes; -1 if no room
- * for a 0 byte data record due to record descriptor length.
- */
-s64
-mlog_append_dmax(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout)
-{
-	struct mlog_stat *lstat = &layout->eld_lstat;
-
-	u64    lbmax;
-	u64    lbrest;
-	u32    sectsz;
-	u32    datalb;
-
-	sectsz = MLOG_SECSZ(lstat);
-	datalb = MLOG_TOTSEC(lstat);
-
-	if (lstat->lst_wsoff >= datalb) {
-		/* log already full */
-		ev(1);
-		return -1;
-	}
-
-	lbmax  = (sectsz - OMF_LOGBLOCK_HDR_PACKLEN - OMF_LOGREC_DESC_PACKLEN);
-	lbrest = (datalb - lstat->lst_wsoff - 1) * lbmax;
-
-	if ((sectsz - lstat->lst_aoff) < OMF_LOGREC_DESC_PACKLEN) {
-		/* current log block cannot hold even a record descriptor */
-		if (lbrest)
-			return lbrest;
-
-		ev(1);
-		return -1;
-	}
-	/*
-	 * can start in current log block and spill over to others (if any)
-	 */
-	return sectsz - lstat->lst_aoff - OMF_LOGREC_DESC_PACKLEN + lbrest;
 }
 
 /**

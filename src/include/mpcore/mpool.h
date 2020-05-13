@@ -54,15 +54,6 @@ enum mpool_status {
 
 _Static_assert((MPOOL_STAT_LAST < 256), "enum mpool_status must fit in u8");
 
-/* Checksum types */
-enum mp_cksum_type {
-	MP_CK_UNDEF  = 0,
-	MP_CK_NONE   = 1,
-	MP_CK_DIF    = 2,
-	MP_CK_NUMBER,
-	MP_CK_INVALID = MP_CK_NUMBER
-};
-
 /* Object types */
 enum mp_obj_type {
 	MP_OBJ_UNDEF  = 0,
@@ -154,29 +145,6 @@ enum pd_state {
 };
 
 _Static_assert((PD_DEV_STATE_LAST < 256), "enum pd_state must fit in uint8_t");
-
-/**
- * Device physical interface.
- * @DEVICE_PHYS_IF_UNKNOWN: unknown or unsupported
- * @DEVICE_PHYS_IF_VIRTUAL: virtual interface (VM)
- * @DEVICE_PHYS_IF_NVDIMM:  PMEM interface to NVDIMM
- * @DEVICE_PHYS_IF_NVME:
- * @DEVICE_PHYS_IF_SAS:
- * @DEVICE_PHYS_IF_SATA:    SATA or ATA
- */
-enum device_phys_if {
-	DEVICE_PHYS_IF_UNKNOWN = 0,
-	DEVICE_PHYS_IF_VIRTUAL,
-	DEVICE_PHYS_IF_NVDIMM,
-	DEVICE_PHYS_IF_NVME,
-	DEVICE_PHYS_IF_SAS,
-	DEVICE_PHYS_IF_SATA,
-	DEVICE_PHYS_IF_TEST,
-	DEVICE_PHYS_IF_LAST = DEVICE_PHYS_IF_TEST,
-};
-
-_Static_assert((DEVICE_PHYS_IF_LAST < 256),
-			"enum device_phys_if must fit in uint8_t");
 
 /**
  * struct mpool_config -
@@ -300,13 +268,6 @@ mpool_activate(
 merr_t mpool_deactivate(struct mpool_descriptor *mp);
 
 /**
- * mpool_queue_work() - queue a work item to the per-mpool workqueue.
- * @mp:   mpool descriptor
- * @work: work unit
- */
-merr_t mpool_queue_work(struct mpool_descriptor *mp, struct work_struct *work);
-
-/**
  * mpool_destroy() - Destroy an mpool
  * @dcnt:
  * @dpaths:
@@ -408,13 +369,6 @@ mpool_mclass_get(
 	struct mpool_mclass_xprops *mcxv);
 
 /**
- * mpool_get_props() - Return basic mpool properties in prop.
- * @mp:
- * @prop:
- */
-void mpool_get_props(struct mpool_descriptor *mp, struct mp_props *prop);
-
-/**
  * mpool_get_xprops() - Retrieve extended mpool properties
  * @mp:
  * @prop:
@@ -456,53 +410,6 @@ mpool_get_usage(
 	enum mp_media_classp        mclassp,
 	struct mp_usage            *usage);
 
-/**
- * mpool_sb_erase() - erase all superblocks on the specified paths
- * @dcnt: Number of paths
- * @dpaths: Vector of path names
- * @pd: pool drive properties
- * @devrpt: Device error report
- */
-merr_t
-mpool_sb_erase(
-	int                   dcnt,
-	char                **dpaths,
-	struct pd_prop       *pd,
-	struct mpool_devrpt  *devrpt);
-
-/**
- * mpool_sb_magic_check() -
- * @dpath: device path
- * @pd_prop: PD properties
- * @devrpt:
- * Return merr_t, if either failed to read superblock or superblock
- * has MPOOL magic code
- */
-merr_t
-mpool_sb_magic_check(
-	char                   *dpath,
-	struct pd_prop         *pd_prop,
-	struct mpool_devrpt    *devrpt);
-
-/**
- * mpool_user_desc_alloc() - Allocate a minimal mpool descriptor for user
- * space mlogs support
- * @mpname:
- */
-struct mpool_descriptor *mpool_user_desc_alloc(char *mpname);
-
-/**
- * mpool_user_desc_free() - Free the mpool descriptor used for user space mlog
- * support
- * @mp:
- */
-void mpool_user_desc_free(struct mpool_descriptor *mp);
-
-/**
- * mpool_fzero_use_discard() - issue discard command to zero out LBA range
- * @mp:
- */
-bool mpool_fzero_use_discard(struct mpool_descriptor *mp);
 
 /**
  * mpool_mc_isbe() - Check whether mclassp is a best effort media classes.

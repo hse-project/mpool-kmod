@@ -96,8 +96,6 @@ mlog_open(
 
 merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-merr_t mlog_flush(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
-
 merr_t
 mlog_gen(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *gen);
 
@@ -106,12 +104,6 @@ mlog_empty(
 	struct mpool_descriptor    *mp,
 	struct mlog_descriptor     *mlh,
 	bool                       *empty);
-
-merr_t
-mlog_len(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	u64                        *len);
 
 merr_t
 mlog_erase(
@@ -130,14 +122,6 @@ mlog_append_data(
 	struct mpool_descriptor    *mp,
 	struct mlog_descriptor     *mlh,
 	char                       *buf,
-	u64                         buflen,
-	int                         sync);
-
-merr_t
-mlog_append_datav(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	struct iovec               *iov,
 	u64                         buflen,
 	int                         sync);
 
@@ -166,15 +150,6 @@ mlog_read_data_next(
 	u64                        *rdlen);
 
 merr_t
-mlog_seek_read_data_next(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	u64                         seek,
-	char                       *buf,
-	u64                         buflen,
-	u64                        *rdlen);
-
-merr_t
 mlog_get_props(
 	struct mpool_descriptor    *mp,
 	struct mlog_descriptor     *mlh,
@@ -186,13 +161,8 @@ mlog_get_props_ex(
 	struct mlog_descriptor     *mlh,
 	struct mlog_props_ex       *prop);
 
-bool mlog_aresame(struct mlog_descriptor *mlh1, struct mlog_descriptor *mlh2);
-
 void
 mlog_precompact_alsz(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
-
-merr_t
-mlog_stat_reinit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
 merr_t
 mlog_rw_raw(

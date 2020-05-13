@@ -111,25 +111,6 @@ sb_read(
 	struct mpool_devrpt        *devrpt);
 
 /**
- * sb_read_debug() - read superblock, with debug data
- * @pd: struct mpool_dev_info *
- * @sb: struct omf_sb_descriptor *
- * @posn: u32
- *
- * Read superblock number posn from drive pd without making repairs;
- * provided for debugging.
- *
- * Note: only pd.status and pd.parm must be set; no other pd fields accessed.
- *
- * Return: 0 if successful; merr_t otherwise
- */
-merr_t
-sb_read_debug(
-	struct mpool_dev_info      *pd,
-	struct omf_sb_descriptor   *sb,
-	u32                         posn);
-
-/**
  * sb_zones_for_sbs() - compute how many zones are needed to contain the
  *	               superblocks.
  * @pd_prop:
@@ -167,18 +148,6 @@ void
 sbutil_mdc0_copy(
 	struct omf_sb_descriptor   *tgtsb,
 	struct omf_sb_descriptor   *srcsb);
-
-/**
- * sbutil_mdc0_eq() - compare mdc0's of two superblocks
- * @sb1: struct omf_sb_descriptor *
- * @sb2: struct omf_sb_descriptor *
- *
- * Compare mdc0 portions of sb1 and sb2.
- *
- * Return: 0 if not identical, 1 if identical
- */
-int
-sbutil_mdc0_eq(struct omf_sb_descriptor *sb1, struct omf_sb_descriptor *sb2);
 
 /**
  * sbutil_mdc0_isvalid() - validate mdc0 of a superblock
