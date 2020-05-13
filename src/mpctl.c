@@ -3316,11 +3316,11 @@ merr_t mpioc_mlog_erase(struct mpc_unit *unit, struct mpioc_mlog_id *mi)
 }
 
 /**
- * mpioc_vma_create() - create an mpctl map
+ * mpioc_xvm_create() - create an extended VMA map (AKA mcache map)
  * @unit:
  * @arg:
  */
-static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
+static merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
 	struct mpool_descriptor    *mpdesc;
 	struct mpc_metamap         *mm;
@@ -3334,23 +3334,23 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 	merr_t  err;
 	int     rc, i;
 
-	if (ev(!unit || !unit->un_mapping || !vma))
+	if (ev(!unit || !unit->un_mapping || !ioc))
 		return merr(EINVAL);
 
-	if (vma->im_mbidc < 1)
+	if (ioc->im_mbidc < 1)
 		return merr(EINVAL);
 
-	if (vma->im_advice > MPC_VMA_PINNED)
+	if (ioc->im_advice > MPC_VMA_PINNED)
 		return merr(EINVAL);
 
 	mult = 1;
-	if (vma->im_advice == MPC_VMA_WARM)
+	if (ioc->im_advice == MPC_VMA_WARM)
 		mult = 10;
-	else if (vma->im_advice == MPC_VMA_HOT)
+	else if (ioc->im_advice == MPC_VMA_HOT)
 		mult = 100;
 
 	mpdesc = unit->un_mpool->mp_desc;
-	mbidc = vma->im_mbidc;
+	mbidc = ioc->im_mbidc;
 
 	sz = sizeof(*xvm) + sizeof(*mbinfov) * mbidc;
 	if (sz > mpc_xvm_cachesz[1])
@@ -3366,7 +3366,7 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 	if (!mbidv)
 		return merr(ENOMEM);
 
-	rc = copy_from_user(mbidv, vma->im_mbidv, sz);
+	rc = copy_from_user(mbidv, ioc->im_mbidv, sz);
 	if (rc) {
 		kfree(mbidv);
 		return merr(EFAULT);
@@ -3385,7 +3385,7 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 	xvm->xvm_mapping = unit->un_mapping;
 	xvm->xvm_metamap = unit->un_metamap;
 	xvm->xvm_unit = unit;
-	xvm->xvm_advice = vma->im_advice;
+	xvm->xvm_advice = ioc->im_advice;
 	kref_init(&xvm->xvm_ref);
 	xvm->xvm_cache = cache;
 	atomic_set(&xvm->xvm_opened, 0);
@@ -3437,10 +3437,10 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 		goto errout;
 	}
 
-	vma->im_offset = (ulong)xvm->xvm_rgn << mpc_xvm_size_max;
-	vma->im_bktsz = xvm->xvm_bktsz;
-	vma->im_len = xvm->xvm_bktsz * mbidc;
-	vma->im_len = ALIGN(vma->im_len, (1ul << mpc_xvm_size_max));
+	ioc->im_offset = (ulong)xvm->xvm_rgn << mpc_xvm_size_max;
+	ioc->im_bktsz = xvm->xvm_bktsz;
+	ioc->im_len = xvm->xvm_bktsz * mbidc;
+	ioc->im_len = ALIGN(ioc->im_len, (1ul << mpc_xvm_size_max));
 
 	atomic_inc(&mm->mm_refcnt);
 
@@ -3460,11 +3460,11 @@ errout:
 }
 
 /**
- * mpioc_vma_destroy() - destroy an mpctl map that is not in use
+ * mpioc_xvm_destroy() - destroy an extended VMA
  * @unit:
  * @arg:
  */
-static merr_t mpioc_vma_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
+static merr_t mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
 	struct mpc_metamap *mm;
 	struct mpc_xvm     *xvm;
@@ -3492,7 +3492,7 @@ static merr_t mpioc_vma_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	return 0;
 }
 
-static merr_t mpioc_vma_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
+static merr_t mpioc_xvm_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
 	struct mpc_xvm *xvm;
 	u64             rgn;
@@ -3513,7 +3513,7 @@ static merr_t mpioc_vma_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	return 0;
 }
 
-static merr_t mpioc_vma_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc)
+static merr_t mpioc_xvm_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
 	struct mpc_xvm *xvm;
 	u64             rgn;
@@ -3741,19 +3741,19 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		break;
 
 	case MPIOC_VMA_CREATE:
-		err = mpioc_vma_create(unit, argp);
+		err = mpioc_xvm_create(unit, argp);
 		break;
 
 	case MPIOC_VMA_DESTROY:
-		err = mpioc_vma_destroy(unit, argp);
+		err = mpioc_xvm_destroy(unit, argp);
 		break;
 
 	case MPIOC_VMA_PURGE:
-		err = mpioc_vma_purge(unit, argp);
+		err = mpioc_xvm_purge(unit, argp);
 		break;
 
 	case MPIOC_VMA_VRSS:
-		err = mpioc_vma_vrss(unit, argp);
+		err = mpioc_xvm_vrss(unit, argp);
 		break;
 
 	case MPIOC_TEST:
