@@ -7,6 +7,7 @@
 #define MPOOL_MPCTL_H
 
 #include <linux/rbtree.h>
+#include <linux/kref.h>
 
 #include <mpcore/mblock.h>
 
@@ -21,21 +22,23 @@ struct mpc_mbinfo {
 } __aligned(32);
 
 struct mpc_vma {
-	struct rb_node              mcm_rnode;
-	uint                        mcm_rgn;
-	u32                         mcm_magic;
 	size_t                      mcm_bktsz;
 	uint                        mcm_mbinfoc;
+	uint                        mcm_rgn;
+	struct kref                 mcm_ref;
+	u32                         mcm_magic;
 	struct mpool_descriptor    *mcm_mpdesc;
-	atomic64_t                 *mcm_hcpagesp;
 
+	atomic64_t                 *mcm_hcpagesp;
 	struct address_space       *mcm_mapping;
 	struct mpc_metamap         *mcm_metamap;
 	struct mpc_reap            *mcm_reap;
+
 	struct mpc_unit            *mcm_unit;
 	enum mpc_vma_advice         mcm_advice;
-	int                         mcm_refcnt;
+	atomic_t                    mcm_opened;
 	struct kmem_cache          *mcm_cache;
+	struct mpc_vma             *mcm_next;
 
 	____cacheline_aligned
 	struct list_head            mcm_list;

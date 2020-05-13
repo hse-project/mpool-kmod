@@ -149,27 +149,18 @@ struct readpage_work {
 };
 
 /**
- * struct mpc_metabkt -
- * @mmb_lock:
- */
-struct mpc_metabkt {
-	spinlock_t      mmb_lock;
-} ____cacheline_aligned;
-
-/**
  * struct mpc_metamap -
  * @mm_rgnlock: serializes region alloc/free
  * @mm_rgnmap:  vma region allocator
  * @mm_refcnt;  metamap reference count
- * @mm_bktv:    lockpool to serialize mpc_vma updates
  */
 struct mpc_metamap {
-	spinlock_t          mm_rgnlock;
-	struct idr          mm_rgnmap;
-	atomic_t            mm_refcnt;
-
-	struct mpc_metabkt  mm_bktv[13];
+	struct mutex    mm_rgnlock;
+	struct idr      mm_rgnmap;
+	atomic_t        mm_refcnt;
 };
+
+static void mpc_vma_put(struct mpc_vma *vma);
 
 static merr_t mpc_cf_journal(struct mpc_unit *unit);
 
@@ -894,9 +885,7 @@ static struct workqueue_struct *mpc_rgn2wq(uint rgn)
 static merr_t mpc_metamap_create(struct mpc_metamap **mmp)
 {
 	struct mpc_metamap *mm;
-
-	size_t  sz;
-	int     i;
+	size_t              sz;
 
 	sz = roundup_pow_of_two(sizeof(*mm));
 
@@ -904,28 +893,59 @@ static merr_t mpc_metamap_create(struct mpc_metamap **mmp)
 	if (ev(!mm))
 		return merr(ENOMEM);
 
-	spin_lock_init(&mm->mm_rgnlock);
+	mutex_init(&mm->mm_rgnlock);
 	idr_init(&mm->mm_rgnmap);
 	atomic_set(&mm->mm_refcnt, 0);
-
-	for (i = 0; i < ARRAY_SIZE(mm->mm_bktv); ++i)
-		spin_lock_init(&mm->mm_bktv[i].mmb_lock);
 
 	*mmp = mm;
 
 	return 0;
 }
 
+static int mpc_metamap_destroy_cb(int rn, void *item, void *data)
+{
+	struct mpc_vma *vma = item;
+	void          **headp = data;
+
+	if (vma && kref_read(&vma->mcm_ref) == 1 &&
+	    !atomic_read(&vma->mcm_opened)) {
+		idr_replace(&vma->mcm_metamap->mm_rgnmap, NULL, vma->mcm_rgn);
+		vma->mcm_next = *headp;
+		*headp = vma;
+	}
+
+	return 0;
+}
+
 static void mpc_metamap_destroy(struct mpc_metamap *mm)
 {
+	struct mpc_vma *head = NULL, *vma;
+
 	if (!mm)
 		return;
 
-	/* Wait for all mpc_vma_free_cb() callbacks to complete, after
-	 * which we must wait for the reaper to prune its lists.
+	/* Wait for all mpc_vma_free_cb() callbacks to complete...
 	 */
 	flush_workqueue(mpc_wq_trunc);
 
+	/* Build a list of all orphaned VMAs and release their birth
+	 * references (i.e., VMAs that were created but never mmapped).
+	 */
+	mutex_lock(&mm->mm_rgnlock);
+	idr_for_each(&mm->mm_rgnmap, mpc_metamap_destroy_cb, &head);
+	mutex_unlock(&mm->mm_rgnlock);
+
+	while ((vma = head)) {
+		head = vma->mcm_next;
+		mpc_vma_put(vma);
+	}
+
+	/* Wait for all mpc_vma_free_cb() callbacks to complete...
+	 */
+	flush_workqueue(mpc_wq_trunc);
+
+	/* Wait for reaper to prune its lists...
+	 */
 	while (atomic_read(&mm->mm_refcnt) > 0)
 		usleep_range(100000, 150000);
 
@@ -935,16 +955,13 @@ static void mpc_metamap_destroy(struct mpc_metamap *mm)
 
 static struct mpc_vma *mpc_vma_lookup(struct mpc_metamap *mm, uint key)
 {
-	struct mpc_metabkt *bkt;
-	struct mpc_vma     *vma;
+	struct mpc_vma *vma;
 
-	bkt = mm->mm_bktv + (key % ARRAY_SIZE(mm->mm_bktv));
-
-	spin_lock(&bkt->mmb_lock);
+	mutex_lock(&mm->mm_rgnlock);
 	vma = idr_find(&mm->mm_rgnmap, key);
-	if (vma)
-		++vma->mcm_refcnt;
-	spin_unlock(&bkt->mmb_lock);
+	if (vma && !kref_get_unless_zero(&vma->mcm_ref))
+		vma = NULL;
+	mutex_unlock(&mm->mm_rgnlock);
 
 	return vma;
 }
@@ -973,9 +990,9 @@ again:
 
 	mm = meta->mcm_metamap;
 
-	spin_lock(&mm->mm_rgnlock);
+	mutex_lock(&mm->mm_rgnlock);
 	idr_remove(&mm->mm_rgnmap, meta->mcm_rgn);
-	spin_unlock(&mm->mm_rgnlock);
+	mutex_unlock(&mm->mm_rgnlock);
 
 	meta->mcm_magic = 0xbadcafe;
 	meta->mcm_rgn = -1;
@@ -994,40 +1011,22 @@ static void mpc_vma_free_cb(struct work_struct *work)
 
 static void mpc_vma_get(struct mpc_vma *vma)
 {
-	struct mpc_metamap *mm = vma->mcm_metamap;
-	struct mpc_metabkt *bkt;
-
-	bkt = mm->mm_bktv + (vma->mcm_rgn % ARRAY_SIZE(mm->mm_bktv));
-
-	spin_lock(&bkt->mmb_lock);
-	assert(vma->mcm_refcnt > 0);
-	++vma->mcm_refcnt;
-	spin_unlock(&bkt->mmb_lock);
+	kref_get(&vma->mcm_ref);
 }
 
-static void mpc_vma_put(struct mpc_vma *vma)
+static void mpc_vma_release(struct kref *kref)
 {
+	struct mpc_vma *vma = container_of(kref, struct mpc_vma, mcm_ref);
 	struct mpc_metamap *mm = vma->mcm_metamap;
-	struct mpc_metabkt *bkt;
-
-	bool closed;
 	int  i;
 
 	assert(vma);
 	assert((u32)(uintptr_t)vma == vma->mcm_magic);
 
-	bkt = mm->mm_bktv + (vma->mcm_rgn % ARRAY_SIZE(mm->mm_bktv));
-
-	spin_lock(&bkt->mmb_lock);
-	assert(vma->mcm_refcnt > 0);
-
-	closed = (--vma->mcm_refcnt == 0);
-	if (closed)
-		idr_replace(&mm->mm_rgnmap, NULL, vma->mcm_rgn);
-	spin_unlock(&bkt->mmb_lock);
-
-	if (!closed)
-		return;
+	mutex_lock(&mm->mm_rgnlock);
+	assert(kref_read(kref) == 0);
+	idr_replace(&mm->mm_rgnmap, NULL, vma->mcm_rgn);
+	mutex_unlock(&mm->mm_rgnlock);
 
 	/* Wait for all in-progress readaheads to complete
 	 * before we drop our mblock references.
@@ -1040,6 +1039,11 @@ static void mpc_vma_put(struct mpc_vma *vma)
 
 	INIT_WORK(&vma->mcm_work, mpc_vma_free_cb);
 	queue_work(mpc_wq_trunc, &vma->mcm_work);
+}
+
+static void mpc_vma_put(struct mpc_vma *vma)
+{
+	kref_put(&vma->mcm_ref, mpc_vma_release);
 }
 
 /*
@@ -1749,6 +1753,12 @@ static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 	meta = mpc_vma_lookup(unit->un_metamap, key);
 	if (!meta)
 		return -EINVAL;
+
+	/* Drop the birth ref on first open so that the final call
+	 * to mpc_vm_close() will cause the vma to be destroyed.
+	 */
+	if (atomic_inc_return(&meta->mcm_opened) == 1)
+		mpc_vma_put(meta);
 
 	vma->vm_ops = &mpc_vops_default;
 
@@ -3369,20 +3379,23 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 		return merr(ENOMEM);
 	}
 
+	meta->mcm_magic = (u32)(uintptr_t)meta;
 	meta->mcm_mbinfoc = mbidc;
 	meta->mcm_mpdesc = unit->un_mpool->mp_desc;
+
+	meta->mcm_mapping = unit->un_mapping;
 	meta->mcm_metamap = unit->un_metamap;
 	meta->mcm_unit = unit;
 	meta->mcm_advice = vma->im_advice;
-	meta->mcm_magic = (u32)(uintptr_t)meta;
+	kref_init(&meta->mcm_ref);
+	meta->mcm_cache = cache;
+	atomic_set(&meta->mcm_opened, 0);
 
+	INIT_LIST_HEAD(&meta->mcm_list);
 	atomic_set(&meta->mcm_evicting, 0);
 	atomic_set(&meta->mcm_reapref, 1);
-	atomic_set(&meta->mcm_rabusy, 0);
-	INIT_LIST_HEAD(&meta->mcm_list);
 	atomic64_set(&meta->mcm_nrpages, 0);
-	meta->mcm_mapping = unit->un_mapping;
-	meta->mcm_cache = cache;
+	atomic_set(&meta->mcm_rabusy, 0);
 
 	largest = 0;
 	err = 0;
@@ -3416,15 +3429,12 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 
 	mm = unit->un_metamap;
 
-	idr_preload(GFP_KERNEL);
-
-	spin_lock(&mm->mm_rgnlock);
-	meta->mcm_rgn = idr_alloc(&mm->mm_rgnmap, NULL, 1, -1, GFP_NOWAIT);
+	mutex_lock(&mm->mm_rgnlock);
+	meta->mcm_rgn = idr_alloc(&mm->mm_rgnmap, NULL, 1, -1, GFP_KERNEL);
 	if (meta->mcm_rgn < 1) {
-		spin_unlock(&mm->mm_rgnlock);
+		mutex_unlock(&mm->mm_rgnlock);
 
 		err = merr(meta->mcm_rgn ?: EINVAL);
-		idr_preload_end();
 		goto errout;
 	}
 
@@ -3436,9 +3446,7 @@ static merr_t mpioc_vma_create(struct mpc_unit *unit, struct mpioc_vma *vma)
 	atomic_inc(&mm->mm_refcnt);
 
 	idr_replace(&mm->mm_rgnmap, meta, meta->mcm_rgn);
-	spin_unlock(&mm->mm_rgnlock);
-
-	idr_preload_end();
+	mutex_unlock(&mm->mm_rgnlock);
 
 errout:
 	if (err) {
@@ -3457,21 +3465,30 @@ errout:
  * @unit:
  * @arg:
  */
-static merr_t mpioc_vma_destroy(struct mpc_unit *unit, struct mpioc_vma *vma)
+static merr_t mpioc_vma_destroy(struct mpc_unit *unit, struct mpioc_vma *im)
 {
-	struct mpc_vma *meta;
-	u64             rgn;
+	struct mpc_metamap *mm;
+	struct mpc_vma     *vma;
+	u64                 rgn;
 
-	if (ev(!unit || !vma))
+	if (ev(!unit || !im))
 		return merr(EINVAL);
 
-	rgn = vma->im_offset >> mpc_vma_size_max;
+	rgn = im->im_offset >> mpc_vma_size_max;
+	mm = unit->un_metamap;
 
-	meta = mpc_vma_lookup(unit->un_metamap, rgn);
-	if (!meta)
-		return merr(ENOENT);
+	mutex_lock(&mm->mm_rgnlock);
+	vma = idr_find(&mm->mm_rgnmap, rgn);
+	if (vma && kref_read(&vma->mcm_ref) == 1 &&
+	    !atomic_read(&vma->mcm_opened)) {
+		idr_remove(&mm->mm_rgnmap, rgn);
+	} else {
+		vma = NULL;
+	}
+	mutex_unlock(&mm->mm_rgnlock);
 
-	mpc_vma_put(meta);
+	if (vma)
+		mpc_vma_put(vma);
 
 	return 0;
 }
