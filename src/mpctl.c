@@ -90,12 +90,15 @@ struct mpc_uinfo {
  * struct mpc_rgnmap - xvm region management
  * @rm_lock:    protects rm_root
  * @rm_root:    root of the region map
- * @rm_refcnt;  number of active regions
+ * @rm_rgncnt;  number of active regions
+ *
+ * Note that this is not a ref-counted object, its lifetime
+ * is tied to struct mpc_unit.
  */
 struct mpc_rgnmap {
 	struct mutex    rm_lock;
 	struct idr      rm_root;
-	atomic_t        rm_refcnt;
+	atomic_t        rm_rgncnt;
 } ____cacheline_aligned;
 
 /* There is one unit object for each device object created by the driver.
@@ -352,6 +355,11 @@ static void mpc_mpool_release(struct kref *refp)
 	module_put(THIS_MODULE);
 }
 
+static void mpc_mpool_put(struct mpc_mpool *mpool)
+{
+	kref_put(&mpool->mp_ref, mpc_mpool_release);
+}
+
 /**
  * mpc_toascii() - convert string to restricted ASCII
  *
@@ -605,17 +613,21 @@ mpc_unit_create(
 	unit->un_open_cnt = 0;
 	unit->un_devno = NODEV;
 	kref_init(&unit->un_ref);
-	kref_get(&unit->un_ref);
 	unit->un_mpool = mpool;
 
 	mutex_init(&unit->un_rgnmap.rm_lock);
 	idr_init(&unit->un_rgnmap.rm_root);
-	atomic_set(&unit->un_rgnmap.rm_refcnt, 0);
+	atomic_set(&unit->un_rgnmap.rm_rgncnt, 0);
+
+	/* Acquire an additional reference for the caller....
+	 */
+	kref_get(&unit->un_ref);
 
 	err = 0;
 
-	/* Check to see if the desired name is in use.
+	/* TODO: Check to see if the desired name is in use.
 	 */
+
 	mutex_lock(&ss->ss_lock);
 	minor = idr_alloc(&ss->ss_unitmap, NULL, 0, -1, GFP_KERNEL);
 	if (minor >= 0)
@@ -634,12 +646,12 @@ mpc_unit_create(
 }
 
 /**
- * mpc_unit_destroy() - Destroy a unit object created by mpc_unit_create().
+ * mpc_unit_release() - Destroy a unit object created by mpc_unit_create().
  * @unit:
  *
  * Returns: merr_t, usually EBUSY or 0.
  */
-static void mpc_unit_destroy(struct kref *refp)
+static void mpc_unit_release(struct kref *refp)
 {
 	struct mpc_unit *unit = container_of(refp, struct mpc_unit, un_ref);
 	struct mpc_softstate *ss = &mpc_softstate;
@@ -649,7 +661,7 @@ static void mpc_unit_destroy(struct kref *refp)
 	mutex_unlock(&ss->ss_lock);
 
 	if (unit->un_mpool)
-		kref_put(&unit->un_mpool->mp_ref, mpc_mpool_release);
+		mpc_mpool_put(unit->un_mpool);
 
 	if (unit->un_device)
 		device_destroy(ss->ss_class, unit->un_devno);
@@ -657,6 +669,11 @@ static void mpc_unit_destroy(struct kref *refp)
 	idr_destroy(&unit->un_rgnmap.rm_root);
 
 	kfree(unit);
+}
+
+static void mpc_unit_put(struct mpc_unit *unit)
+{
+	kref_put(&unit->un_ref, mpc_unit_release);
 }
 
 /**
@@ -801,7 +818,7 @@ mpc_unit_setup(
 	struct device          *device;
 	merr_t                  err;
 
-	if (!ss || !uinfo || !name || !name[0] || !cfg || !cmn)
+	if (!ss || !uinfo || !name || !name[0] || !cfg || !unitp || !cmn)
 		return merr(EINVAL);
 
 	if (cfg->mc_uid == -1 || cfg->mc_gid == -1 || cfg->mc_mode == -1) {
@@ -822,6 +839,7 @@ mpc_unit_setup(
 		return merr(EINVAL);
 
 	rcode = MPOOL_RC_NONE;
+	*unitp = NULL;
 	unit = NULL;
 
 	/* Try to create a new unit object.  If successful, then all error
@@ -861,10 +879,7 @@ mpc_unit_setup(
 		 MINOR(unit->un_devno),
 		 cfg->mc_uid, cfg->mc_gid, cfg->mc_mode);
 
-	if (unitp)
-		*unitp = unit;
-	else
-		kref_put(&unit->un_ref, mpc_unit_destroy);
+	*unitp = unit;
 
 errout:
 	if (err) {
@@ -876,8 +891,8 @@ errout:
 		 * destroy the unit.
 		 */
 		kref_get(&mpool->mp_ref);
-		kref_put(&unit->un_ref, mpc_unit_destroy);
-		kref_put(&unit->un_ref, mpc_unit_destroy);
+		mpc_unit_put(unit);
+		mpc_unit_put(unit);
 	}
 
 	return err;
@@ -888,7 +903,7 @@ static struct workqueue_struct *mpc_rgn2wq(uint rgn)
 	return mpc_wq_rav[rgn % ARRAY_SIZE(mpc_wq_rav)];
 }
 
-static int mpc_rgnmap_destroy_cb(int rgn, void *item, void *data)
+static int mpc_rgnmap_isorphan(int rgn, void *item, void *data)
 {
 	struct mpc_xvm *xvm = item;
 	void          **headp = data;
@@ -914,11 +929,11 @@ static void mpc_rgnmap_flush(struct mpc_rgnmap *rm)
 	 */
 	flush_workqueue(mpc_wq_trunc);
 
-	/* Build a list of all orphaned XVMAs and release their birth
-	 * references (i.e., XVMAs that were created but never mmapped).
+	/* Build a list of all orphaned XVMs and release their birth
+	 * references (i.e., XVMs that were created but never mmapped).
 	 */
 	mutex_lock(&rm->rm_lock);
-	idr_for_each(&rm->rm_root, mpc_rgnmap_destroy_cb, &head);
+	idr_for_each(&rm->rm_root, mpc_rgnmap_isorphan, &head);
 	mutex_unlock(&rm->rm_lock);
 
 	while ((xvm = head)) {
@@ -928,7 +943,7 @@ static void mpc_rgnmap_flush(struct mpc_rgnmap *rm)
 
 	/* Wait for reaper to prune its lists...
 	 */
-	while (atomic_read(&rm->rm_refcnt) > 0)
+	while (atomic_read(&rm->rm_rgncnt) > 0)
 		usleep_range(100000, 150000);
 }
 
@@ -978,7 +993,7 @@ again:
 
 	kmem_cache_free(xvm->xvm_cache, xvm);
 
-	atomic_dec(&rm->rm_refcnt);
+	atomic_dec(&rm->rm_rgncnt);
 }
 
 static void mpc_xvm_free_cb(struct work_struct *work)
@@ -1648,7 +1663,7 @@ errout:
 	if (err) {
 		if (merr_errno(err) != EBUSY)
 			mp_pr_err("open %s failed", err, unit->un_name);
-		kref_put(&unit->un_ref, mpc_unit_destroy);
+		mpc_unit_put(unit);
 	}
 
 	return -merr_errno(err);
@@ -1691,7 +1706,7 @@ static int mpc_release(struct inode *ip, struct file *fp)
 errout:
 	up(&unit->un_open_lock);
 
-	kref_put(&unit->un_ref, mpc_unit_destroy);
+	mpc_unit_put(unit);
 
 	return 0;
 }
@@ -2172,8 +2187,8 @@ mpioc_mp_create(
 	struct mpool_devrpt    *devrpt;
 	struct mpcore_params    mpc_params;
 	struct mpool_mdparm     mdparm;
-	struct mpc_unit        *mpool_unit = NULL;
-	struct mpc_mpool       *mpool      = NULL;
+	struct mpc_unit        *unit = NULL;
+	struct mpc_mpool       *mpool = NULL;
 	size_t                  len;
 	merr_t                  err;
 	mode_t                  mode;
@@ -2278,8 +2293,11 @@ mpioc_mp_create(
 		goto errout;
 	}
 
+	/* A unit is born with two references:  A birth reference,
+	 * and one for the caller.
+	 */
 	err = mpc_unit_setup(&mpc_uinfo_mpool, mp->mp_params.mp_name,
-			     &cfg, mpool, &mpool_unit, &mp->mp_cmn);
+			     &cfg, mpool, &unit, &mp->mp_cmn);
 	if (err) {
 		mp_pr_err("%s unit setup failed", err, mp->mp_params.mp_name);
 		goto errout;
@@ -2295,15 +2313,14 @@ mpioc_mp_create(
 	mp->mp_params.mp_oidv[0] = cfg.mc_oid1;
 	mp->mp_params.mp_oidv[1] = cfg.mc_oid2;
 
-	err = mpc_params_register(mpool_unit);
+	err = mpc_params_register(unit);
 	if (ev(err)) {
-		/* Drop the birth ref. on mpool unit. */
-		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
+		mpc_unit_put(unit); /* drop birth ref */
 		goto errout;
 	}
 
 	mutex_lock(&ss->ss_lock);
-	idr_replace(&ss->ss_unitmap, mpool_unit, MINOR(mpool_unit->un_devno));
+	idr_replace(&ss->ss_unitmap, unit, MINOR(unit->un_devno));
 	mutex_unlock(&ss->ss_lock);
 
 	mpool = NULL;
@@ -2316,11 +2333,13 @@ errout:
 			      mp->mp_flags, devrpt);
 	}
 
-	/* Drop the caller's reference on mpool unit. */
-	if (mpool_unit)
-		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
+	/* For failures after mpc_unit_setup() (i.e., mpool != NULL)
+	 * dropping the final unit ref will release the mpool ref.
+	 */
+	if (unit)
+		mpc_unit_put(unit); /* Drop caller's ref */
 	else if (mpool)
-		kref_put(&mpool->mp_ref, mpc_mpool_release);
+		mpc_mpool_put(mpool);
 
 	return err;
 }
@@ -2345,8 +2364,8 @@ mpioc_mp_activate(
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpool_config     cfg;
-	struct mpc_mpool       *mpool      = NULL;
-	struct mpc_unit        *mpool_unit = NULL;
+	struct mpc_mpool       *mpool = NULL;
+	struct mpc_unit        *unit = NULL;
 	struct mpool_devrpt    *devrpt;
 	merr_t                  err;
 	size_t                  len;
@@ -2390,8 +2409,11 @@ mpioc_mp_activate(
 	if (mpool_params_merge_config(&mp->mp_params, &cfg))
 		mpool_config_store(mpool->mp_desc, &cfg);
 
+	/* A unit is born with two references:  A birth reference,
+	 * and one for the caller.
+	 */
 	err = mpc_unit_setup(&mpc_uinfo_mpool, mp->mp_params.mp_name,
-			     &cfg, mpool, &mpool_unit, &mp->mp_cmn);
+			     &cfg, mpool, &unit, &mp->mp_cmn);
 	if (err) {
 		mp_pr_err("%s unit setup failed", err, mp->mp_params.mp_name);
 		goto errout;
@@ -2413,25 +2435,26 @@ mpioc_mp_activate(
 	strlcpy(mp->mp_params.mp_label, cfg.mc_label,
 		sizeof(mp->mp_params.mp_label));
 
-	err = mpc_params_register(mpool_unit);
+	err = mpc_params_register(unit);
 	if (ev(err)) {
-		/* Drop the birth ref. on mpool unit. */
-		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
+		mpc_unit_put(unit); /* drop birth ref */
 		goto errout;
 	}
 
 	mutex_lock(&ss->ss_lock);
-	idr_replace(&ss->ss_unitmap, mpool_unit, MINOR(mpool_unit->un_devno));
+	idr_replace(&ss->ss_unitmap, unit, MINOR(unit->un_devno));
 	mutex_unlock(&ss->ss_lock);
 
 	mpool = NULL;
 
 errout:
-	/* Drop the caller's reference on mpool_unit. */
-	if (mpool_unit)
-		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
+	/* For failures after mpc_unit_setup() (i.e., mpool != NULL)
+	 * dropping the final unit ref will release the mpool ref.
+	 */
+	if (unit)
+		mpc_unit_put(unit); /* drop caller's ref */
 	else if (mpool)
-		kref_put(&mpool->mp_ref, mpc_mpool_release);
+		mpc_mpool_put(mpool);
 
 	return err;
 }
@@ -2495,13 +2518,10 @@ mp_deactivate_impl(
 
 	if (!err) {
 		mpc_params_unregister(unit);
-
-		/* Release birth ref. */
-		kref_put(&unit->un_ref, mpc_unit_destroy);
+		mpc_unit_put(unit); /* drop birth ref */
 	}
 
-	/* Release lookup ref. */
-	kref_put(&unit->un_ref, mpc_unit_destroy);
+	mpc_unit_put(unit); /* drop lookup ref */
 
 errout:
 	if (!locked)
@@ -2663,7 +2683,7 @@ mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 
 	case MPIOC_MP_DESTROY:
 		if (mpool_unit) {
-			kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
+			mpc_unit_put(mpool_unit);
 			mpool_unit = NULL;
 
 			err = mp_deactivate_impl(ctl, cmd, mp, true);
@@ -2690,7 +2710,7 @@ mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 
 errout:
 	if (mpool_unit)
-		kref_put(&mpool_unit->un_ref, mpc_unit_destroy);
+		mpc_unit_put(mpool_unit);
 
 	up(&ss->ss_op_sema);
 
@@ -3410,7 +3430,7 @@ static merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	ioc->im_len = xvm->xvm_bktsz * mbidc;
 	ioc->im_len = ALIGN(ioc->im_len, (1ul << mpc_xvm_size_max));
 
-	atomic_inc(&rm->rm_refcnt);
+	atomic_inc(&rm->rm_rgncnt);
 
 	idr_replace(&rm->rm_root, xvm, xvm->xvm_rgn);
 	mutex_unlock(&rm->rm_lock);
@@ -4084,7 +4104,7 @@ static int mpc_exit_unit(int minor, void *item, void *arg)
 	struct mpc_unit *unit = item;
 
 	if (unit)
-		kref_put(&unit->un_ref, mpc_unit_destroy);
+		mpc_unit_put(unit);
 
 	return 0;
 }
@@ -4275,13 +4295,6 @@ static __init int mpc_init(void)
 	cfg.mc_gid = mpc_ctl_gid;
 	cfg.mc_mode = mpc_ctl_mode;
 
-	err = mpc_unit_setup(&mpc_uinfo_ctl, MPC_DEV_CTLNAME,
-			     &cfg, NULL, &ctlunit, &cmn);
-	if (err) {
-		errmsg = "cannot create control device";
-		goto errout;
-	}
-
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
 	rc = mpc_bdi_alloc();
 	if (ev(rc)) {
@@ -4291,13 +4304,19 @@ static __init int mpc_init(void)
 	}
 #endif
 
-	dev_info(ctlunit->un_device, "%s", mpool_version);
+	err = mpc_unit_setup(&mpc_uinfo_ctl, MPC_DEV_CTLNAME,
+			     &cfg, NULL, &ctlunit, &cmn);
+	if (err) {
+		errmsg = "cannot create control device";
+		goto errout;
+	}
 
 	mutex_lock(&ss->ss_lock);
 	idr_replace(&ss->ss_unitmap, ctlunit, MINOR(ctlunit->un_devno));
 	mutex_unlock(&ss->ss_lock);
 
-	kref_put(&ctlunit->un_ref, mpc_unit_destroy);
+	dev_info(ctlunit->un_device, "%s", mpool_version);
+	mpc_unit_put(ctlunit);
 
 errout:
 	if (err) {
