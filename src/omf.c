@@ -664,7 +664,7 @@ omf_pmd_layout_unpack_letoh(
 	}
 
 	if (i >= mp->pds_pdvcnt) {
-		kref_put(&ecl->eld_ref, pmd_layout_release);
+		pmd_obj_put(mp, ecl);
 
 		err = merr(ENOENT);
 		mp_pr_err("mpool %s, unpacking layout failed, mclass %u not in mpool",

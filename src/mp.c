@@ -79,7 +79,7 @@ mpool_mdc0_sb2obj(
 		char uuid_str[40];
 
 		/* should never happen */
-		kref_put(&(*l1)->eld_ref, pmd_layout_release);
+		pmd_obj_put(mp, *l1);
 		*l1 = *l2 = NULL;
 
 		mpool_unparse_uuid(&sb->osb_mdc01devid, uuid_str);
@@ -95,7 +95,8 @@ mpool_mdc0_sb2obj(
 			       sb->osb_mdc02gen, 0,
 			       sb->osb_mdc02desc.ol_zcnt);
 	if (!*l2) {
-		kref_put(&(*l1)->eld_ref, pmd_layout_release);
+		pmd_obj_put(mp, *l1);
+
 		*l1 = *l2 = NULL;
 
 		err = merr(ENOMEM);
@@ -119,8 +120,8 @@ mpool_mdc0_sb2obj(
 		char uuid_str[40];
 
 		/* should never happen */
-		kref_put(&(*l1)->eld_ref, pmd_layout_release);
-		kref_put(&(*l2)->eld_ref, pmd_layout_release);
+		pmd_obj_put(mp, *l1);
+		pmd_obj_put(mp, *l2);
 		*l1 = *l2 = NULL;
 
 		mpool_unparse_uuid(&sb->osb_mdc02devid, uuid_str);

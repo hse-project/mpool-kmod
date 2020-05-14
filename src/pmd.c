@@ -1085,7 +1085,7 @@ pmd_objs_load(
 			found = pmd_co_insert(cinfo, layout);
 			if (found) {
 				msg = "OCREATE duplicate object ID";
-				kref_put(&layout->eld_ref, pmd_layout_release);
+				pmd_obj_put(mp, layout);
 				err = merr(EEXIST);
 				break;
 			}
@@ -1105,7 +1105,7 @@ pmd_objs_load(
 			}
 
 			pmd_co_remove(cinfo, found);
-			kref_put(&found->eld_ref, pmd_layout_release);
+			pmd_obj_put(mp, found);
 
 			atomic_inc(&cinfo->mmi_pco_cnt.pcc_del);
 			atomic_dec(&cinfo->mmi_pco_cnt.pcc_cobj);
@@ -1164,13 +1164,13 @@ pmd_objs_load(
 			found = pmd_co_find(cinfo, objid);
 			if (!found) {
 				msg = "OUPDATE object not found";
-				kref_put(&layout->eld_ref, pmd_layout_release);
+				pmd_obj_put(mp, layout);
 				err = merr(ENOENT);
 				break;
 			}
 
 			pmd_co_remove(cinfo, found);
-			kref_put(&found->eld_ref, pmd_layout_release);
+			pmd_obj_put(mp, found);
 
 			layout->eld_state = PMD_LYT_COMMITTED;
 			pmd_co_insert(cinfo, layout);
@@ -1286,7 +1286,7 @@ void pmd_mda_free(struct mpool_descriptor *mp)
 		rbtree_postorder_for_each_entry_safe(
 			layout, tmp, &cinfo->mmi_co_root, eld_nodemdc) {
 
-			kref_put(&layout->eld_ref, pmd_layout_release);
+			pmd_obj_put(mp, layout);
 		}
 
 		/* Release uncommitted objects...
@@ -1294,7 +1294,7 @@ void pmd_mda_free(struct mpool_descriptor *mp)
 		rbtree_postorder_for_each_entry_safe(
 			layout, tmp, &cinfo->mmi_uc_root, eld_nodemdc) {
 
-			kref_put(&layout->eld_ref, pmd_layout_release);
+			pmd_obj_put(mp, layout);
 		}
 	}
 }
@@ -1429,8 +1429,8 @@ pmd_mpool_activate(
 		 * pmd_mda_free() will dealloc mdc01/2 on subsequent
 		 * activation failures
 		 */
-		kref_put(&mdc01->eld_ref, pmd_layout_release);
-		kref_put(&mdc02->eld_ref, pmd_layout_release);
+		pmd_obj_put(mp, mdc01);
+		pmd_obj_put(mp, mdc02);
 		goto exit;
 	}
 
@@ -2057,7 +2057,7 @@ pmd_obj_abort(
 
 	/* Drop caller's reference...
 	 */
-	kref_put(&layout->eld_ref, pmd_layout_release);
+	pmd_obj_put(mp, layout);
 
 	return 0;
 }
@@ -2133,7 +2133,7 @@ pmd_obj_delete(
 
 	/* Drop caller's reference...
 	 */
-	kref_put(&layout->eld_ref, pmd_layout_release);
+	pmd_obj_put(mp, layout);
 
 	return 0;
 }
@@ -2695,7 +2695,7 @@ pmd_layout_unprovision(
 
 	/* Drop birth reference...
 	 */
-	kref_put(&layout->eld_ref, pmd_layout_release);
+	pmd_obj_put(mp, layout);
 }
 
 /**
@@ -3099,7 +3099,7 @@ retry:
 	up_read(&mp->pds_pdvlock);
 
 	if (err) {
-		kref_put(&layout->eld_ref, pmd_layout_release);
+		pmd_obj_put(mp, layout);
 
 		/* TODO: Retry only if mperasewq is busy... */
 		if (retries-- > 0) {
@@ -3151,7 +3151,7 @@ retry:
 			  (ulong)objid, realloc ? "" : "un");
 
 		if (needref)
-			kref_put(&layout->eld_ref, pmd_layout_release);
+			pmd_obj_put(mp, layout);
 
 		/*
 		 * Since object insertion failed, we need to undo the
