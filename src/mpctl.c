@@ -1008,7 +1008,7 @@ static void mpc_xvm_put(struct mpc_xvm *xvm)
 }
 
 /*
- * VMA operations.  We require that mmap() map the full xvm
+ * VM operations.  We require that mmap() map the full xvm
  * region and do not allow splitting via partial munmap()
  * because managing the fragments complicates eviction.
  */
@@ -1023,6 +1023,7 @@ static void mpc_vm_close(struct vm_area_struct *vma)
 	mpc_xvm_put(vma->vm_private_data);
 }
 
+__maybe_unused
 static int mpc_vm_split(struct vm_area_struct *vma, ulong addr)
 {
 	return -EINVAL;
@@ -1180,18 +1181,18 @@ retry_find:
 }
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
-#define VM_FAULT_ARGS  struct vm_area_struct *vma, struct vm_fault *vmf
-#else
-#define VM_FAULT_ARGS  struct vm_fault *vmf
-#endif
-
-static vm_fault_t mpc_vm_fault(VM_FAULT_ARGS)
+static vm_fault_t mpc_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
-	struct vm_area_struct  *vma = vmf->vma;
-#endif
 	return mpc_vm_fault_impl(vma, vmf);
 }
+
+#else
+
+static vm_fault_t mpc_vm_fault(struct vm_fault *vmf)
+{
+	return mpc_vm_fault_impl(vmf->vma, vmf);
+}
+#endif
 
 /*
  * MPCTL address-space operations.
@@ -4318,7 +4319,10 @@ static const struct vm_operations_struct mpc_vops_default = {
 	.open           = mpc_vm_open,
 	.close          = mpc_vm_close,
 	.fault          = mpc_vm_fault,
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
 	.split          = mpc_vm_split,
+#endif
 };
 
 static const struct address_space_operations mpc_aops_default = {
