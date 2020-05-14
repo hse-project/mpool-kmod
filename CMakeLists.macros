@@ -335,19 +335,12 @@ FUNCTION(MPOOL_KMOD)
     SET(KMOD_NAME ${param_NAME})
 
     MY_JOIN(KMOD_CCFLAGS " " ${include_dirs_cflags})
-    set(KMOD_CCFLAGS "${KMOD_CCFLAGS} ${param_CFLAGS} ${CMAKE_KC_FLAGS}")
+    set(KMOD_CCFLAGS "${KMOD_CCFLAGS} ${param_CFLAGS}")
 
-    IF( "${MPOOL_DISTRO}" STREQUAL "el6" )
-    CONFIGURE_FILE(
-        ${MPOOL_TREE_SCRIPTS_DIR}/kernel/Kbuild.el6.in
-        ${kmod_build_dir}/Kbuild
-        @ONLY)
-    ELSE()
     CONFIGURE_FILE(
         ${MPOOL_TREE_SCRIPTS_DIR}/kernel/Kbuild.in
         ${kmod_build_dir}/Kbuild
         @ONLY)
-    ENDIF()
 
     CONFIGURE_FILE(
         ${MPOOL_TREE_SCRIPTS_DIR}/kernel/Makefile.in
