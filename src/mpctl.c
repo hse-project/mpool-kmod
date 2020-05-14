@@ -184,9 +184,6 @@ static int mpc_readpage_impl(struct page *page, struct mpc_xvm *map);
 #define ITERCB_NEXT     (0)
 #define ITERCB_DONE     (1)
 
-typedef int mpc_unit_itercb_t(int minor, void *item, void *arg);
-
-
 /* The following structures are initialized at the end of this file.
  */
 static const struct file_operations            mpc_fops_default;
@@ -595,7 +592,6 @@ mpc_unit_create(
 	struct mpc_unit        *unit;
 	size_t                  unitsz;
 	int                     minor;
-	merr_t                  err;
 
 	if (!ss || !name || !unitp)
 		return merr(EINVAL);
@@ -619,30 +615,21 @@ mpc_unit_create(
 	idr_init(&unit->un_rgnmap.rm_root);
 	atomic_set(&unit->un_rgnmap.rm_rgncnt, 0);
 
-	/* Acquire an additional reference for the caller....
-	 */
-	kref_get(&unit->un_ref);
-
-	err = 0;
-
-	/* TODO: Check to see if the desired name is in use.
-	 */
-
 	mutex_lock(&ss->ss_lock);
 	minor = idr_alloc(&ss->ss_unitmap, NULL, 0, -1, GFP_KERNEL);
-	if (minor >= 0)
-		unit->un_devno = MKDEV(MAJOR(ss->ss_cdev.dev), minor);
 	mutex_unlock(&ss->ss_lock);
 
 	if (minor < 0) {
-		err = merr(minor);
 		kfree(unit);
-		unit = NULL;
+		return merr(minor);
 	}
 
+	kref_get(&unit->un_ref); /* acquire additional ref for the caller */
+
+	unit->un_devno = MKDEV(MAJOR(ss->ss_cdev.dev), minor);
 	*unitp = unit;
 
-	return err;
+	return 0;
 }
 
 /**
@@ -673,30 +660,8 @@ static void mpc_unit_release(struct kref *refp)
 
 static void mpc_unit_put(struct mpc_unit *unit)
 {
-	kref_put(&unit->un_ref, mpc_unit_release);
-}
-
-/**
- * mpc_unit_iterate() - Iterate over all active unit objects
- * @func:   function to call on each iteration
- * @arg:    arg to supply to func()
- *
- * Iterate over all active unit objects and call 'func(unit, arg)' for each.
- * If 'atomic' is true, the unit lock is held across the entire iteration.
- * If 'atomic' is false, a reference to each unit is acquired and held
- * across each call to func() (the unit lock is dropped before each
- * call to func() and reacquired when func() returns).
- */
-static void
-mpc_unit_iterate(
-	mpc_unit_itercb_t      *func,
-	void                   *arg)
-{
-	struct mpc_softstate *ss = &mpc_softstate;
-
-	mutex_lock(&ss->ss_lock);
-	idr_for_each(&ss->ss_unitmap, func, arg);
-	mutex_unlock(&ss->ss_lock);
+	if (unit)
+		kref_put(&unit->un_ref, mpc_unit_release);
 }
 
 /**
@@ -729,11 +694,11 @@ mpc_unit_lookup(int minor, struct mpc_unit **unitp)
  * @item:   unit ptr
  * @arg:    argument vector base ptr
  *
- * This iterator callback is called by mpc_unit_iterate() on behalf
- * of mpc_unit_lookup_by_name() for each unit in the units table.
+ * This iterator callback is called by mpc_unit_lookup_by_name()
+ * for each unit in the units table.
  *
- * Return:  Returns ITERCB_DONE if unit matches args.
- *          Returns ITERCB_NEXT if unit does not match args.
+ * Return: If the unit matching the given name is found returns
+ * the referenced unit pointer in argv[2], otherwise NULL.
  */
 static int mpc_unit_lookup_by_name_itercb(int minor, void *item, void *arg)
 {
@@ -776,9 +741,12 @@ mpc_unit_lookup_by_name(
 	const char         *name,
 	struct mpc_unit   **unitp)
 {
+	struct mpc_softstate *ss = &mpc_softstate;
 	void   *argv[] = { parent, (void *)name, NULL };
 
-	mpc_unit_iterate(mpc_unit_lookup_by_name_itercb, argv);
+	mutex_lock(&ss->ss_lock);
+	idr_for_each(&ss->ss_unitmap, mpc_unit_lookup_by_name_itercb, argv);
+	mutex_unlock(&ss->ss_lock);
 
 	*unitp = argv[2];
 }
@@ -915,7 +883,7 @@ static int mpc_rgnmap_isorphan(int rgn, void *item, void *data)
 		*headp = xvm;
 	}
 
-	return 0;
+	return ITERCB_NEXT;
 }
 
 static void mpc_rgnmap_flush(struct mpc_rgnmap *rm)
@@ -2540,9 +2508,9 @@ static merr_t
 mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
-	struct mpc_unit        *mpool_unit = NULL;
-	struct pd_prop         *pd_prop    = NULL;
-	char                  **dpathv     = NULL;
+	struct mpc_unit        *unit = NULL;
+	struct pd_prop         *pd_prop = NULL;
+	char                  **dpathv = NULL;
 	struct mpool_devrpt    *devrpt;
 	merr_t                  err = 0;
 	size_t                  dpathvsz;
@@ -2605,12 +2573,12 @@ mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 		return merr(rc);
 
 	/* If mpc_unit_lookup_by_name() succeeds it will have acquired
-	 * a reference on mpool_unit.  We release that reference at the
+	 * a reference on unit.  We release that reference at the
 	 * end of this function.
 	 */
-	mpc_unit_lookup_by_name(ctl, mp->mp_params.mp_name, &mpool_unit);
+	mpc_unit_lookup_by_name(ctl, mp->mp_params.mp_name, &unit);
 
-	if (mpool_unit && cmd != MPIOC_MP_DESTROY) {
+	if (unit && cmd != MPIOC_MP_DESTROY) {
 		if (cmd == MPIOC_MP_ACTIVATE)
 			goto errout;
 		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
@@ -2682,9 +2650,9 @@ mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 		break;
 
 	case MPIOC_MP_DESTROY:
-		if (mpool_unit) {
-			mpc_unit_put(mpool_unit);
-			mpool_unit = NULL;
+		if (unit) {
+			mpc_unit_put(unit);
+			unit = NULL;
 
 			err = mp_deactivate_impl(ctl, cmd, mp, true);
 			if (ev(err)) {
@@ -2709,9 +2677,7 @@ mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 			     mp->mp_params.mp_name, action);
 
 errout:
-	if (mpool_unit)
-		mpc_unit_put(mpool_unit);
-
+	mpc_unit_put(unit);
 	up(&ss->ss_op_sema);
 
 	kfree(pd_prop);
@@ -2791,9 +2757,7 @@ mpioc_devprops_get(struct mpc_unit *unit, struct mpioc_devprops *devprops)
  * @item:   unit ptr
  * @arg:    argument list
  *
- * Return:  Returns ITERCB_DONE when the iteratior is complete or an
- *          error is encountered (erroris returned in argv[3]).
- *          Returns ITERCB_NEXT to continue the iteration.
+ * Return: Returns properties for each unit matching the input criteria.
  */
 static int
 mpioc_proplist_get_itercb(int minor, void *item, void *arg)
@@ -2845,14 +2809,15 @@ mpioc_proplist_get_itercb(int minor, void *item, void *arg)
  * @cmd     MPIOC_PROP_GET
  * @ls:     properties parameter block
  *
- * MPIOC_PROP_GET ioctl handler to retrieve properties for one or all mpools
- * or datasets.
+ * MPIOC_PROP_GET ioctl handler to retrieve properties for one
+ * or more mpools.
  *
  * Return:  Returns 0 if successful, errno via merr_t otherwise...
  */
 static merr_t
 mpioc_proplist_get(struct mpc_unit *unit, uint cmd, struct mpioc_list *ls)
 {
+	struct mpc_softstate *ss = &mpc_softstate;
 	merr_t      err = 0;
 	int         cnt = 0;
 	void       *argv[] = { unit, ls, &cnt, &err };
@@ -2860,7 +2825,9 @@ mpioc_proplist_get(struct mpc_unit *unit, uint cmd, struct mpioc_list *ls)
 	if (!ls || ls->ls_listc < 1 || ls->ls_cmd == MPIOC_LIST_CMD_INVALID)
 		return merr(EINVAL);
 
-	mpc_unit_iterate(mpioc_proplist_get_itercb, argv);
+	mutex_lock(&ss->ss_lock);
+	idr_for_each(&ss->ss_unitmap, mpioc_proplist_get_itercb, argv);
+	mutex_unlock(&ss->ss_lock);
 
 	ls->ls_listc = cnt;
 
@@ -4101,12 +4068,9 @@ void mpool_meminfo(ulong *freep, ulong *availp, uint shift)
 
 static int mpc_exit_unit(int minor, void *item, void *arg)
 {
-	struct mpc_unit *unit = item;
+	mpc_unit_put(item);
 
-	if (unit)
-		mpc_unit_put(unit);
-
-	return 0;
+	return ITERCB_NEXT;
 }
 
 /**
