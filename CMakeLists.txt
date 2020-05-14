@@ -4,7 +4,7 @@
 # Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
 #
 
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.6)
 if(${CMAKE_MAJOR_VERSION} GREATER 2)
 cmake_policy(SET CMP0046 OLD)
 endif()
@@ -61,13 +61,7 @@ include_directories(${MPOOL_STAGE_INSTALL_PREFIX}/include)
 
 # increasing warning levels
 set( CFLAGS_WARN_1 "${CFLAGS_WARN_0} -Wall -Werror -std=gnu99")
-
-if ( "${MPOOL_DISTRO}" STREQUAL  "el6" )
-   set( CFLAGS_WARN_2 "${CFLAGS_WARN_1} -Wlogical-op -Wno-missing-field-initializers  -Wuninitialized -Wno-format-zero-length")
-else()
-   set( CFLAGS_WARN_2 "${CFLAGS_WARN_1} -Wlogical-op -Wno-missing-field-initializers  -Wuninitialized -Wmaybe-uninitialized ")
-endif()
-
+set( CFLAGS_WARN_2 "${CFLAGS_WARN_1} -Wlogical-op -Wno-missing-field-initializers  -Wuninitialized -Wmaybe-uninitialized ")
 set( CFLAGS_WARN_3 "${CFLAGS_WARN_2} -Wextra -Wno-conversion -Wno-sign-conversion -Wno-sign-compare -Wno-unused-parameter")
 set( CFLAGS_WARN_4 "${CFLAGS_WARN_2} -Wextra -Wconversion    -Wsign-conversion    -Wsign-compare    -Wunused-parameter")
 set( CFLAGS_WARN_MAX "${CFLAGS_WARN_4}")
@@ -88,46 +82,6 @@ if ( ${ASAN} )
     link_libraries( -fsanitize=address )
 endif()
 
-
-# Generate some macros that can be used to recognize a distro kernel.
-# These need to be passed to kernel modules too, hence building them as
-# CMAKE_KC_FLAGS and then merging them into CMAKE_C_FLAGS.
-#
-# Always make our distro variables visible as macros via cflags
-#
-if ( "${MPOOL_DISTRO}" STREQUAL  "el7" )
-   set ( CMAKE_KC_FLAGS "${CMAKE_KC_FLAGS} -DMPOOL_DISTRO_EL7  ")
-   if ( ${MPOOL_KDIR_UNAME} MATCHES "3.10.0-1062" )
-      set ( CMAKE_KC_FLAGS "${CMAKE_KC_FLAGS} -DMPOOL_DISTRO_EL77 ")
-   elseif ( ${MPOOL_KDIR_UNAME} MATCHES "3.10.0-862" )
-      set ( CMAKE_KC_FLAGS "${CMAKE_KC_FLAGS} -DMPOOL_DISTRO_EL75 ")
-   elseif ( ${MPOOL_KDIR_UNAME} MATCHES "3.10.0-693" )
-      set ( CMAKE_KC_FLAGS "${CMAKE_KC_FLAGS} -DMPOOL_DISTRO_EL74 ")
-   else()
-       message(FATAL_ERROR "Unsupported el7 kernel: ${MPOOL_KDIR_UNAME}")
-   endif()
-elseif ( "${MPOOL_DISTRO}" STREQUAL  "el8" )
-   set ( CMAKE_KC_FLAGS "${CMAKE_KC_FLAGS} -DMPOOL_DISTRO_EL8  ")
-   if ( ${MPOOL_KDIR_UNAME} MATCHES "4.18.0-147" )
-      set ( CMAKE_KC_FLAGS "${CMAKE_KC_FLAGS} -DMPOOL_DISTRO_EL81 ")
-   elseif ( ${MPOOL_KDIR_UNAME} MATCHES "4.18.0-193" )
-      set ( CMAKE_KC_FLAGS "${CMAKE_KC_FLAGS} -DMPOOL_DISTRO_EL82 ")
-   else()
-       message(FATAL_ERROR "Unsupported el8 kernel: ${MPOOL_KDIR_UNAME}")
-   endif()
-elseif ( "${MPOOL_DISTRO}" STREQUAL  "el6")
-   set ( CMAKE_KC_FLAGS "${CMAKE_KC_FLAGS} -DMPOOL_DISTRO_EL6 ")
-elseif ( "${MPOOL_DISTRO}" STREQUAL  "fc25")
-   set ( CMAKE_KC_FLAGS "${CMAKE_KC_FLAGS} -DMPOOL_DISTRO_FC25 ")
-elseif ( "${MPOOL_DISTRO}" STREQUAL  "fc26")
-   set ( CMAKE_KC_FLAGS "${CMAKE_KC_FLAGS} -DMPOOL_DISTRO_FC26 ")
-elseif ( "${MPOOL_DISTRO}" STREQUAL  "fc27")
-   set ( CMAKE_KC_FLAGS "${CMAKE_KC_FLAGS} -DMPOOL_DISTRO_FC27 ")
-endif()
-
-set ( CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${CMAKE_KC_FLAGS}")
-
-
 # Fedora system packages use Python 3; RHEL7 packages use Python 2
 if( EXISTS /etc/fedora-release )
     set( MPOOL_PYTHON /usr/bin/python3 )
@@ -141,9 +95,7 @@ get_filename_component( MPOOL_PYTHON_BASE_DIR ${MPOOL_PYTHON_PKG_DIR}/.. ABSOLUT
 set ( MPOOL_PYTHON_SOS_DIR ${MPOOL_PYTHON_PKG_DIR}/sos )
 set ( MPOOL_PYTHON_SOS_PLUGINS_DIR ${MPOOL_PYTHON_PKG_DIR}/sos/plugins )
 
-
 include(CMakeLists.macros)
-
 
 # Set-up what kind of build this is
 #
@@ -499,7 +451,6 @@ message(STATUS "  CMAKE_C_FLAGS_RELEASE        = ${CMAKE_C_FLAGS_RELEASE}")
 message(STATUS "  CMAKE_C_FLAGS_RELASSERT      = ${CMAKE_C_FLAGS_RELASSERT}")
 message(STATUS "  CMAKE_C_FLAGS_RELWITHDEBINFO = ${CMAKE_C_FLAGS_RELWITHDEBINFO}")
 message(STATUS "  CMAKE_C_FLAGS_OPTDEBUG       = ${CMAKE_C_FLAGS_OPTDEBUG}")
-message(STATUS "  CMAKE_KC_FLAGS               = ${CMAKE_KC_FLAGS}")
 message(STATUS "Linker flags:")
 message(STATUS "  CMAKE_EXE_LINKER_FLAGS = ${CMAKE_EXE_LINKER_FLAGS}")
 message(STATUS "Notes:")
