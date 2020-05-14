@@ -1008,7 +1008,9 @@ static void mpc_xvm_put(struct mpc_xvm *xvm)
 }
 
 /*
- * MPCTL vm operations.
+ * VMA operations.  We require that mmap() map the full xvm
+ * region and do not allow splitting via partial munmap()
+ * because managing the fragments complicates eviction.
  */
 
 static void mpc_vm_open(struct vm_area_struct *vma)
@@ -1019,6 +1021,11 @@ static void mpc_vm_open(struct vm_area_struct *vma)
 static void mpc_vm_close(struct vm_area_struct *vma)
 {
 	mpc_xvm_put(vma->vm_private_data);
+}
+
+static int mpc_vm_split(struct vm_area_struct *vma, ulong addr)
+{
+	return -EINVAL;
 }
 
 static int
@@ -1681,20 +1688,23 @@ errout:
 
 static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 {
-	struct mpc_unit    *unit;
+	struct mpc_unit    *unit = fp->private_data;
 	struct mpc_xvm     *xvm;
 
 	off_t   off;
 	ulong   len;
 	u32     key;
 
-	unit = fp->private_data;
-
-	/* Verify that the request doesn't cross a vma region boundary.
-	 */
 	off = vma->vm_pgoff << PAGE_SHIFT;
 	len = vma->vm_end - vma->vm_start - 1;
-	if ((off >> mpc_xvm_size_max) != ((off + len) >> mpc_xvm_size_max))
+
+	/* Verify that the request maps the full xvm region
+	 * (fragments unnecessarily complicate eviction).
+	 */
+	if (((off >> mpc_xvm_size_max) << mpc_xvm_size_max) != off)
+		return -EINVAL;
+
+	if (len != (1u << mpc_xvm_size_max) - 1)
 		return -EINVAL;
 
 	/* Acquire a reference on the region map for this region.
@@ -4308,6 +4318,7 @@ static const struct vm_operations_struct mpc_vops_default = {
 	.open           = mpc_vm_open,
 	.close          = mpc_vm_close,
 	.fault          = mpc_vm_fault,
+	.split          = mpc_vm_split,
 };
 
 static const struct address_space_operations mpc_aops_default = {
