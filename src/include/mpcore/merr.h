@@ -53,15 +53,15 @@
 
 /* MERR_ALIGN      Alignment of _merr_file in section ".merr"
  * MERR_INFO_SZ    Max size of struct merr_info message buffer
- * MERR_BASE_SZ    Size of struct merr_base[] buffer for kernel file names
+ * MERR_BASE_SZ    Size of struct merr_base[] user buffer for module file names
  */
-#define MERR_ALIGN          (1u << 6)
+#define MERR_ALIGN          (1 << 6)
 #define MERR_BASE_SZ        (MERR_ALIGN * 64 * 2)
 
-#define _merr_section       __attribute__((__section__(".merr")))
+#define _merr_section       __attribute__((__section__("mpool_merr")))
 #define _merr_attributes    _merr_section __aligned(MERR_ALIGN) __maybe_unused
 
-static char _merr_file[]    _merr_attributes = __BASE_FILE__;
+static char _merr_file[]    _merr_attributes = KBUILD_BASENAME;
 
 /* Layout of merr_t:
  *
@@ -128,4 +128,5 @@ static inline int merr_lineno(merr_t err)
 {
 	return (err & MERR_LINE_MASK) >> MERR_LINE_SHIFT;
 }
-#endif
+
+#endif /* MPOOL_MERR_H */
