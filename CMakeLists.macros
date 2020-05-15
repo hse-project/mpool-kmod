@@ -385,9 +385,14 @@ FUNCTION(MPOOL_KMOD)
     #------------------------------------------------
     # Generate an install rule for this kernel module
     #------------------------------------------------
+    set (UNAME_CMD uname -r)
+    EXECUTE_PROCESS(
+        COMMAND ${UNAME_CMD}
+        OUTPUT_VARIABLE  CMD_OUTPUT
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
 
     INSTALL(
         FILES ${real_kmod_file}
-        DESTINATION lib/mpool/modules
+        DESTINATION lib/modules/${CMD_OUTPUT}/mpool
         COMPONENT ${param_COMPONENT})
 ENDFUNCTION()
