@@ -337,7 +337,6 @@ enable_testing()
 
 add_subdirectory( src )
 add_subdirectory( scripts/modules-load.d )
-add_subdirectory( scripts/sysconfig/modules )
 add_subdirectory( scripts/udev/rules.d )
 add_subdirectory( scripts/sysctl.d )
 
@@ -384,8 +383,6 @@ set( CPACK_RPM_RELOCATION_PATHS /usr /etc )
 set( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
   /etc
   /etc/modules-load.d
-  /etc/sysconfig
-  /etc/sysconfig/modules
   /lib
   /usr/lib
   /usr/lib/sysctl.d
