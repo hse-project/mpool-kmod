@@ -64,7 +64,7 @@ Configuration Variables:
       which means you have to keep specifying KDIR for that step.
 
   Defaults:
-    BDIR           = $(BDIR_DEFAULT)      # note MPOOL_DISTRO is appended
+    BDIR           = $(BDIR_DEFAULT)
     BTOPDIR        = $(BTOPDIR_DEFAULT)
     BUILD_DIR      = $$(BTOPDIR)/$$(BDIR)
     BUILD_NUMBER   = $(BUILD_NUMBER_DEFAULT)
@@ -154,42 +154,28 @@ MPOOL_SRC_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 # Other dirs commonly accessed w/in this makefile:
 S=$(MPOOL_SRC_DIR)/scripts
 
-# Get some details about the distro environment
-# Can override detection by passing DISTRO=el6.9 (where el6.9 is a
-# specifically recognized by the get_distro.sh script)
-MPOOL_DISTRO_CMD_OUTPUT := $(shell scripts/dev/get_distro.sh $(DISTRO))
-MPOOL_DISTRO_PREFIX     := $(word 1,$(MPOOL_DISTRO_CMD_OUTPUT))
-MPOOL_DISTRO            := $(word 2,$(MPOOL_DISTRO_CMD_OUTPUT))
-MPOOL_DISTRO_MAJOR      := $(word 3,$(MPOOL_DISTRO_CMD_OUTPUT))
-MPOOL_DISTRO_MINOR      := $(word 4,$(MPOOL_DISTRO_CMD_OUTPUT))
-MPOOL_DISTRO_SUPPORTED  := $(word 5,$(MPOOL_DISTRO_CMD_OUTPUT))
-
-ifeq ($(MPOOL_DISTRO_SUPPORTED),unsupported)
-  $(error invalid MPOOL_DISTRO ($(MPOOL_DISTRO_CMD_OUTPUT)) )
-endif
-
 ################################################################
 #
 # Set config var defaults.
 #
 ################################################################
 ifeq ($(findstring release,$(MAKECMDGOALS)),release)
-  BDIR_DEFAULT  := release.$(MPOOL_DISTRO)
+  BDIR_DEFAULT  := release
   CFILE_DEFAULT := $(S)/cmake/release.cmake
 else ifeq ($(findstring relwithdebug,$(MAKECMDGOALS)),relwithdebug)
-  BDIR_DEFAULT  := relwithdebug.$(MPOOL_DISTRO)
+  BDIR_DEFAULT  := relwithdebug
   CFILE_DEFAULT := $(S)/cmake/relwithdebug.cmake
 else ifeq ($(findstring relassert,$(MAKECMDGOALS)),relassert)
-  BDIR_DEFAULT  := relassert.$(MPOOL_DISTRO)
+  BDIR_DEFAULT  := relassert
   CFILE_DEFAULT := $(S)/cmake/relassert.cmake
 else ifeq ($(findstring optdebug,$(MAKECMDGOALS)),optdebug)
-  BDIR_DEFAULT  := optdebug.$(MPOOL_DISTRO)
+  BDIR_DEFAULT  := optdebug
   CFILE_DEFAULT := $(S)/cmake/optdebug.cmake
 else ifeq ($(findstring debug,$(MAKECMDGOALS)),debug)
-  BDIR_DEFAULT  := debug.$(MPOOL_DISTRO)
+  BDIR_DEFAULT  := debug
   CFILE_DEFAULT := $(S)/cmake/debug.cmake
 else
-  BDIR_DEFAULT  := release.$(MPOOL_DISTRO)
+  BDIR_DEFAULT  := release
   CFILE_DEFAULT := $(S)/cmake/release.cmake
 endif
 
@@ -244,13 +230,7 @@ define config-show
 	(echo 'BUILD_DIR="$(BUILD_DIR)"';\
 	  echo 'CFILE="$(CFILE)"';\
 	  echo 'KDIR="$(KDIR)"';\
-          echo 'KDIR_UNAME="$(KDIR_UNAME)"';\
 	  echo 'BUILD_NUMBER="$(BUILD_NUMBER)"';\
-	  echo 'MPOOL_DISTRO_PREFIX="$(MPOOL_DISTRO_PREFIX)"';\
-	  echo 'MPOOL_DISTRO="$(MPOOL_DISTRO)"';\
-	  echo 'MPOOL_DISTRO_MAJOR="$(MPOOL_DISTRO_MAJOR)"';\
-	  echo 'MPOOL_DISTRO_MINOR="$(MPOOL_DISTRO_MINOR)"';\
-	  echo 'MPOOL_DISTRO_SUPPORTED="$(MPOOL_DISTRO_SUPPORTED)"';\
 	  echo 'REL_CANDIDATE="$(REL_CANDIDATE)"')
 endef
 
@@ -260,7 +240,6 @@ define config-gen =
 	echo ;\
 	echo '# building kernel modules' ;\
 	echo 'Set( MPOOL_KERNEL_DIR "$(KDIR)" CACHE STRING "" )' ;\
-	echo 'Set( MPOOL_KDIR_UNAME "$(KDIR_UNAME)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_NUMBER "$(BUILD_NUMBER)" CACHE STRING "" )' ;\
 	echo 'Set( REL_CANDIDATE "$(REL_CANDIDATE)" CACHE STRING "" )' ;\
 	if test "$(BUILD_SHA)"; then \
@@ -270,10 +249,6 @@ define config-gen =
 	fi ;\
 	echo ;\
 	echo '# Linux distro detection' ;\
-	echo 'Set( MPOOL_DISTRO_PREFIX "$(MPOOL_DISTRO_PREFIX)" CACHE STRING "" )' ;\
-	echo 'Set( MPOOL_DISTRO "$(MPOOL_DISTRO)" CACHE STRING "" )' ;\
-	echo 'Set( MPOOL_DISTRO_MAJOR "$(MPOOL_DISTRO_MAJOR)" CACHE STRING "" )' ;\
-	echo 'Set( MPOOL_DISTRO_MINOR "$(MPOOL_DISTRO_MINOR)" CACHE STRING "" )' ;\
 	echo ;\
 	echo '# BEGIN: $(CFILE)' ;\
 	cat  "$(CFILE)" ;\
@@ -289,20 +264,6 @@ endef
 #
 MPOOL_CUSTOM_INC_DIR ?= $(HOME)
 -include $(MPOOL_CUSTOM_INC_DIR)/mpool-kmod.mk
-
-
-# Verify that kernel-headers version matches KDIR version.
-#
-KDIR_UNAME := $(shell scripts/dev/get_kdir_uname.sh $(KDIR))
-
-TMP = $(shell scripts/dev/check_kernel_headers "$(KDIR_UNAME)")
-ifneq ($(findstring Congratulations,$(TMP)),Congratulations)
-  # kernel-headers does not match KDIR
-  ifneq ($(KHEADERS),force)
-    $(warning kernel-headers/KDIR mismatch $(TMP))
-  endif
-endif
-
 
 # If MAKECMDGOALS contains no goals other than any combination
 # of BTYPES then make the given goals depend on the default goal.
