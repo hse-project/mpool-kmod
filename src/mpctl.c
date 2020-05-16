@@ -1621,7 +1621,9 @@ retry_find:
 	/* At this point, page is not locked but has a ref. */
 	if (vmfrc == VM_FAULT_MAJOR) {
 		count_vm_event(PGMAJFAULT);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
 		count_memcg_event_mm(vma->vm_mm, PGMAJFAULT);
+#endif
 	}
 
 	if (!mpc_lock_page_or_retry(page, vma->vm_mm, vmf->flags)) {

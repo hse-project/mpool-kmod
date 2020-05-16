@@ -77,8 +77,9 @@ static int shash_desc_alloc(const char *name, struct shash_desc **desc)
 	}
 
 	d->tfm = tfm;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
 	d->flags = 0;
-
+#endif
 	*desc = d;
 
 	return 0;
