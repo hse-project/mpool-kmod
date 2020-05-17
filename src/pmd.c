@@ -716,32 +716,32 @@ pmd_smap_insert(
 	return err;
 }
 
+/**
+ * pmd_mdc0_validate() -
+ * @mp:
+ * @activation:
+ *
+ * Called during mpool activation and mdc alloc because a failed
+ * mdc alloc can result in extraneous mdc mlog objects which if
+ * found we attempt to clean-up here. when called during activation
+ * we may need to adjust mp.mda. this is not so when called from
+ * mdc alloc and in fact decreasing slotvcnt post activation would
+ * violate a key invariant.
+ */
 static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 {
+	u8                      lcnt[MDC_SLOTS] = { 0 };
 	struct pmd_mdc_info    *cinfo;
 	struct pmd_layout      *layout;
 	struct rb_node         *node;
 	merr_t                  err = 0, err1, err2;
 	u64                     mdcn, mdcmax = 0;
 	u64                     logid1, logid2;
-	u32                     lcnt[MDC_SLOTS];
 	u16                     slotvcnt;
 	int                     i;
 
-	/* initialize lcnt */
-	for (i = 0; i < MDC_SLOTS; i++)
-		lcnt[i] = 0;
-
-	/*
-	 * Called during mpool activation and mdc alloc because a failed
-	 * mdc alloc can result in extraneous mdc mlog objects which if
-	 * found we attempt to clean-up here. when called during activation
-	 * we may need to adjust mp.mda. this is not so when called from
-	 * mdc alloc and in fact decreasing slotvcnt post activation would
-	 * violate a key invariant.
-	 * note: activation is single-threaded and mdc alloc is serialized
-	 * so the number of active mdc (slotvcnt) will not change concurrent
-	 * with this fn
+	/* Activation is single-threaded and mdc alloc is serialized
+	 * so the number of active mdc (slotvcnt) will not change.
 	 */
 	spin_lock(&mp->pds_mda.mdi_slotvlock);
 	slotvcnt = mp->pds_mda.mdi_slotvcnt;
