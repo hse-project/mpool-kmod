@@ -14,11 +14,11 @@
 #include <linux/fs.h>
 #include <linux/blkdev.h>
 #include <linux/blk_types.h>
-#include <linux/version.h>
 
+#include "mpool_config.h"
 #include "mpcore_defs.h"
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
+#ifndef SECTOR_SHIFT
 #define SECTOR_SHIFT   9
 #endif
 
@@ -126,10 +126,12 @@ static merr_t
 pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
 {
 	struct block_device    *bdev;
-	merr_t                  err;
-	size_t                  zonelen;
-	size_t                  sector;
-	size_t                  nr_sects;
+
+	size_t  zonelen;
+	size_t  sector;
+	size_t  nr_sects;
+	merr_t  err;
+	int     rc;
 
 	bdev = pd->pdi_parm.dpr_dev_private;
 	if (!bdev) {
@@ -146,15 +148,15 @@ pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
 	 * Zero filling LBA range either using write-same if device supports,
 	 * or writing zeros as a fallback
 	 */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
-	err = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO, 0);
-#elif LINUX_VERSION_CODE > KERNEL_VERSION(4, 0, 0)
-	err = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO, true);
+#if HAVE_BLKDEV_ISSUE_ZEROOUT_FLAGS
+	rc = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO, 0);
+#elif HAVE_BLKDEV_ISSUE_ZEROOUT_DISCARD
+	rc = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO, true);
 #else
-	err = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO);
+	rc = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO);
 #endif
 
-	return ev(err);
+	return rc ? merr(rc) : 0;
 }
 
 #define CAN_BE_DISCARDED(a, b) \
@@ -215,12 +217,12 @@ pd_zone_erase(
 }
 
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
-#define SUBMIT_BIO(op, bio)            submit_bio((bio))
-#define SUBMIT_BIO_WAIT(op, bio)       submit_bio_wait((bio))
-#else
+#if HAVE_SUBMIT_BIO_OP
 #define SUBMIT_BIO(op, bio)            submit_bio((op), (bio))
 #define SUBMIT_BIO_WAIT(op, bio)       submit_bio_wait((op), (bio))
+#else
+#define SUBMIT_BIO(op, bio)            submit_bio((bio))
+#define SUBMIT_BIO_WAIT(op, bio)       submit_bio_wait((bio))
 #endif
 
 
@@ -232,7 +234,7 @@ pd_bio_init(
 	loff_t                  off,
 	int                     op_flags)
 {
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
+#if HAVE_BIO_SET_OP_ATTRS
 	bio_set_op_attrs(bio, rw, op_flags);
 	bio->bi_iter.bi_sector = off >> SECTOR_SHIFT;
 #else
@@ -240,7 +242,7 @@ pd_bio_init(
 	bio->bi_sector = off >> SECTOR_SHIFT;
 #endif
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
+#if HAVE_BIO_SET_DEV
 	bio_set_dev(bio, bdev);
 #else
 	bio->bi_bdev = bdev;
@@ -256,7 +258,7 @@ pd_bio_chain(
 {
 	struct bio *new;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+#if HAVE_BIOSET_INIT
 	new = bio_alloc_bioset(gfp, nr_pages, &mpool_bioset);
 #else
 	new = bio_alloc_bioset(gfp, nr_pages, mpool_bioset);

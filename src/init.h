@@ -11,8 +11,9 @@
 #ifndef MPOOL_INIT_H
 #define MPOOL_INIT_H
 
-#include <linux/version.h>
 #include <linux/bio.h>
+
+#include "mpool_config.h"
 
 extern struct crypto_shash *mpool_tfm;
 
@@ -23,7 +24,7 @@ extern struct kmem_cache *smap_zone_cache;
 
 extern unsigned int mpc_rsvd_bios_max;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+#if HAVE_BIOSET_INIT
 extern struct bio_set mpool_bioset;
 #else
 extern struct bio_set *mpool_bioset;

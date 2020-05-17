@@ -10,7 +10,8 @@
 #define MPOOL_UUID_STRING_LEN  36
 
 #include <linux/uuid.h>
-#include <linux/version.h>
+
+#include "mpool_config.h"
 
 struct mpool_uuid {
 	unsigned char uuid[MPOOL_UUID_SIZE];
@@ -19,13 +20,13 @@ struct mpool_uuid {
 /* mpool_uuid uses the LE version in the kernel */
 static inline void mpool_generate_uuid(struct mpool_uuid *uuid)
 {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 7, 0)
+#if HAVE_GENERATE_RANDOM_GUID
+	generate_random_guid(uuid->uuid);
+#else
 	uuid_le l_u;
 
 	uuid_le_gen(&l_u);
 	memcpy(uuid->uuid, l_u.b, MPOOL_UUID_SIZE);
-#else
-	generate_random_guid(uuid->uuid);
 #endif
 }
 

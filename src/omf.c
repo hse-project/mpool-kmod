@@ -13,9 +13,9 @@
  * All mpool metadata is versioned and stored on media in little-endian format.
  */
 
-#include <linux/version.h>
 #include <crypto/hash.h>
 
+#include "mpool_config.h"
 #include "mpcore_defs.h"
 
 #define _STR(x) #x
@@ -705,9 +705,11 @@ merr_t omf_cksum_crc32c_le(const char *dbuf, u64 dlen, u8 *obuf)
 	memset(obuf, 0, 4);
 
 	desc->tfm = mpool_tfm;
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
+
+#if HAVE_SHASH_DESC_FLAGS
 	desc->flags = 0;
 #endif
+
 	rc = crypto_shash_digest(desc, (u8 *)dbuf, dlen, obuf);
 
 	return merr(rc);

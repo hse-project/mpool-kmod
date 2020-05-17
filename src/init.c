@@ -5,6 +5,7 @@
 
 #include <crypto/hash.h>
 
+#include "mpool_config.h"
 #include "mpcore_defs.h"
 
 /*
@@ -29,7 +30,7 @@ struct kmem_cache  *smap_zone_cache __read_mostly;
 
 unsigned int mpc_rsvd_bios_max __read_mostly = 16;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+#if HAVE_BIOSET_INIT
 struct bio_set mpool_bioset;
 #else
 struct bio_set *mpool_bioset;
@@ -107,10 +108,10 @@ int mpcore_init(void)
 
 	mpc_rsvd_bios_max = clamp_t(uint, mpc_rsvd_bios_max, 1, 1024);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+#if HAVE_BIOSET_INIT
 	rc = bioset_init(&mpool_bioset, mpc_rsvd_bios_max, 0,
 			 BIOSET_NEED_BVECS);
-#elif LINUX_VERSION_CODE >= KERNEL_VERSION(4, 13, 0)
+#elif HAVE_BIOSET_CREATE_3
 	mpool_bioset = bioset_create(mpc_rsvd_bios_max, 0, BIOSET_NEED_BVECS);
 	if (!mpool_bioset)
 		rc = -ENOMEM;
@@ -144,7 +145,7 @@ void mpcore_fini(void)
 	if (mpool_tfm)
 		crypto_free_shash(mpool_tfm);
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 18, 0)
+#if HAVE_BIOSET_INIT
 	bioset_exit(&mpool_bioset);
 #else
 	bioset_free(mpool_bioset);

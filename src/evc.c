@@ -5,7 +5,6 @@
 
 #include <linux/kernel.h>
 #include <linux/ktime.h>
-#include <linux/version.h>
 #include <linux/gfp.h>
 #include <linux/slab.h>
 #include <linux/debugfs.h>

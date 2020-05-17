@@ -25,11 +25,12 @@
 #include <linux/fs.h>
 #include <linux/mm.h>
 #include <linux/delay.h>
-#include <linux/version.h>
 #include <linux/sched.h>
 #include <linux/slab.h>
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
+#include "mpool_config.h"
+
+#if HAVE_SCHED_CLOCK_H
 #include <linux/sched/clock.h>
 #endif
 

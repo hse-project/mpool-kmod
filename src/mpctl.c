@@ -39,14 +39,12 @@
 
 #include <mpool_version.h>
 
+#include "mpool_config.h"
+
 #include "mpctl.h"
 #include "mpctl_params.h"
 #include "mpctl_reap.h"
 #include "init.h"
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 17, 0)
-typedef int vm_fault_t;
-#endif
 
 #ifndef lru_to_page
 #define lru_to_page(_head)  (list_entry((_head)->prev, struct page, lru))
@@ -209,7 +207,7 @@ static struct mpc_reap *mpc_reap __read_mostly;
 static size_t mpc_xvm_cachesz[2] __read_mostly;
 static struct kmem_cache *mpc_xvm_cache[2] __read_mostly;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+#if !HAVE_BDI_ALLOC
 static struct backing_dev_info mpc_bdi = {
 	.name          = "mpctl",
 	.capabilities  = BDI_CAP_NO_ACCT_AND_WRITEBACK,
@@ -1099,10 +1097,6 @@ mpc_handle_page_error(struct page *page, struct vm_area_struct *vma)
 	return rc;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 13, 0)
-#define count_memcg_event_mm(_x, _y)   mem_cgroup_count_vm_event((_x), (_y))
-#endif
-
 static vm_fault_t
 mpc_vm_fault_impl(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
@@ -1174,17 +1168,18 @@ retry_find:
 	return vmfrc | VM_FAULT_LOCKED;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 11, 0)
-static vm_fault_t mpc_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+#if HAVE_VMFAULT_VMF
+static vm_fault_t mpc_vm_fault(struct vm_fault *vmf)
 {
-	return mpc_vm_fault_impl(vma, vmf);
+	return mpc_vm_fault_impl(vmf->vma, vmf);
 }
 
 #else
 
-static vm_fault_t mpc_vm_fault(struct vm_fault *vmf)
+static vm_fault_t mpc_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
+
 {
-	return mpc_vm_fault_impl(vmf->vma, vmf);
+	return mpc_vm_fault_impl(vma, vmf);
 }
 #endif
 
@@ -1482,16 +1477,19 @@ int mpc_releasepage(struct page *page, gfp_t gfp)
 	return 1;
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(3, 11, 0)
-#define INVALIDATEPAGE_ARGS    struct page *page, ulong offset
-#else
-#define INVALIDATEPAGE_ARGS    struct page *page, uint offset, uint length
-#endif
-
-static void mpc_invalidatepage(INVALIDATEPAGE_ARGS)
+#if HAVE_INVALIDATEPAGE_LENGTH
+static void mpc_invalidatepage(struct page *page, uint offset, uint length)
 {
 	mpc_releasepage(page, 0);
 }
+
+#else
+
+static void mpc_invalidatepage(struct page *page, ulong offset)
+{
+	mpc_releasepage(page, 0);
+}
+#endif
 
 /**
  * mpc_migratepage() -  Callback for handling page migration.
@@ -1523,7 +1521,7 @@ mpc_migratepage(
 	return migrate_page(mapping, newpage, page, mode);
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+#if !HAVE_BDI_ALLOC
 static int mpc_bdi_alloc(void)
 {
 	int    rc;
@@ -1539,7 +1537,7 @@ static void mpc_bdi_free(void)
 {
 	bdi_destroy(&mpc_bdi);
 }
-#endif /* LINUX_VERSION_CODE */
+#endif
 
 /*
  * MPCTL file operations.
@@ -1607,7 +1605,7 @@ static int mpc_open(struct inode *ip, struct file *fp)
 	fp->f_op = &mpc_fops_default;
 	fp->f_mapping->a_ops = &mpc_aops_default;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+#if HAVE_ADDRESS_SPACE_BDI
 	unit->un_saved_bdi = fp->f_mapping->backing_dev_info;
 	fp->f_mapping->backing_dev_info = &mpc_bdi;
 #endif
@@ -1666,7 +1664,7 @@ static int mpc_release(struct inode *ip, struct file *fp)
 		unit->un_ds_reap = NULL;
 		unit->un_mapping = NULL;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+#if HAVE_ADDRESS_SPACE_BDI
 		fp->f_mapping->backing_dev_info = unit->un_saved_bdi;
 #endif
 	}
@@ -3898,7 +3896,7 @@ mpc_physio(
 	iov_base = (struct iovec *)
 		((char *)pagesv + (sizeof(*pagesv) * pagesc));
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+#if HAVE_IOV_ITER_INIT_DIRECTION
 	iov_iter_init(&iter, rw, uiov, uioc, length);
 #else
 	iov_iter_init(&iter, uiov, uioc, length, 0);
@@ -3908,7 +3906,7 @@ mpc_physio(
 
 		/* Get struct page vector for the user buffers.
 		 */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+#if HAVE_IOV_ITER_GET_PAGES
 		cc = iov_iter_get_pages(&iter, &pagesv[i],
 					length - (i * PAGE_SIZE),
 					pagesc - i, &pgbase);
@@ -4112,7 +4110,7 @@ static void mpc_exit_impl(void)
 	kmem_cache_destroy(mpc_xvm_cache[0]);
 	mpc_vcache_fini(&mpc_physio_vcache);
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+#if !HAVE_BDI_ALLOC
 	mpc_bdi_free();
 #endif
 
@@ -4260,7 +4258,7 @@ static __init int mpc_init(void)
 	cfg.mc_gid = mpc_ctl_gid;
 	cfg.mc_mode = mpc_ctl_mode;
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 0, 0)
+#if !HAVE_BDI_ALLOC
 	rc = mpc_bdi_alloc();
 	if (ev(rc)) {
 		errmsg = "bdi alloc failed";
