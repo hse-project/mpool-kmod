@@ -14,18 +14,6 @@ depmod -a
 # load kernel modules
 modprobe mpool
 
-# sysctl config
-echo
-echo "*** NOTE ***"
-echo
-echo "This package configures the vm.max_map_count sysctl parameter."
-echo "This is required for normal operation of mpool."
-echo
-sysctl -p /usr/lib/sysctl.d/90-mpool.conf
-
-# reload udev rules
-udevadm control --reload-rules
-
 # additional work if we did a "force install" via /tmp/mpool-force-install
 if [[ -f /tmp/mpool-needs-reboot ]]; then
     echo

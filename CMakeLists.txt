@@ -336,10 +336,6 @@ set( MPOOL_SYNTH_PREREQS mpool_version )
 enable_testing()
 
 add_subdirectory( src )
-add_subdirectory( scripts/modules-load.d )
-add_subdirectory( scripts/udev/rules.d )
-add_subdirectory( scripts/sysctl.d )
-
 
 # NOTE: The package name and version values are configured at "make config"
 # time.  If changes are made in the tree (thereby changing the last commit SHA),
@@ -381,13 +377,7 @@ set( CPACK_RPM_RELOCATION_PATHS /usr /etc )
 # conflicts.
 #
 set( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
-  /etc
-  /etc/modules-load.d
-  /lib
   /usr/lib
-  /usr/lib/sysctl.d
-  /usr/lib/udev
-  /usr/lib/udev/rules.d
   /usr/lib/modules
   /usr/lib/modules/${MPOOL_KERNEL_VER}
   ${MPOOL_PYTHON_BASE_DIR}

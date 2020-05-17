@@ -345,7 +345,6 @@ install-pre: module-cleanup config
 	@$(MAKE) -C "$(BUILD_DIR)" install
 
 install: install-pre
-	udevadm control --reload-rules
 	depmod -a || exit 1
 	-modprobe -r mpool
 	modprobe mpool

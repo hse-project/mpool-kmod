@@ -12,9 +12,6 @@
 if [[ $1 -eq 0 ]]; then
     # this is a real uninstall, NOT an upgrade
     depmod -a
-
-    # reload udev rules
-    udevadm control --reload-rules
 fi
 
 exit 0
