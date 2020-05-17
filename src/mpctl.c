@@ -37,10 +37,7 @@
 #include <mpcore/mlog.h>
 #include <mpcore/evc.h>
 
-#include <mpool_version.h>
-
 #include "mpool_config.h"
-
 #include "mpctl.h"
 #include "mpctl_params.h"
 #include "mpctl_reap.h"
@@ -4278,7 +4275,6 @@ static __init int mpc_init(void)
 	idr_replace(&ss->ss_unitmap, ctlunit, MINOR(ctlunit->un_devno));
 	mutex_unlock(&ss->ss_lock);
 
-	dev_info(ctlunit->un_device, "%s", mpool_version);
 	mpc_unit_put(ctlunit);
 
 errout:

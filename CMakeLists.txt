@@ -21,12 +21,6 @@ set( CMAKE_INSTALL_PREFIX /usr )
 ##################
 # The next three variables determine where the build outputs land:
 #
-#   MPOOL_EXT_INSTALL_PREFIX
-#     - used by external code in ./sub directory.
-#
-#   MPOOL_STAGE_INSTALL_PREFIX
-#     - used by mpool-kmod code.
-#
 #   MPOOL_TREE_SCRIPTS_DIR
 #     - Scripts related to the mpool-kmod source tree (building it, working
 #       with git, etc.)
@@ -36,89 +30,30 @@ set( CMAKE_INSTALL_PREFIX /usr )
 # building everything.
 ##################
 
-set( MPOOL_EXT_INSTALL_PREFIX          ${PROJECT_BINARY_DIR}/ext_install)
-set( MPOOL_STAGE_INSTALL_PREFIX        ${PROJECT_BINARY_DIR}/stage)
-set( CMAKE_RUNTIME_OUTPUT_DIRECTORY  ${MPOOL_STAGE_INSTALL_PREFIX}/bin)
 set( MPOOL_TREE_SCRIPTS_DIR            ${PROJECT_SOURCE_DIR}/scripts)
-
-# Install() destination for CPack
-set( MPOOL_TOOLS_BIN                   /opt/micron/bin)
-
-# Docs and Example Code
-set( MPOOL_DOCS_DIR                    share/doc/mpool/)
-set( MPOOL_UDOC_DIR                    /opt/micron/mpool/doc)
 
 # A kmod that should always be present in MPOOL_KERNEL_DIR from which we
 # can obtain the value of uname -r.
 set( MPOOL_MODINFO_FILE                virtio_blk.ko)
 
-string(LENGTH ${PROJECT_SOURCE_DIR} MPOOL_PROJECT_SOURCE_DIR_PATH_LEN)
-
 set( MPOOL_INCLUDE_DIRS     ${PROJECT_SOURCE_DIR}/include)
-
-include_directories(${MPOOL_EXT_INSTALL_PREFIX}/include)
-include_directories(${MPOOL_STAGE_INSTALL_PREFIX}/include)
-
-# increasing warning levels
-set( CFLAGS_WARN_1 "${CFLAGS_WARN_0} -Wall -Werror -std=gnu99")
-set( CFLAGS_WARN_2 "${CFLAGS_WARN_1} -Wlogical-op -Wno-missing-field-initializers  -Wuninitialized -Wmaybe-uninitialized ")
-set( CFLAGS_WARN_3 "${CFLAGS_WARN_2} -Wextra -Wno-conversion -Wno-sign-conversion -Wno-sign-compare -Wno-unused-parameter")
-set( CFLAGS_WARN_4 "${CFLAGS_WARN_2} -Wextra -Wconversion    -Wsign-conversion    -Wsign-compare    -Wunused-parameter")
-set( CFLAGS_WARN_MAX "${CFLAGS_WARN_4}")
-
-set( CMAKE_C_FLAGS "${CFLAGS_WARN_3} -g3")
-
-if ( ${UBSAN} )
-    message(STATUS "Enabling ubsan support")
-    add_compile_options( -fno-omit-frame-pointer )
-    add_compile_options( -fsanitize=undefined -fno-sanitize=alignment )
-    link_libraries( -fsanitize=undefined -fno-sanitize=alignment )
-endif()
-
-if ( ${ASAN} )
-    message(STATUS "Enabling asan/lsan support")
-    add_compile_options( -fno-omit-frame-pointer )
-    add_compile_options( -fsanitize=address )
-    link_libraries( -fsanitize=address )
-endif()
-
-# Fedora system packages use Python 3; RHEL7 packages use Python 2
-if( EXISTS /etc/fedora-release )
-    set( MPOOL_PYTHON /usr/bin/python3 )
-else()
-    set( MPOOL_PYTHON /usr/bin/python )
-endif()
-
-execute_process( COMMAND ${MPOOL_PYTHON} -c "from distutils.sysconfig import get_python_lib; print(get_python_lib())" OUTPUT_STRIP_TRAILING_WHITESPACE OUTPUT_VARIABLE MPOOL_PYTHON_PKG_DIR )
-
-get_filename_component( MPOOL_PYTHON_BASE_DIR ${MPOOL_PYTHON_PKG_DIR}/.. ABSOLUTE )
-set ( MPOOL_PYTHON_SOS_DIR ${MPOOL_PYTHON_PKG_DIR}/sos )
-set ( MPOOL_PYTHON_SOS_PLUGINS_DIR ${MPOOL_PYTHON_PKG_DIR}/sos/plugins )
-
-include(CMakeLists.macros)
 
 # Set-up what kind of build this is
 #
 if( "${CMAKE_BUILD_TYPE}" STREQUAL "Debug" )
-  add_definitions( -DMPOOL_BUILD_DEBUG )
-  add_definitions( -DDEBUG_RCU )
   set( MPOOL_BUILD_TYPE_FLAG "d" )
 
 elseif( "${CMAKE_BUILD_TYPE}" STREQUAL "OptDebug" )
-  add_definitions( -DMPOOL_BUILD_DEBUG )
   set( MPOOL_BUILD_TYPE_FLAG "od" )
 
 elseif( "${CMAKE_BUILD_TYPE}" STREQUAL "Release" )
-  add_definitions( -DMPOOL_BUILD_RELEASE )
   add_definitions( -DNDEBUG )
   set( MPOOL_BUILD_TYPE_FLAG "r" )
 
 elseif( "${CMAKE_BUILD_TYPE}" STREQUAL "RelAssert" )
-  add_definitions( -DMPOOL_BUILD_RELASSERT )
   set( MPOOL_BUILD_TYPE_FLAG "ra" )
 
 elseif( "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo" )
-  add_definitions( -DMPOOL_BUILD_RELEASE )
   add_definitions( -DNDEBUG )
   set( MPOOL_BUILD_TYPE_FLAG "rd" )
 
@@ -142,16 +77,6 @@ set( MPOOL_VERSION_MAJOR 0 )
 set( MPOOL_VERSION_MINOR 0 )
 set( MPOOL_VERSION_PATCH 0 )
 
-# Create our template for the header file
-#
-file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.h.in
-"#define MPOOL_VERSION_LEN 61\n"
-"static const char mpool_version[MPOOL_VERSION_LEN] = \"@MPOOL_VERSION@\";\n"
-"static const char mpool_branch[] = \"@MPOOL_BRANCH@\";\n"
-"static const char mpool_tag[] = \"@MPOOL_TAG@\";\n"
-"static const char mpool_buildserver[] = \"@MPOOL_BUILDSERVER@\";\n"
-)
-
 # Create cmake code to transform input template into target header file.
 #
 file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
@@ -171,19 +96,8 @@ file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
     OUTPUT_STRIP_TRAILING_WHITESPACE
  )
  execute_process(
-    COMMAND ${GIT_EXECUTABLE} rev-parse --abbrev-ref HEAD
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    OUTPUT_VARIABLE MPOOL_BRANCH
-    OUTPUT_STRIP_TRAILING_WHITESPACE
- )
- execute_process(
     COMMAND date +%Y%m%d
     OUTPUT_VARIABLE MPOOL_DATESTAMP
-    OUTPUT_STRIP_TRAILING_WHITESPACE
- )
- execute_process(
-    COMMAND hostname -f
-    OUTPUT_VARIABLE MPOOL_BUILDSERVER
     OUTPUT_STRIP_TRAILING_WHITESPACE
  )
  execute_process(
@@ -290,42 +204,8 @@ file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
 
  set( MPOOL_VERSION \${MPOOL_MAJORMINORPATCH}-\${MPOOL_RELEASE} )
  set( MPOOL_KMOD_VERSION \${MPOOL_MAJORMINORPATCH}-\${MPOOL_KMOD_RELEASE} )
-
- if( NOT MPOOL_VERSION_CMAKE_INCLUDEONLY )
-   if (EXISTS \${DST})
-   	configure_file(\${SRC} \${CMAKE_BINARY_DIR}/mpool_version.h.tmp @ONLY)
-   	file(SHA256 \${CMAKE_BINARY_DIR}/mpool_version.h.tmp NEWSHA)
-   	file(SHA256 \${DST} OLDSHA)
-   	# Replace mpool_version.h file with a newer only if the content changed.
-   	if (NOT \${OLDSHA} EQUAL \${NEWSHA})
-     		configure_file(\${SRC} \${DST} @ONLY)
-   	endif()
-   else()
-     	configure_file(\${SRC} \${DST} @ONLY)
-   endif()
-
- endif( )
 "
 )
-
-# Set up custom target
-#
-add_custom_target(
-    mpool_version
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${MPOOL_STAGE_INSTALL_PREFIX}/install
-    COMMAND ${CMAKE_COMMAND} -D SRC=${CMAKE_BINARY_DIR}/mpool_version.h.in
-                     -D DST=${MPOOL_STAGE_INSTALL_PREFIX}/include/mpool_version.h
-                     -P ${CMAKE_BINARY_DIR}/mpool_version.cmake
-)
-
-
-################################################################
-#
-# Establish prerequisites for all compiled targets
-#
-################################################################
-
-set( MPOOL_SYNTH_PREREQS mpool_version )
 
 ################################################################
 #
@@ -335,7 +215,19 @@ set( MPOOL_SYNTH_PREREQS mpool_version )
 
 enable_testing()
 
-add_subdirectory( src )
+set (KERNEL_RELEASE uname -r)
+
+execute_process(
+  COMMAND ${KERNEL_RELEASE}
+  OUTPUT_VARIABLE  KREL
+  OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+INSTALL(
+  FILES "${PROJECT_SOURCE_DIR}/mpool.ko"
+  DESTINATION lib/modules/${KREL}/mpool
+  COMPONENT runtime
+)
 
 # NOTE: The package name and version values are configured at "make config"
 # time.  If changes are made in the tree (thereby changing the last commit SHA),
@@ -380,10 +272,6 @@ set( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
   /usr/lib
   /usr/lib/modules
   /usr/lib/modules/${MPOOL_KERNEL_VER}
-  ${MPOOL_PYTHON_BASE_DIR}
-  ${MPOOL_PYTHON_PKG_DIR}
-  ${MPOOL_PYTHON_SOS_DIR}
-  ${MPOOL_PYTHON_SOS_PLUGINS_DIR}
 )
 
 # Setting this keeps CMake 3.7+ from generating nonsense filenames
