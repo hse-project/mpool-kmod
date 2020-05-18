@@ -47,6 +47,16 @@
 #define lru_to_page(_head)  (list_entry((_head)->prev, struct page, lru))
 #endif
 
+#if HAVE_MEM_CGROUP_COUNT_VM_EVENT
+#define count_memcg_event_mm(_x, _y)    mem_cgroup_count_vm_event((_x), (_y))
+#elif !HAVE_COUNT_MEMCG_EVENT_MM
+#define count_memcg_event_mm(_x, _y)
+#endif
+
+#if !HAVE_VM_FAULT_T
+typedef int vm_fault_t;
+#endif
+
 /*
  * MPC_RA_IOV_MAX - Max pages per call to mblock read by a readahead
  * request.  Be careful about increasing this as it directly adds
@@ -1129,9 +1139,7 @@ retry_find:
 	/* At this point, page is not locked but has a ref. */
 	if (vmfrc == VM_FAULT_MAJOR) {
 		count_vm_event(PGMAJFAULT);
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 2, 0)
 		count_memcg_event_mm(vma->vm_mm, PGMAJFAULT);
-#endif
 	}
 
 	if (!mpc_lock_page_or_retry(page, vma->vm_mm, vmf->flags)) {

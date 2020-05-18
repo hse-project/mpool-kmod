@@ -5,6 +5,6 @@ all:
 	@./configure > config.h
 
 clean distclean:
-	rm -rf test.o test.ko test.mod* .test* [Mm]odule* .tmp_versions built* .built*
-	rm -rf config.h Kbuild Makefile
+	@rm -rf test.o test.ko test.mod* .test* [Mm]odule* .tmp_versions built* .built*
+	@rm -rf config.h Kbuild Makefile
 

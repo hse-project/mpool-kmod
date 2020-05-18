@@ -16,12 +16,14 @@ MAKEFLAGS += --no-print-directory
 
 all: ${CF}
 
-clean distclean: ${SUBDIRS}
-	rm -rf config.h-*
+clean: ${SUBDIRS}
+
+distclean: clean
+	rm -f config.h-*
 
 ${CF}: ${SUBDIRS}
 	echo "/* SPDX-License-Identifier: GPL-2.0-only */" > $@.tmp
-	echo "/* *** Machine generated on $(date) *** */" >> $@.tmp
+	echo "/* *** Machine generated for $(shell uname -a) on $(shell date) *** */" >> $@.tmp
 	cat */config.h >> $@.tmp
 	mv $@.tmp $@
 

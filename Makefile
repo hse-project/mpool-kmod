@@ -121,7 +121,7 @@ Examples:
 
   Work in the 'release' build output dir, but with your own configuration file:
 
-    make release config CFILE=myconfig.cmake
+    make release CFILE=myconfig.cmake
     make release all
 
   Create a 'debug' build:
@@ -130,12 +130,12 @@ Examples:
 
   Build against currently running kernel:
 
-    make debug config KDIR=/lib/modules/`uname -r`/build
+    make debug KDIR=/lib/modules/`uname -r`/build
     make debug all
 
   Custom everything:
 
-    make BDIR=mybuild config CFILE=mybuild.cmake KDIR=~/linux-stable
+    make BDIR=mybuild CFILE=mybuild.cmake KDIR=~/linux-stable
     make BDIR=mybuild all
 
 endef
@@ -286,13 +286,19 @@ endif
 
 clean:
 	$(MAKE) -C $(KDIR) M=`pwd` clean
-	rm -rf *.mod
-	rm -rf "$(BUILD_DIR)"/*.rpm
+	${MAKE} -C config clean
+	rm -rf "$(BUILD_DIR)"/*.rpm *.mod src/mpool_config.h
 
 config-preview:
 	@$(config-show)
 
-${CONFIG}:
+config/config.h-$(shell uname -r):
+	${MAKE} -j -C config all
+
+src/mpool_config.h: config/config.h-$(shell uname -r)
+	cp $< $@
+
+${CONFIG}: src/mpool_config.h
 	@test -d "$(BUILD_DIR)" || mkdir -p "$(BUILD_DIR)"
 	@$(config-show) > $(BUILD_DIR)/config.sh
 	@$(config-gen) > $@.tmp
@@ -302,6 +308,7 @@ ${CONFIG}:
 config: ${CONFIG}
 
 distclean scrub: clean
+	${MAKE} -C config distclean
 	@if test -f ${CONFIG} ; then \
 		rm -rf "$(BUILD_DIR)" ;\
 	fi
