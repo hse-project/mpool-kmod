@@ -274,10 +274,10 @@ CONFIG = $(BUILD_DIR)/mpool_config.cmake
 # Goals in mostly alphabetical order.
 #
 all: config
-	KCFLAGS=$(KCFLAGS_DEFAULT) $(MAKE) -C $(KDIR_DEFAULT) M=`pwd` modules
+	KCFLAGS=$(KCFLAGS_DEFAULT) $(MAKE) -C $(KDIR) M=`pwd` modules
 
 allv: config
-	KCFLAGS=$(KCFLAGS_DEFAULT) $(MAKE) -C $(KDIR_DEFAULT) V=1 M=`pwd` modules
+	KCFLAGS=$(KCFLAGS_DEFAULT) $(MAKE) -C $(KDIR) M=`pwd` V=1 modules
 
 ifneq (${BTYPES},)
 ${BTYPES}: ${BTYPESDEP}
@@ -285,7 +285,7 @@ ${BTYPES}: ${BTYPESDEP}
 endif
 
 clean:
-	$(MAKE) -C $(KDIR_DEFAULT) M=`pwd` clean
+	$(MAKE) -C $(KDIR) M=`pwd` clean
 	rm -rf *.mod
 	rm -rf "$(BUILD_DIR)"/*.rpm
 
@@ -319,7 +319,7 @@ module-cleanup:
 install-pre: module-cleanup config all
 
 install: install-pre
-	$(MAKE) INSTALL_MOD_DIR=mpool -C $(KDIR_DEFAULT) M=`pwd` modules_install
+	$(MAKE) -C $(KDIR) M=`pwd` INSTALL_MOD_DIR=mpool modules_install
 	depmod -a || exit 1
 	-modprobe -r mpool
 	modprobe mpool
