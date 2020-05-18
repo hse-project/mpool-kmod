@@ -1,0 +1,11 @@
+#!/bin/sh
+
+KDIR=${KDIR:-/lib/modules/`uname -r`/build}
+
+make -C ${KDIR} M=$(pwd) modules > /dev/null 2>&1
+
+if [ $? -eq 0 ] ; then
+	echo "#define HAVE_SUBMIT_BIO_OP 0"
+else
+	echo "#define HAVE_SUBMIT_BIO_OP 1"
+fi
