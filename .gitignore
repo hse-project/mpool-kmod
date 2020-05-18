@@ -17,3 +17,13 @@ bull.cov
 *.swp
 \#*
 .#*
+.*
+*.o
+*.o.*
+*.ko
+*.xz
+*.mod
+*.mod.c
+Module.symvers
+modules.builtin
+modules.order

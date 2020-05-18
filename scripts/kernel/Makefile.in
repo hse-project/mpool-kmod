@@ -1,5 +1,0 @@
-KDIR ?= @KDIR@
-default:
-	$(MAKE) -C $(KDIR) M=`pwd` modules
-clean:
-	$(MAKE) -C $(KDIR) M=`pwd` clean

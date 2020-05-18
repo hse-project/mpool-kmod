@@ -74,8 +74,6 @@ Configuration Variables:
 
 Get info about the build:
 
-    etags     -- build TAGS file
-
 Customizations:
 
   The behavior of this makefile can be customized by creating the following files in your home directory:
@@ -162,21 +160,27 @@ S=$(MPOOL_SRC_DIR)/scripts
 ifeq ($(findstring release,$(MAKECMDGOALS)),release)
   BDIR_DEFAULT  := release
   CFILE_DEFAULT := $(S)/cmake/release.cmake
+  KCFLAGS_DEFAULT += "-O2 -DNDEBUG"
 else ifeq ($(findstring relwithdebug,$(MAKECMDGOALS)),relwithdebug)
   BDIR_DEFAULT  := relwithdebug
   CFILE_DEFAULT := $(S)/cmake/relwithdebug.cmake
+  KCFLAGS_DEFAULT += "-O2 -DNDEBUG -g"
 else ifeq ($(findstring relassert,$(MAKECMDGOALS)),relassert)
   BDIR_DEFAULT  := relassert
   CFILE_DEFAULT := $(S)/cmake/relassert.cmake
+  KCFLAGS_DEFAULT += -O2
 else ifeq ($(findstring optdebug,$(MAKECMDGOALS)),optdebug)
   BDIR_DEFAULT  := optdebug
   CFILE_DEFAULT := $(S)/cmake/optdebug.cmake
+  KCFLAGS_DEFAULT += -Og
 else ifeq ($(findstring debug,$(MAKECMDGOALS)),debug)
   BDIR_DEFAULT  := debug
   CFILE_DEFAULT := $(S)/cmake/debug.cmake
+  KCFLAGS_DEFAULT += -g
 else
   BDIR_DEFAULT  := release
   CFILE_DEFAULT := $(S)/cmake/release.cmake
+  KCFLAGS_DEFAULT += "-O2 -DNDEBUG"
 endif
 
 BTOPDIR_DEFAULT       := $(MPOOL_SRC_DIR)/builds
@@ -206,22 +210,6 @@ REL_CANDIDATE ?= $(REL_CANDIDATE_DEFAULT)
 ################################################################
 # Git and external repos
 ################################################################
-
-mpool_repo=.
-mpool_branch=master
-
-
-PERL_CMAKE_NOISE_FILTER := \
-    perl -e '$$|=1;\
-        while (<>) {\
-            next if m/(Entering|Leaving) directory/;\
-            next if m/Not a git repository/;\
-            next if m/GIT_DISCOVERY_ACROSS_FILESYSTEM/;\
-            next if m/^\[..\d%\]/;\
-            next if m/cmake_progress/;\
-            print;\
-        }'
-
 
 #   CFILE
 #   DEPGRAPH
@@ -277,25 +265,19 @@ endif
 
 CONFIG = $(BUILD_DIR)/mpool_config.cmake
 
-.PHONY: all allv allq allqv allvq ${BTYPES}
-.PHONY: checkfiles clean config config-preview distclean
-.PHONY: etags help install install-pre maintainer-clean
+.PHONY: all allv ${BTYPES}
+.PHONY: clean config config-preview distclean
+.PHONY: help install install-pre maintainer-clean
 .PHONY: load package rebuild scrub unload
 
 
 # Goals in mostly alphabetical order.
 #
 all: config
-	@$(MAKE) -C "$(BUILD_DIR)" $(MF)
+	KCFLAGS=$(KCFLAGS_DEFAULT) $(MAKE) -C $(KDIR) M=`pwd` modules
 
 allv: config
-	$(MAKE) -C "$(BUILD_DIR)" VERBOSE=1 $(MF)
-
-allq: config
-	$(MAKE) -C "$(BUILD_DIR)" $(MF) 2>&1 | $(PERL_CMAKE_NOISE_FILTER)
-
-allqv allvq: config
-	$(MAKE) -C "$(BUILD_DIR)" VERBOSE=1 $(MF) 2>&1 | $(PERL_CMAKE_NOISE_FILTER)
+	KCFLAGS=$(KCFLAGS_DEFAULT) $(MAKE) -C $(KDIR) M=`pwd` V=1 modules
 
 ifneq (${BTYPES},)
 ${BTYPES}: ${BTYPESDEP}
@@ -303,17 +285,15 @@ ${BTYPES}: ${BTYPESDEP}
 endif
 
 clean:
-	@if test -f ${BUILD_DIR}/src/kbuild.mpool/Makefile ; then \
-		$(MAKE) --no-print-directory -C "$(BUILD_DIR)/src/kbuild.mpool" clean ;\
-		rm -rf "$(BUILD_DIR)"/*.rpm ;\
-	fi
+	$(MAKE) -C $(KDIR) M=`pwd` clean
+	rm -rf *.mod
+	rm -rf "$(BUILD_DIR)"/*.rpm
 
 config-preview:
 	@$(config-show)
 
 ${CONFIG}:
 	@test -d "$(BUILD_DIR)" || mkdir -p "$(BUILD_DIR)"
-	@echo "prune: true" > "$(BUILD_DIR)"/.checkfiles.yml
 	@$(config-show) > $(BUILD_DIR)/config.sh
 	@$(config-gen) > $@.tmp
 	@cmp -s $@ $@.tmp || (cd "$(BUILD_DIR)" && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_SRC_DIR)")
@@ -321,15 +301,10 @@ ${CONFIG}:
 
 config: ${CONFIG}
 
-distclean scrub:
+distclean scrub: clean
 	@if test -f ${CONFIG} ; then \
 		rm -rf "$(BUILD_DIR)" ;\
 	fi
-
-etags:
-	@echo "Making emacs TAGS file"
-	@find src include \
-	        -type f -name "*.[ch]" -print | etags -
 
 help:
 	@true
@@ -341,10 +316,10 @@ module-cleanup:
 	fi
 	@rm -rf /usr/lib/mpool
 
-install-pre: module-cleanup config
-	@$(MAKE) -C "$(BUILD_DIR)" install
+install-pre: module-cleanup config all
 
 install: install-pre
+	$(MAKE) -C $(KDIR) M=`pwd` INSTALL_MOD_DIR=mpool modules_install
 	depmod -a || exit 1
 	-modprobe -r mpool
 	modprobe mpool
