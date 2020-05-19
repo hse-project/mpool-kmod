@@ -48,8 +48,6 @@ Configuration Variables:
                      graphviz dependency graph files
     KDIR          -- Location of pre-built Linux Kernel source tree
                      Typically <linux source tree>/builds/<config name>.
-    KHEADERS      -- Set KHEADERS=force to build, even if the kernel-headers
-                     do not match KDIR. You could get hurt doing this.
     REL_CANDIDATE -- When set builds a release candidate.
 
   Rules of use:
@@ -185,14 +183,8 @@ endif
 
 BTOPDIR_DEFAULT       := $(MPOOL_SRC_DIR)/builds
 BUILD_DIR_DEFAULT     := $(BTOPDIR_DEFAULT)/$(BDIR_DEFAULT)
-MPOOL_REL_KERNEL      := $(shell uname -r)
-MPOOL_DBG_KERNEL      := $(MPOOL_REL_KERNEL)+debug
-KDIR_REL              := /lib/modules/$(MPOOL_REL_KERNEL)/build
-KDIR_DBG              := /lib/modules/$(MPOOL_DBG_KERNEL)/build
 BUILD_NUMBER_DEFAULT  := 0
 REL_CANDIDATE_DEFAULT := false
-
-KDIR_DEFAULT          := $(KDIR_REL)
 
 ################################################################
 #
@@ -204,12 +196,19 @@ BDIR          ?= $(BDIR_DEFAULT)
 BUILD_DIR     ?= $(BTOPDIR)/$(BDIR)
 CFILE         ?= $(CFILE_DEFAULT)
 BUILD_NUMBER  ?= $(BUILD_NUMBER_DEFAULT)
-KDIR          ?= $(KDIR_DEFAULT)
 REL_CANDIDATE ?= $(REL_CANDIDATE_DEFAULT)
 
-################################################################
-# Git and external repos
-################################################################
+KARCH ?= $(shell uname -m)
+KDIR  ?= /lib/modules/$(shell uname -r)/build
+KREL  ?= $(patsubst /lib/modules/%/build,%,${KDIR})
+
+ifeq (${KREL},${KDIR})
+  KREL := $(patsubst /usr/src/kernels/%,%,${KDIR})
+endif
+
+ifeq (${KREL},${KDIR})
+  $(error "Unable to determine kernel release from KDIR.  Try setting it via the KREL= variable")
+endif
 
 #   CFILE
 #   DEPGRAPH
@@ -218,6 +217,8 @@ define config-show
 	(echo 'BUILD_DIR="$(BUILD_DIR)"';\
 	  echo 'CFILE="$(CFILE)"';\
 	  echo 'KDIR="$(KDIR)"';\
+	  echo 'KREL="$(KREL)"';\
+	  echo 'KARCH="$(KARCH)"';\
 	  echo 'BUILD_NUMBER="$(BUILD_NUMBER)"';\
 	  echo 'REL_CANDIDATE="$(REL_CANDIDATE)"')
 endef
@@ -227,7 +228,9 @@ define config-gen =
 	echo '#       it is the *first* setting that sticks!' ;\
 	echo ;\
 	echo '# building kernel modules' ;\
-	echo 'Set( MPOOL_KERNEL_DIR "$(KDIR)" CACHE STRING "" )' ;\
+	echo 'Set( KDIR "$(KDIR)" CACHE STRING "" )' ;\
+	echo 'Set( KREL "$(KREL)" CACHE STRING "" )' ;\
+	echo 'Set( KARCH "$(KARCH)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_NUMBER "$(BUILD_NUMBER)" CACHE STRING "" )' ;\
 	echo 'Set( REL_CANDIDATE "$(REL_CANDIDATE)" CACHE STRING "" )' ;\
 	if test "$(BUILD_SHA)"; then \
@@ -286,16 +289,16 @@ endif
 
 clean:
 	$(MAKE) -C $(KDIR) M=`pwd` clean
-	${MAKE} -C config clean
+	${MAKE} -C config KDIR=${KDIR} KREL=${KREL} clean
 	rm -rf "$(BUILD_DIR)"/*.rpm *.mod src/mpool_config.h
 
 config-preview:
 	@$(config-show)
 
-config/config.h-$(shell uname -r):
-	${MAKE} -j -C config all
+config/config.h-${KREL}:
+	${MAKE} -j -C config KDIR=${KDIR} KREL=${KREL}  all
 
-src/mpool_config.h: config/config.h-$(shell uname -r)
+src/mpool_config.h: config/config.h-${KREL}
 	cp $< $@
 
 ${CONFIG}: src/mpool_config.h

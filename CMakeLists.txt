@@ -30,13 +30,8 @@ set( CMAKE_INSTALL_PREFIX /usr )
 # building everything.
 ##################
 
-set( MPOOL_TREE_SCRIPTS_DIR            ${PROJECT_SOURCE_DIR}/scripts)
-
-# A kmod that should always be present in MPOOL_KERNEL_DIR from which we
-# can obtain the value of uname -r.
-set( MPOOL_MODINFO_FILE                virtio_blk.ko)
-
-set( MPOOL_INCLUDE_DIRS     ${PROJECT_SOURCE_DIR}/include)
+set( MPOOL_TREE_SCRIPTS_DIR  ${PROJECT_SOURCE_DIR}/scripts)
+set( MPOOL_INCLUDE_DIRS      ${PROJECT_SOURCE_DIR}/include)
 
 # Set-up what kind of build this is
 #
@@ -61,7 +56,6 @@ else()
   message( FATAL_ERROR "Invalid build type [${CMAKE_BUILD_TYPE}]" )
 endif()
 
-
 ################################################################
 #
 # Create the version header file
@@ -76,6 +70,10 @@ find_package(Git)
 set( MPOOL_VERSION_MAJOR 0 )
 set( MPOOL_VERSION_MINOR 0 )
 set( MPOOL_VERSION_PATCH 0 )
+
+set( MPOOL_KMOD_VERSION  ${KREL} )
+set( MPOOL_KMOD_ARCH     ${KARCH} )
+set( MPOOL_KMOD_DEBUG    "" )
 
 # Create cmake code to transform input template into target header file.
 #
@@ -100,26 +98,6 @@ file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
     OUTPUT_VARIABLE MPOOL_DATESTAMP
     OUTPUT_STRIP_TRAILING_WHITESPACE
  )
- execute_process(
-    COMMAND dirname ${MPOOL_KERNEL_DIR}
-    OUTPUT_VARIABLE MPOOL_KERNEL_PARENT_DIR
-    OUTPUT_STRIP_TRAILING_WHITESPACE
- )
- find_file(
-   MPOOL_MODINFO_FILE_PATH
-   NAMES ${MPOOL_MODINFO_FILE} ${MPOOL_MODINFO_FILE}.xz
-   PATHS
-     \${MPOOL_KERNEL_PARENT_DIR}/kernel/drivers/block
-     \${MPOOL_KERNEL_DIR}/drivers/block
-   NO_DEFAULT_PATH
- )
- execute_process(
-  COMMAND bash -c \"/sbin/modinfo \${MPOOL_MODINFO_FILE_PATH} | grep vermagic | awk '{print $2}'\"
-  OUTPUT_VARIABLE MPOOL_KMOD_VERSION
-  OUTPUT_STRIP_TRAILING_WHITESPACE
- )
-
- set( MPOOL_KERNEL_VER \${MPOOL_KMOD_VERSION})
 
  #
  # cmake DIST doesn't work in 3.6.2.
@@ -131,18 +109,8 @@ file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
  )
  set( MPOOL_KMOD_DIST \${PACKAGE_DIST})
 
- #
- # In 3.6.x, for some reason, CPACK_RPM_PACKAGE_ARCHITECTURE is an
- # empty string when this CMakeLists.txt gets processed.
- #
- execute_process(
-  COMMAND uname -m
-  OUTPUT_VARIABLE PACKAGE_ARCH
-  OUTPUT_STRIP_TRAILING_WHITESPACE
- )
-
  if( \${MPOOL_TAG} MATCHES \"dirty$\" )
-  set( MPOOL_DIRTYTAG \".dirty\" )
+     set( MPOOL_DIRTYTAG \".dirty\" )
  endif( )
 
 # Keep this line--we need it in release branches
@@ -152,43 +120,37 @@ file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
  set( MPOOL_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP}.\${MPOOL_SHA}\${MPOOL_DIRTYTAG} )
 
  if (REL_CANDIDATE)
-  set( MPOOL_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP} )
+    set( MPOOL_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP} )
  endif()
 
  set( MPOOL_KMOD_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP}.\${MPOOL_SHA}\${MPOOL_DIRTYTAG}-\${MPOOL_KMOD_VERSION} )
- #
+
  # MPOOL_SHA varibale may not be populated when user is downloading
  # source code from tarball on the github website instead of cloning the repo
  #
  if( NOT MPOOL_SHA )
-   set( MPOOL_KMOD_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP}\${MPOOL_DIRTYTAG}-\${MPOOL_KMOD_VERSION} )
-   set( MPOOL_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP}\${MPOOL_DIRTYTAG} )
+     set( MPOOL_KMOD_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP}\${MPOOL_DIRTYTAG}-\${MPOOL_KMOD_VERSION} )
+     set( MPOOL_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP}\${MPOOL_DIRTYTAG} )
  endif()
  if (REL_CANDIDATE)
-  set( MPOOL_KMOD_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP}-\${MPOOL_KMOD_VERSION} )
+    set( MPOOL_KMOD_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.\${MPOOL_DATESTAMP}-\${MPOOL_KMOD_VERSION} )
  endif()
 
- #
- # If the kernel version string includes the machine architecture,
- # strip it out of MPOOL_KMOD_VERSION, which we only use to generate the
- # package file name.  If we do not do this, we end up with stuff like
- # 'x86_64.x86_64.rpm'.
- #
- if( \${MPOOL_KMOD_RELEASE} MATCHES \${PACKAGE_ARCH})
-  string(LENGTH \${MPOOL_KMOD_RELEASE} MPOOL_KMOD_RELEASE_LENGTH)
-  string(LENGTH \${PACKAGE_ARCH} PACKAGE_ARCH_LENGTH)
-  math(EXPR SUBSTRING_END_POS \"\${MPOOL_KMOD_RELEASE_LENGTH} - \${PACKAGE_ARCH_LENGTH} - 1\")
-  string(SUBSTRING \${MPOOL_KMOD_RELEASE} 0 \${SUBSTRING_END_POS} MPOOL_KMOD_RELEASE)
+ if( \${MPOOL_KMOD_RELEASE} MATCHES \"[+]debug\")
+     string( REPLACE \"+debug\" \"\" MPOOL_KMOD_RELEASE \${MPOOL_KMOD_RELEASE} )
+     set( MPOOL_KMOD_DEBUG \"-debug\" )
  endif()
 
- #
+ if( \${MPOOL_KMOD_RELEASE} MATCHES \".\${MPOOL_KMOD_ARCH}\")
+     string( REPLACE \".\${MPOOL_KMOD_ARCH}\" \"\" MPOOL_KMOD_RELEASE \${MPOOL_KMOD_RELEASE} )
+ endif()
+
  # Similar deal with dist.
  #
  if( \${MPOOL_KMOD_VERSION} MATCHES \${PACKAGE_DIST})
   unset( MPOOL_KMOD_DIST )
  endif()
 
- #
  # There's a little bit of horribleness in that Fedora/RedHat do not
  # permit hyphens in release strings.  We want the kernel version in
  # the release string in any RPM that contains a kernel module.  Our
@@ -202,8 +164,8 @@ file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
   OUTPUT_STRIP_TRAILING_WHITESPACE
  )
 
- set( MPOOL_VERSION \${MPOOL_MAJORMINORPATCH}-\${MPOOL_RELEASE} )
- set( MPOOL_KMOD_VERSION \${MPOOL_MAJORMINORPATCH}-\${MPOOL_KMOD_RELEASE} )
+ set( MPOOL_VERSION       \${MPOOL_MAJORMINORPATCH}-\${MPOOL_RELEASE} )
+ set( MPOOL_KMOD_VERSION  \${MPOOL_MAJORMINORPATCH}-\${MPOOL_KMOD_RELEASE} )
 "
 )
 
@@ -212,16 +174,6 @@ file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
 # Subdirectories
 #
 ################################################################
-
-enable_testing()
-
-set (KERNEL_RELEASE uname -r)
-
-execute_process(
-  COMMAND ${KERNEL_RELEASE}
-  OUTPUT_VARIABLE  KREL
-  OUTPUT_STRIP_TRAILING_WHITESPACE
-)
 
 INSTALL(
   FILES "${PROJECT_SOURCE_DIR}/mpool.ko"
@@ -243,7 +195,7 @@ set( MPOOL_VERSION_CMAKE_INCLUDEONLY "OFF" )
 # Package options
 #
 set( CPACK_GENERATOR "RPM" )
-set( CPACK_PACKAGE_NAME "mpool-kmod" )
+set( CPACK_PACKAGE_NAME "mpool-kmod${MPOOL_KMOD_DEBUG}" )
 set( CPACK_PACKAGE_VERSION_MAJOR "${MPOOL_VERSION_MAJOR}" )
 set( CPACK_PACKAGE_VERSION_MINOR "${MPOOL_VERSION_MINOR}" )
 set( CPACK_PACKAGE_VERSION_PATCH "${MPOOL_VERSION_PATCH}" )
@@ -271,7 +223,7 @@ set( CPACK_RPM_RELOCATION_PATHS /usr /etc )
 set( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
   /usr/lib
   /usr/lib/modules
-  /usr/lib/modules/${MPOOL_KERNEL_VER}
+  /usr/lib/modules/${KREL}
 )
 
 # Setting this keeps CMake 3.7+ from generating nonsense filenames
@@ -297,7 +249,7 @@ set( CPACK_RPM_RUNTIME_PACKAGE_SUMMARY
 set(
   CPACK_RPM_RUNTIME_PACKAGE_DESCRIPTION
   "Object Storage Media Pool (mpool) kernel module for kernel ${MPOOL_KMOD_VERSION}")
-set( CPACK_RPM_RUNTIME_FILE_NAME "${CPACK_RPM_RUNTIME_PACKAGE_NAME}-${CPACK_RPM_PACKAGE_VERSION}-${MPOOL_KMOD_RELEASE}${MPOOL_KMOD_DIST}.${PACKAGE_ARCH}.rpm" )
+set( CPACK_RPM_RUNTIME_FILE_NAME "${CPACK_RPM_RUNTIME_PACKAGE_NAME}-${CPACK_RPM_PACKAGE_VERSION}-${MPOOL_KMOD_RELEASE}${MPOOL_KMOD_DIST}.${MPOOL_KMOD_ARCH}.rpm" )
 set( CPACK_RPM_RUNTIME_PACKAGE_RELEASE "${CPACK_RPM_PACKAGE_RELEASE}")
 set( CPACK_RPM_RUNTIME_USER_BINARY_SPECFILE "${MPOOL_TREE_SCRIPTS_DIR}/package/mpool.spec.in")
 set( CPACK_RPM_RUNTIME_PRE_INSTALL_SCRIPT_FILE "${MPOOL_TREE_SCRIPTS_DIR}/package/rpm-pre-install.sh" )
@@ -305,7 +257,7 @@ set( CPACK_RPM_RUNTIME_POST_INSTALL_SCRIPT_FILE "${MPOOL_TREE_SCRIPTS_DIR}/packa
 set( CPACK_RPM_RUNTIME_PRE_UNINSTALL_SCRIPT_FILE "${MPOOL_TREE_SCRIPTS_DIR}/package/rpm-pre-uninstall.sh" )
 set( CPACK_RPM_RUNTIME_POST_UNINSTALL_SCRIPT_FILE "${MPOOL_TREE_SCRIPTS_DIR}/package/rpm-post-uninstall.sh" )
 set( CPACK_RPM_RUNTIME_USER_FILELIST
-  "%dir /usr/lib/modules/${MPOOL_KERNEL_VER}/mpool"
+  "%dir /usr/lib/modules/${KREL}/mpool"
 )
 set( CPACK_RPM_RUNTIME_PACKAGE_REQUIRES "sos >= 3.2" )
 

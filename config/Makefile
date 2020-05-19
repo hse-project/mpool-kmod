@@ -10,7 +10,18 @@ SUBDIRS += sched_clock shash_desc submit_bio
 
 .DELETE_ON_ERROR:
 
-CF := config.h-$(shell uname -r)
+KDIR ?= /lib/modules/$(shell uname -r)/build
+KREL ?= $(patsubst /lib/modules/%/build,%,${KDIR})
+
+ifeq (${KREL},${KDIR})
+  KREL := $(patsubst /usr/src/kernels/%,%,${KDIR})
+endif
+
+ifeq (${KREL},${KDIR})
+  $(error "Unable to determine kernel release from KDIR.  Try setting it via the KREL= variable")
+endif
+
+CF := config.h-${KREL}
 
 MAKEFLAGS += --no-print-directory
 
@@ -23,7 +34,7 @@ distclean: clean
 
 ${CF}: ${SUBDIRS}
 	echo "/* SPDX-License-Identifier: GPL-2.0-only */" > $@.tmp
-	echo "/* *** Machine generated for $(shell uname -a) on $(shell date) *** */" >> $@.tmp
+	echo "/* *** Machine generated for ${KREL} on $(shell date) *** */" >> $@.tmp
 	cat */config.h >> $@.tmp
 	mv $@.tmp $@
 
@@ -32,5 +43,5 @@ vm_fault_func: vm_fault_t
 ${SUBDIRS}:
 	@cp Makefile.test $@/Makefile
 	@cp Kbuild.test $@/Kbuild
-	${MAKE} -C $@ ${MAKECMDGOALS}
+	${MAKE} -C $@ KDIR=${KDIR} KREL=${KREL} ${MAKECMDGOALS}
 
