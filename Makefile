@@ -321,15 +321,12 @@ help:
 	$(info $(HELP_TEXT))
 
 module-cleanup:
-	@if test -L /lib/modules/`uname -r`/mpool ; then \
-		rm -f /lib/modules/`uname -r`/mpool ;\
-	fi
-	@rm -rf /usr/lib/mpool
+	@rm -rf /lib/modules/`uname -r`/mpool /usr/lib/mpool
 
 install-pre: module-cleanup config all
 
 install: install-pre
-	$(MAKE) -C $(KDIR) M=`pwd` INSTALL_MOD_DIR=mpool modules_install
+	$(MAKE) -C $(KDIR) M=`pwd` modules_install
 	depmod -a || exit 1
 	-modprobe -r mpool
 	modprobe mpool

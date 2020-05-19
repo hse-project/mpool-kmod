@@ -27,3 +27,4 @@ bull.cov
 Module.symvers
 modules.builtin
 modules.order
+config/config.h*

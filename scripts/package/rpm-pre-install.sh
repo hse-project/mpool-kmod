@@ -148,11 +148,11 @@ do
     fi
 done
 
-[ -L /lib/modules/`uname -r`/mpool ] && rm -f /lib/modules/`uname -r`/mpool
+rm -rf /lib/modules/`uname -r`/mpool
 if [[ $1 -eq 2 ]]; then
-    rm -rf /usr/lib/mpool/modules/* || :
+    rm -rf /usr/lib/mpool/modules/*
 else
-    rm -rf /usr/lib/mpool || :
+    rm -rf /usr/lib/mpool
 fi
 
 if [[ ${deactivate_done} -eq 1 ]]; then

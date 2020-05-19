@@ -177,7 +177,7 @@ file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
 
 INSTALL(
   FILES "${PROJECT_SOURCE_DIR}/mpool.ko"
-  DESTINATION lib/modules/${KREL}/mpool
+  DESTINATION lib/modules/${KREL}/extra
   COMPONENT runtime
 )
 
@@ -224,6 +224,7 @@ set( CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
   /usr/lib
   /usr/lib/modules
   /usr/lib/modules/${KREL}
+  /usr/lib/modules/${KREL}/extra
 )
 
 # Setting this keeps CMake 3.7+ from generating nonsense filenames
@@ -256,9 +257,7 @@ set( CPACK_RPM_RUNTIME_PRE_INSTALL_SCRIPT_FILE "${MPOOL_TREE_SCRIPTS_DIR}/packag
 set( CPACK_RPM_RUNTIME_POST_INSTALL_SCRIPT_FILE "${MPOOL_TREE_SCRIPTS_DIR}/package/rpm-post-install.sh" )
 set( CPACK_RPM_RUNTIME_PRE_UNINSTALL_SCRIPT_FILE "${MPOOL_TREE_SCRIPTS_DIR}/package/rpm-pre-uninstall.sh" )
 set( CPACK_RPM_RUNTIME_POST_UNINSTALL_SCRIPT_FILE "${MPOOL_TREE_SCRIPTS_DIR}/package/rpm-post-uninstall.sh" )
-set( CPACK_RPM_RUNTIME_USER_FILELIST
-  "%dir /usr/lib/modules/${KREL}/mpool"
-)
+
 set( CPACK_RPM_RUNTIME_PACKAGE_REQUIRES "sos >= 3.2" )
 
 include( CPack )
