@@ -907,7 +907,7 @@ ecio_mblock_flush(
 	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
 		return merr(ev(EIO));
 
-	err = pd_bio_flush_sync(pd);
+	err = pd_bio_flush(pd);
 
 	ecio_pd_status_update(mp, layout->eld_ld.ol_pdh, erpt);
 

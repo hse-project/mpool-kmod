@@ -15,15 +15,6 @@
 
 #include "mpcore_defs.h"
 
-
-#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 7, 0)
-#define REQ_PREFLUSH REQ_FLUSH
-#endif
-
-#ifndef IOV_MAX
-#define IOV_MAX         (1024)
-#endif
-
 static const fmode_t    pd_bio_fmode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
 static char            *pd_bio_holder = "mpool";
 
@@ -55,21 +46,14 @@ merr_t pd_bio_dev_close(struct pd_dev_parm *dparm)
 }
 
 /**
- * pd_bio_discard_sync() - issue discard command to erase a byte-aligned region
+ * pd_bio_discard_() - issue discard command to erase a byte-aligned region
  * @pd:
  * @off:
  * @len:
  */
-merr_t pd_bio_discard_sync(struct mpool_dev_info  *pd, u64 off, size_t len)
+static merr_t pd_bio_discard(struct mpool_dev_info  *pd, u64 off, size_t len)
 {
 	struct block_device    *bdev;
-	struct bio	       *bio;
-	u64                     sector_mask;
-	struct request_queue   *q;
-	size_t                  max_discard_sectors;
-	size_t                  granularity;
-	size_t                  sector;
-	size_t                  bi_size;
 	merr_t                  err = 0;
 	int                     rc;
 
@@ -82,8 +66,7 @@ merr_t pd_bio_discard_sync(struct mpool_dev_info  *pd, u64 off, size_t len)
 	}
 
 	/* Validate I/O offset is sector-aligned */
-	sector_mask = PD_SECTORMASK(&pd->pdi_prop);
-	if (off & sector_mask) {
+	if (off & PD_SECTORMASK(&pd->pdi_prop)) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s, offset 0x%lx not multiple of sec size %u",
 			  err, pd->pdi_name, (ulong)off,
@@ -99,71 +82,14 @@ merr_t pd_bio_discard_sync(struct mpool_dev_info  *pd, u64 off, size_t len)
 		return err;
 	}
 
-	q = bdev_get_queue(bdev);
-	if (!q) {
-		err = merr(ev(ENXIO));
-		mp_pr_err("bdev %s, no request queue", err, pd->pdi_name);
-		return err;
+	rc = blkdev_issue_discard(bdev, off >> 9, len >> 9, GFP_NOIO, 0);
+	if (rc) {
+		err = merr(rc);
+		mp_pr_err("bdev %s, offset 0x%lx len 0x%lx, discard faiure",
+			  err, pd->pdi_name,
+			  (ulong)off, (ulong)len);
 	}
 
-	if (!blk_queue_discard(q)) {
-		err = merr(EOPNOTSUPP);
-		mp_pr_err("bdev %s, Discard command not supported",
-			  err, pd->pdi_name);
-		return err;
-	}
-
-	granularity = max_t(u32, q->limits.discard_granularity / KSECSZ, 1U);
-	max_discard_sectors = min_t(u32, q->limits.max_discard_sectors,
-				UINT_MAX / KSECSZ);
-	max_discard_sectors -= max_discard_sectors % granularity;
-	sector = off / KSECSZ;
-
-	while (len > 0) {
-		bio = bio_alloc(GFP_KERNEL, 1);
-		if (!bio) {
-			err = merr(ev(ENOMEM));
-			goto out;
-		}
-
-		bi_size = min_t(size_t, max_discard_sectors * KSECSZ, len);
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 13, 0)
-		bio->bi_iter.bi_sector = sector;
-		bio->bi_iter.bi_size   = bi_size;
-#else
-		bio->bi_max_vecs = 1;
-		bio->bi_io_vec   = bio->bi_inline_vecs;
-		bio->bi_sector   = sector;
-		bio->bi_size     = bi_size;
-#endif
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-		bio_set_dev(bio, bdev);
-#else
-		bio->bi_bdev = bdev;
-#endif
-
-#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 10, 0) || defined(MPOOL_DISTRO_EL74)
-		bio_set_op_attrs(bio, REQ_OP_DISCARD, 0);
-#else
-		bio->bi_rw = REQ_OP_DISCARD;
-#endif
-
-		sector += bi_size / KSECSZ;
-		len -= bi_size;
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
-		rc = submit_bio_wait(bio);
-#else
-		rc = submit_bio_wait(WRITE, bio);
-#endif
-		bio_put(bio);
-
-		if (rc)
-			err = merr(rc);
-	}
-out:
 	return err;
 }
 
@@ -263,18 +189,18 @@ pd_bio_erase_sync(
 		size_t zlen;
 
 		zlen = pd->pdi_parm.dpr_zonepg << PAGE_SHIFT;
-		err = pd_bio_discard_sync(pd, zoneaddr * zlen, zonecnt * zlen);
+		err = pd_bio_discard(pd, zoneaddr * zlen, zonecnt * zlen);
 	}
 
 	return ev(err);
 }
 
-merr_t pd_bio_flush_sync(struct mpool_dev_info *pd)
+merr_t pd_bio_flush(struct mpool_dev_info *pd)
 {
 	struct block_device    *bdev;
-	struct bio             *bio;
 	merr_t                  err = 0;
 	int                     rc;
+	sector_t                esect;
 
 	bdev = pd->pdi_parm.dpr_dev_private;
 
@@ -284,37 +210,12 @@ merr_t pd_bio_flush_sync(struct mpool_dev_info *pd)
 		return err;
 	}
 
-	/* Alloc BIO with zero iovec, since this is an empty flush IO */
-	bio = bio_alloc(GFP_KERNEL, 0);
-	if (!bio)
-		return merr(ENOMEM);
-
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 14, 0)
-	bio_set_dev(bio, bdev);
-#else
-	bio->bi_bdev = bdev;
-#endif
-
-#if LINUX_VERSION_CODE > KERNEL_VERSION(3, 10, 0) || defined(MPOOL_DISTRO_EL7)
-	bio_set_op_attrs(bio, REQ_OP_WRITE, REQ_PREFLUSH);
-#else
-	bio->bi_rw    = REQ_OP_PREFLUSH;
-#endif
-
-	/*
-	 * Submit an empty flush BIO to block layer. Block layer will decide
-	 * if an flush request needs to be issued. If device doesn't
-	 * have volatile write cache, this empty flush BIO will be a no-op.
-	 */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
-	rc = submit_bio_wait(bio);
-#else
-	rc = submit_bio_wait(WRITE_FLUSH, bio);
-#endif
-	bio_put(bio);
-
-	if (rc)
+	rc = blkdev_issue_flush(bdev, GFP_NOIO, &esect);
+	if (rc) {
 		err = merr(rc);
+		mp_pr_err("Flush failed for %s at sector %lu",
+			  err, pd->pdi_name, (ulong)esect);
+	}
 
 	return err;
 }
@@ -612,8 +513,9 @@ pd_bio_rw(
 		}
 	}
 
+out:
 	if (cbctx && atomic_dec_and_test(&cbctx->cb_iocnt))
 		complete(&cbctx->cb_iodone);
-out:
+
 	return err;
 }
