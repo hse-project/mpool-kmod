@@ -213,8 +213,8 @@ endif
 # Compare mpool_config.h to CONFIG_H_GEN.  If they differ, mark
 # mpool_config.h as a phony target so that it will be rebuilt.
 #
-CONFIG_H_GEN := $(wildcard config/config.h-${KREL})
-ifneq (${CONFIG_H_GEN},)
+CONFIG_H_GEN := config/config.h-${KREL}
+ifneq ($(wildcard ${CONFIG_H_GEN}),)
 RC := $(shell (cmp -s src/mpool_config.h ${CONFIG_H_GEN} || echo force))
 ifeq (${RC},force)
 .PHONY: src/mpool_config.h
@@ -287,29 +287,28 @@ CONFIG = $(BUILD_DIR)/mpool_config.cmake
 
 # Goals in mostly alphabetical order.
 #
-all: config
-	KCFLAGS=$(KCFLAGS_DEFAULT) $(MAKE) -C $(KDIR) M=`pwd` modules
-
-allv: config
-	KCFLAGS=$(KCFLAGS_DEFAULT) $(MAKE) -C $(KDIR) M=`pwd` V=1 modules
+allv: V=1
+allv all: config
+	KCFLAGS=$(KCFLAGS_DEFAULT) $(MAKE) -C $(KDIR) M=`pwd` V=$V modules
 
 ifneq (${BTYPES},)
 ${BTYPES}: ${BTYPESDEP}
 	@true
 endif
 
+clean: MAKEFLAGS += --no-print-directory
 clean:
 	$(MAKE) -C $(KDIR) M=`pwd` clean
-	${MAKE} -C config KDIR=${KDIR} KREL=${KREL} clean
-	rm -rf "$(BUILD_DIR)"/*.rpm *.mod src/mpool_config.h
+	rm -rf "$(BUILD_DIR)"/*.rpm
+	rm -rf src/mpool_config.h
 
 config-preview:
 	@$(config-show)
 
-config/config.h-${KREL}:
+${CONFIG_H_GEN}:
 	${MAKE} -j -C config KDIR=${KDIR} KREL=${KREL}  all
 
-src/mpool_config.h: config/config.h-${KREL}
+src/mpool_config.h: ${CONFIG_H_GEN}
 	cp $< $@
 
 ${CONFIG}: src/mpool_config.h
@@ -321,15 +320,16 @@ ${CONFIG}: src/mpool_config.h
 
 config: ${CONFIG}
 
+distclean scrub: MAKEFLAGS += --no-print-directory
 distclean scrub: clean
-	${MAKE} -C config distclean
+	${MAKE} -C config KDIR=${KDIR} KREL=${KREL} distclean
 	@if test -f ${CONFIG} ; then \
 		rm -rf "$(BUILD_DIR)" ;\
 	fi
 
 help:
-	@true
 	$(info $(HELP_TEXT))
+	@true
 
 module-cleanup:
 	@rm -rf /lib/modules/`uname -r`/mpool /usr/lib/mpool
