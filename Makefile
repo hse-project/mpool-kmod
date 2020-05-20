@@ -210,6 +210,17 @@ ifeq (${KREL},${KDIR})
   $(error "Unable to determine kernel release from KDIR.  Try setting it via the KREL= variable")
 endif
 
+# Compare mpool_config.h to CONFIG_H_GEN.  If they differ, mark
+# mpool_config.h as a phony target so that it will be rebuilt.
+#
+CONFIG_H_GEN := $(wildcard config/config.h-${KREL})
+ifneq (${CONFIG_H_GEN},)
+RC := $(shell (cmp -s src/mpool_config.h ${CONFIG_H_GEN} || echo force))
+ifeq (${RC},force)
+.PHONY: src/mpool_config.h
+endif
+endif
+
 #   CFILE
 #   DEPGRAPH
 #   BUILD_NUMBER
