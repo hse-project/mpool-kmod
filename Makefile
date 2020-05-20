@@ -299,6 +299,7 @@ endif
 clean: MAKEFLAGS += --no-print-directory
 clean:
 	$(MAKE) -C $(KDIR) M=`pwd` clean
+	$(MAKE) -C config clean
 	rm -rf "$(BUILD_DIR)"/*.rpm
 	rm -rf src/mpool_config.h
 
@@ -322,7 +323,7 @@ config: ${CONFIG}
 
 distclean scrub: MAKEFLAGS += --no-print-directory
 distclean scrub: clean
-	${MAKE} -C config KDIR=${KDIR} KREL=${KREL} distclean
+	${MAKE} -C config distclean
 	@if test -f ${CONFIG} ; then \
 		rm -rf "$(BUILD_DIR)" ;\
 	fi

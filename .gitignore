@@ -28,3 +28,6 @@ Module.symvers
 modules.builtin
 modules.order
 config/config.h*
+config/*/Kbuild
+config/*/Makefile
+config/*/config.h

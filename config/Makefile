@@ -6,7 +6,7 @@ SUBDIRS += mem_cgroup_count_vm_event count_memcg_event_mm
 SUBDIRS += bdi_alloc backing_dev_info generate_random_guid
 SUBDIRS += sched_clock shash_desc submit_bio
 
-.PHONY: all clean distclean ${SUBDIRS}
+.PHONY: all clean distclean maintainer-clean ${SUBDIRS}
 
 .DELETE_ON_ERROR:
 
@@ -21,16 +21,22 @@ ifeq (${KREL},${KDIR})
   $(error "Unable to determine kernel release from KDIR.  Try setting it via the KREL= variable")
 endif
 
+CLEANFILES := */Kbuild */Makefile */config.h
+
 CF := config.h-${KREL}
 
 MAKEFLAGS += --no-print-directory
 
 all: ${CF}
 
-clean: ${SUBDIRS}
+clean:
+	rm -f ${CLEANFILES}
 
 distclean: clean
 	rm -f config.h-*
+
+maintainer-clean: distclean
+	@true
 
 ${CF}: ${SUBDIRS}
 	echo "/* SPDX-License-Identifier: GPL-2.0-only */" > $@.tmp
