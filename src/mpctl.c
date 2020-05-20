@@ -4132,7 +4132,7 @@ static __init int mpc_init(void)
 	struct mpioc_cmn        cmn = { };
 	struct mpool_config     cfg = { };
 	struct mpc_unit        *ctlunit;
-	const char             *errmsg;
+	const char             *errmsg = NULL;
 	size_t                  sz;
 	merr_t                  err;
 	int                     rc, i;
