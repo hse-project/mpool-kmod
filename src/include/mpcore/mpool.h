@@ -37,7 +37,8 @@ struct mpool_descriptor;
 #define PD_SECTORMASK(_pd_prop) \
 	((uint64_t)(1 << PD_SECTORSZ(&pd->pdi_prop)) - 1)
 
-#define MPOOL_DRIVES_MAX           MP_MED_NUMBER
+#define MPOOL_DRIVES_MAX       MP_MED_NUMBER
+#define MP_MED_ALL             MP_MED_NUMBER
 
 /**
  * enum mpool_status -
