@@ -221,9 +221,9 @@ ifeq (${RC},force)
 endif
 endif
 
-#   CFILE
-#   DEPGRAPH
-#   BUILD_NUMBER
+CONFIG_CMAKE = $(BUILD_DIR)/mpool_config.cmake-${KREL}
+
+
 define config-show
 	(echo 'BUILD_DIR="$(BUILD_DIR)"';\
 	  echo 'CFILE="$(CFILE)"';\
@@ -277,8 +277,6 @@ ifeq ($(filter-out ${BTYPES},${MAKECMDGOALS}),)
 BTYPESDEP := ${.DEFAULT_GOAL}
 endif
 
-CONFIG = $(BUILD_DIR)/mpool_config.cmake
-
 .PHONY: all allv ${BTYPES}
 .PHONY: clean config config-preview distclean
 .PHONY: help install install-pre maintainer-clean
@@ -312,32 +310,26 @@ ${CONFIG_H_GEN}:
 src/mpool_config.h: ${CONFIG_H_GEN}
 	cp $< $@
 
-${CONFIG}: src/mpool_config.h
-	@test -d "$(BUILD_DIR)" || mkdir -p "$(BUILD_DIR)"
+${CONFIG_CMAKE}: src/mpool_config.h
+	mkdir -p "$(BUILD_DIR)"
+	rm -rf "${BUILD_DIR}"/*
 	@$(config-show) > $(BUILD_DIR)/config.sh
 	@$(config-gen) > $@.tmp
-	@cmp -s $@ $@.tmp || (cd "$(BUILD_DIR)" && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_SRC_DIR)")
-	@cp $@.tmp $@
+	(cd "$(BUILD_DIR)" && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_SRC_DIR)")
+	@mv $@.tmp $@
 
-config: ${CONFIG}
+config: ${CONFIG_CMAKE}
 
 distclean scrub: MAKEFLAGS += --no-print-directory
 distclean scrub: clean
 	${MAKE} -C config distclean
-	@if test -f ${CONFIG} ; then \
-		rm -rf "$(BUILD_DIR)" ;\
-	fi
+	rm -rf "$(BUILD_DIR)"
 
 help:
 	$(info $(HELP_TEXT))
 	@true
 
-module-cleanup:
-	@rm -rf /lib/modules/`uname -r`/mpool /usr/lib/mpool
-
-install-pre: module-cleanup config all
-
-install: install-pre
+install: all
 	$(MAKE) -C $(KDIR) M=`pwd` modules_install
 	depmod -a || exit 1
 	-modprobe -r mpool
@@ -351,7 +343,7 @@ maintainer-clean: distclean
 	@true
 
 package: all
-	-rm -f "$(BUILD_DIR)"/mpool*.rpm
+	rm -f "$(BUILD_DIR)"/mpool*.rpm
 	$(MAKE) -C "$(BUILD_DIR)" package
 
 rebuild: distclean all
