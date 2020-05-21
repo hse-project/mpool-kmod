@@ -181,14 +181,20 @@ endif
 
 BTOPDIR_DEFAULT       := $(MPOOL_SRC_DIR)/builds
 BUILD_DIR_DEFAULT     := $(BTOPDIR_DEFAULT)/$(BDIR_DEFAULT)
-MPOOL_REL_KERNEL      := $(shell uname -r)
-MPOOL_DBG_KERNEL      := $(MPOOL_REL_KERNEL)+debug
-KDIR_REL              := /lib/modules/$(MPOOL_REL_KERNEL)/build
-KDIR_DBG              := /lib/modules/$(MPOOL_DBG_KERNEL)/build
 BUILD_NUMBER_DEFAULT  := 0
 REL_CANDIDATE_DEFAULT := false
 
-KDIR_DEFAULT          := $(KDIR_REL)
+KARCH ?= $(shell uname -m)
+KDIR  ?= /lib/modules/$(shell uname -r)/build
+KREL  ?= $(patsubst /lib/modules/%/build,%,${KDIR})
+
+ifeq (${KREL},${KDIR})
+  KREL := $(patsubst /usr/src/kernels/%,%,${KDIR})
+endif
+
+ifeq (${KREL},${KDIR})
+  $(error "Unable to determine kernel release from KDIR.  Try setting it via the KREL= variable")
+endif
 
 ################################################################
 #
@@ -230,6 +236,8 @@ define config-show
 	(echo 'BUILD_DIR="$(BUILD_DIR)"';\
 	  echo 'CFILE="$(CFILE)"';\
 	  echo 'KDIR="$(KDIR)"';\
+	  echo 'KREL="$(KREL)"';\
+	  echo 'KARCH="$(KARCH)"';\
 	  echo 'BUILD_NUMBER="$(BUILD_NUMBER)"';\
 	  echo 'REL_CANDIDATE="$(REL_CANDIDATE)"')
 endef
@@ -239,7 +247,9 @@ define config-gen =
 	echo '#       it is the *first* setting that sticks!' ;\
 	echo ;\
 	echo '# building kernel modules' ;\
-	echo 'Set( MPOOL_KERNEL_DIR "$(KDIR)" CACHE STRING "" )' ;\
+	echo 'Set( KDIR "$(KDIR)" CACHE STRING "" )' ;\
+	echo 'Set( KREL "$(KREL)" CACHE STRING "" )' ;\
+	echo 'Set( KARCH "$(KARCH)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_NUMBER "$(BUILD_NUMBER)" CACHE STRING "" )' ;\
 	echo 'Set( REL_CANDIDATE "$(REL_CANDIDATE)" CACHE STRING "" )' ;\
 	if test "$(BUILD_SHA)"; then \
@@ -275,7 +285,7 @@ ifeq ($(filter-out ${BTYPES},${MAKECMDGOALS}),)
 BTYPESDEP := ${.DEFAULT_GOAL}
 endif
 
-CONFIG = $(BUILD_DIR)/mpool_config.cmake
+CONFIG = $(BUILD_DIR)/mpool_config.cmake-${KREL}
 
 .PHONY: all allv allq allqv allvq ${BTYPES}
 .PHONY: checkfiles clean config config-preview distclean
@@ -313,18 +323,17 @@ config-preview:
 
 ${CONFIG}:
 	@test -d "$(BUILD_DIR)" || mkdir -p "$(BUILD_DIR)"
+	@rm -rf "$(BUILD_DIR)"/*
 	@echo "prune: true" > "$(BUILD_DIR)"/.checkfiles.yml
 	@$(config-show) > $(BUILD_DIR)/config.sh
 	@$(config-gen) > $@.tmp
-	@cmp -s $@ $@.tmp || (cd "$(BUILD_DIR)" && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_SRC_DIR)")
-	@cp $@.tmp $@
+	(cd "$(BUILD_DIR)" && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_SRC_DIR)")
+	@mv $@.tmp $@
 
 config: ${CONFIG}
 
 distclean scrub:
-	@if test -f ${CONFIG} ; then \
-		rm -rf "$(BUILD_DIR)" ;\
-	fi
+	rm -rf "$(BUILD_DIR)"
 
 etags:
 	@echo "Making emacs TAGS file"
@@ -332,19 +341,11 @@ etags:
 	        -type f -name "*.[ch]" -print | etags -
 
 help:
-	@true
 	$(info $(HELP_TEXT))
+	@true
 
-module-cleanup:
-	@if test -L /lib/modules/`uname -r`/mpool ; then \
-		rm -f /lib/modules/`uname -r`/mpool ;\
-	fi
-	@rm -rf /usr/lib/mpool
-
-install-pre: module-cleanup config
-	@$(MAKE) -C "$(BUILD_DIR)" install
-
-install: install-pre
+install: all
+	$(MAKE) -C "$(BUILD_DIR)" install
 	udevadm control --reload-rules
 	depmod -a || exit 1
 	-modprobe -r mpool
@@ -358,7 +359,7 @@ maintainer-clean: distclean
 	@true
 
 package: all
-	-rm -f "$(BUILD_DIR)"/mpool*.rpm
+	rm -f "$(BUILD_DIR)"/mpool*.rpm
 	$(MAKE) -C "$(BUILD_DIR)" package
 
 rebuild: distclean all
