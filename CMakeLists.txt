@@ -18,150 +18,48 @@ project( mpool-kmod )
 
 set( CMAKE_INSTALL_PREFIX /usr )
 
-#   MPOOL_TREE_SCRIPTS_DIR
+# MPOOL_SCRIPTS_DIR
 #     - Scripts related to the mpool-kmod source tree (building it, working
 #       with git, etc.)
 #
-set( MPOOL_TREE_SCRIPTS_DIR  ${PROJECT_SOURCE_DIR}/scripts)
-set( MPOOL_INCLUDE_DIRS      ${PROJECT_SOURCE_DIR}/include)
+set( MPOOL_SCRIPTS_DIR      ${PROJECT_SOURCE_DIR}/scripts)
+set( MPOOL_INCLUDE_DIRS     ${PROJECT_SOURCE_DIR}/include)
 
-# Set up what kind of build type...
+
+# Edit these lines when we cut a release branch.
+set( MPOOL_VERSION_MAJOR 1 )
+set( MPOOL_VERSION_MINOR 8 )
+set( MPOOL_VERSION_PATCH 0 )
+
+
+# Decode build type...
 #
-if( "${CMAKE_BUILD_TYPE}" STREQUAL "Debug" )
-    set( MPOOL_BUILD_TYPE_FLAG "d" )
+string( TOLOWER "${CMAKE_BUILD_TYPE}" MPOOL_BUILD_TYPE )
 
-elseif( "${CMAKE_BUILD_TYPE}" STREQUAL "OptDebug" )
-    set( MPOOL_BUILD_TYPE_FLAG "od" )
-
-elseif( "${CMAKE_BUILD_TYPE}" STREQUAL "Release" )
-    add_definitions( -DNDEBUG )
-    set( MPOOL_BUILD_TYPE_FLAG "r" )
-
-elseif( "${CMAKE_BUILD_TYPE}" STREQUAL "RelAssert" )
-    set( MPOOL_BUILD_TYPE_FLAG "ra" )
-
-elseif( "${CMAKE_BUILD_TYPE}" STREQUAL "RelWithDebInfo" )
-    add_definitions( -DNDEBUG )
-    set( MPOOL_BUILD_TYPE_FLAG "rd" )
-
+if( "${MPOOL_BUILD_TYPE}" STREQUAL "release" )
+  set( BUILD_TYPE "r" )
+elseif( "${MPOOL_BUILD_TYPE}" STREQUAL "relassert" )
+  set( BUILD_TYPE "a" )
+elseif( "${MPOOL_BUILD_TYPE}" STREQUAL "debug" )
+  set( BUILD_TYPE "d" )
+elseif( "${MPOOL_BUILD_TYPE}" STREQUAL "optdebug" )
+  set( BUILD_TYPE "o" )
+elseif( "${MPOOL_BUILD_TYPE}" STREQUAL "relwithdebinfo" )
+  set( BUILD_TYPE "i" )
 else()
-    message( FATAL_ERROR "Invalid build type [${CMAKE_BUILD_TYPE}]" )
+  message( FATAL_ERROR "Invalid build type [${CMAKE_BUILD_TYPE}]" )
 endif()
 
 
 find_package(Git)
 
-# Edit these lines when we cut a release branch.
-set( MPOOL_VERSION_MAJOR 0 )
-set( MPOOL_VERSION_MINOR 0 )
-set( MPOOL_VERSION_PATCH 0 )
-
-set( MPOOL_KMOD_VERSION  ${KREL} )
-set( MPOOL_KMOD_ARCH     ${KARCH} )
-set( MPOOL_KMOD_DEBUG    "" )
-
-set(MPOOL_SHA ${MPOOL_SHA})
-if( NOT DEFINED MPOOL_SHA )
-    execute_process(
-	COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
-	WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-	OUTPUT_VARIABLE MPOOL_SHA
-	OUTPUT_STRIP_TRAILING_WHITESPACE
-	)
-endif()
-
 execute_process(
     COMMAND ${GIT_EXECUTABLE} describe --dirty --always --tags
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
     OUTPUT_VARIABLE MPOOL_TAG
+    ERROR_VARIABLE ERROUT
     OUTPUT_STRIP_TRAILING_WHITESPACE
     )
-
-execute_process(
-    COMMAND date +%Y%m%d
-    OUTPUT_VARIABLE MPOOL_DATESTAMP
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-
-# cmake DIST doesn't work in 3.6.2.
-#
-execute_process(
-    COMMAND rpm --eval %{dist}
-    OUTPUT_VARIABLE PACKAGE_DIST
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-set( MPOOL_KMOD_DIST ${PACKAGE_DIST})
-
-if( ${MPOOL_TAG} MATCHES "dirty$" )
-    set( MPOOL_DIRTYTAG ".dirty" )
-endif( )
-
-# Keep this line--we need it in release branches
-# set( MPOOL_MAJORMINORPATCH ${MPOOL_VERSION_MAJOR}.${MPOOL_VERSION_MINOR}.${MPOOL_VERSION_PATCH} )
-set( MPOOL_MAJORMINORPATCH "master" )
-
-set( MPOOL_RELEASE
-    ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.${MPOOL_DATESTAMP}.${MPOOL_SHA}${MPOOL_DIRTYTAG} )
-
-if (REL_CANDIDATE)
-    set( MPOOL_RELEASE ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.${MPOOL_DATESTAMP} )
-endif()
-
-set( MPOOL_KMOD_RELEASE
-    ${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.${MPOOL_DATESTAMP}.${MPOOL_SHA}${MPOOL_DIRTYTAG}-${MPOOL_KMOD_VERSION} )
-
-# MPOOL_SHA varibale may not be populated when user is downloading
-# source code from tarball on the github website instead of cloning the repo
-#
-if( NOT MPOOL_SHA )
-    set( MPOOL_KMOD_RELEASE
-	${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.${MPOOL_DATESTAMP}${MPOOL_DIRTYTAG}-${MPOOL_KMOD_VERSION} )
-
-    set( MPOOL_RELEASE
-	${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.${MPOOL_DATESTAMP}${MPOOL_DIRTYTAG} )
-endif()
-
-if (REL_CANDIDATE)
-    set( MPOOL_KMOD_RELEASE
-	${MPOOL_BUILD_TYPE_FLAG}${BUILD_NUMBER}.${MPOOL_DATESTAMP}-${MPOOL_KMOD_VERSION} )
-endif()
-
-if( ${MPOOL_KMOD_RELEASE} MATCHES "[+]debug")
-    string( REPLACE "+debug" "" MPOOL_KMOD_RELEASE ${MPOOL_KMOD_RELEASE} )
-    set( MPOOL_KMOD_DEBUG "-debug" )
-endif()
-
-if( ${MPOOL_KMOD_RELEASE} MATCHES ".${MPOOL_KMOD_ARCH}")
-    string( REPLACE ".${MPOOL_KMOD_ARCH}" "" MPOOL_KMOD_RELEASE ${MPOOL_KMOD_RELEASE} )
-endif()
-
-# Similar deal with dist.
-#
-if( ${MPOOL_KMOD_VERSION} MATCHES ${PACKAGE_DIST})
-    unset( MPOOL_KMOD_DIST )
-endif()
-
-# There's a little bit of horribleness in that Fedora/RedHat do not
-# permit hyphens in release strings.  We want the kernel version in
-# the release string in any RPM that contains a kernel module.  Our
-# compromise will be to substitute dots for hyphens in the kernel
-# module for the Release: field of the RPM, but for ease of scripting,
-# we'll leave the hyphen in the RPM file name.
-#
-execute_process(
-    COMMAND bash -c "echo ${MPOOL_KMOD_RELEASE} | sed 's/\-/./g'"
-    OUTPUT_VARIABLE MPOOL_KMOD_RPM_RELEASE
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-
-set( MPOOL_VERSION       ${MPOOL_MAJORMINORPATCH}-${MPOOL_RELEASE} )
-set( MPOOL_KMOD_VERSION  ${MPOOL_MAJORMINORPATCH}-${MPOOL_KMOD_RELEASE} )
-
-################################################################
-#
-# Subdirectories
-#
-################################################################
 
 INSTALL(
     FILES "${PROJECT_SOURCE_DIR}/mpool.ko"
@@ -171,16 +69,10 @@ INSTALL(
 
 # Package options
 #
-set( CPACK_GENERATOR              "RPM" )
-set( CPACK_PACKAGE_NAME           "mpool-kmod${MPOOL_KMOD_DEBUG}" )
+set( CPACK_PACKAGE_NAME           "kmod-mpool-${KREL}" )
 set( CPACK_PACKAGE_VERSION_MAJOR  "${MPOOL_VERSION_MAJOR}" )
 set( CPACK_PACKAGE_VERSION_MINOR  "${MPOOL_VERSION_MINOR}" )
 set( CPACK_PACKAGE_VERSION_PATCH  "${MPOOL_VERSION_PATCH}" )
-set( CPACK_RPM_PACKAGE_URL        "https://github.com/hse-project/mpool-kmod" )
-set( CPACK_RPM_PACKAGE_LICENSE    "GPLv2 and MIT" )
-set( CPACK_RPM_PACKAGE_GROUP      "Unspecified" )
-set( CPACK_RPM_PACKAGE_VENDOR     "Unspecified" )
-
 
 # Explicitly set CPACK_PACKAGE_VERSION first, otherwise CMake may generate
 # nonsense version strings within generated spec files
@@ -188,12 +80,38 @@ set( CPACK_RPM_PACKAGE_VENDOR     "Unspecified" )
 set( CPACK_PACKAGE_VERSION
     "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}" )
 
+message(STATUS "Configuring package ${CPACK_PACKAGE_NAME}" )
+message(STATUS "Configuring version ${CPACK_PACKAGE_VERSION}")
 
+
+set( CPACK_GENERATOR                "RPM" )
+set( CPACK_RPM_PACKAGE_URL          "https://github.com/hse-project/mpool-kmod" )
+set( CPACK_RPM_PACKAGE_LICENSE      "GPLv2 and MIT" )
+set( CPACK_RPM_PACKAGE_GROUP        "Unspecified" )
+set( CPACK_RPM_PACKAGE_VENDOR       "Unspecified" )
 set( CPACK_RPM_PACKAGE_VERSION      "${CPACK_PACKAGE_VERSION}" )
-set( CPACK_RPM_PACKAGE_RELEASE      "${MPOOL_RELEASE}${PACKAGE_DIST}")
+set( CPACK_RPM_PACKAGE_RELEASE      "${BUILD_NUMBER}")
 set( CPACK_RPM_COMPONENT_INSTALL    "ON" )
 set( CPACK_RPM_PACKAGE_RELOCATABLE  "ON" )
 set( CPACK_RPM_RELOCATION_PATHS     /usr /etc )
+
+
+if( "${MPOOL_TAG}" STREQUAL "" )
+    set( MPOOL_TAG "${CPACK_PACKAGE_VERSION}" )
+endif()
+
+# If it's a managed build (e.g, Jenkins) or a dirty git clone
+# then include the build number and git describe tag in the
+# package file name.  Otherwise, the file name will contain
+# only the simple version and no build type/number.
+#
+if( BUILD_NUMBER GREATER 0 OR "${MPOOL_TAG}" MATCHES "dirty$" )
+    set( BUILD_NUMBER "-${BUILD_TYPE}${BUILD_NUMBER}" )
+else()
+    set( MPOOL_TAG "${CPACK_PACKAGE_VERSION}" )
+    set( BUILD_NUMBER  "" )
+endif()
+
 
 # We don't want to claim ownership of these directories, lest there be
 # conflicts.
@@ -224,41 +142,23 @@ SET( CPACK_COMPONENTS_ALL runtime )
 set( CPACK_RPM_RUNTIME_PACKAGE_NAME  "${CPACK_PACKAGE_NAME}" )
 
 set( CPACK_RPM_RUNTIME_PACKAGE_SUMMARY
-    "Object Storage Media Pool (mpool) kernel module")
+    "Object Storage Media Pool (mpool) ${MPOOL_BUILD_TYPE} kernel module" )
 
 set(CPACK_RPM_RUNTIME_PACKAGE_DESCRIPTION
-    "Object Storage Media Pool (mpool) kernel module for kernel ${MPOOL_KMOD_VERSION}")
+    "${CPACK_RPM_RUNTIME_PACKAGE_SUMMARY} ${MPOOL_TAG} for kernel ${KREL}")
 
 set( CPACK_RPM_RUNTIME_FILE_NAME
-    "${CPACK_RPM_RUNTIME_PACKAGE_NAME}-${CPACK_RPM_PACKAGE_VERSION}-${MPOOL_KMOD_RELEASE}${MPOOL_KMOD_DIST}.${MPOOL_KMOD_ARCH}.rpm" )
+    "${CPACK_RPM_RUNTIME_PACKAGE_NAME}-${MPOOL_TAG}${BUILD_NUMBER}.${KARCH}.rpm" )
+
+message(STATUS "Configuring rpm file ${CPACK_RPM_RUNTIME_FILE_NAME}")
 
 set( CPACK_RPM_RUNTIME_PACKAGE_RELEASE             "${CPACK_RPM_PACKAGE_RELEASE}")
-set( CPACK_RPM_RUNTIME_USER_BINARY_SPECFILE        "${MPOOL_TREE_SCRIPTS_DIR}/package/mpool.spec.in")
-set( CPACK_RPM_RUNTIME_PRE_INSTALL_SCRIPT_FILE     "${MPOOL_TREE_SCRIPTS_DIR}/package/rpm-pre-install.sh" )
-set( CPACK_RPM_RUNTIME_POST_INSTALL_SCRIPT_FILE    "${MPOOL_TREE_SCRIPTS_DIR}/package/rpm-post-install.sh" )
-set( CPACK_RPM_RUNTIME_PRE_UNINSTALL_SCRIPT_FILE   "${MPOOL_TREE_SCRIPTS_DIR}/package/rpm-pre-uninstall.sh" )
-set( CPACK_RPM_RUNTIME_POST_UNINSTALL_SCRIPT_FILE  "${MPOOL_TREE_SCRIPTS_DIR}/package/rpm-post-uninstall.sh" )
+set( CPACK_RPM_RUNTIME_USER_BINARY_SPECFILE        "${MPOOL_SCRIPTS_DIR}/package/mpool.spec.in")
+set( CPACK_RPM_RUNTIME_PRE_INSTALL_SCRIPT_FILE     "${MPOOL_SCRIPTS_DIR}/package/rpm-pre-install.sh" )
+set( CPACK_RPM_RUNTIME_POST_INSTALL_SCRIPT_FILE    "${MPOOL_SCRIPTS_DIR}/package/rpm-post-install.sh" )
+set( CPACK_RPM_RUNTIME_PRE_UNINSTALL_SCRIPT_FILE   "${MPOOL_SCRIPTS_DIR}/package/rpm-pre-uninstall.sh" )
+set( CPACK_RPM_RUNTIME_POST_UNINSTALL_SCRIPT_FILE  "${MPOOL_SCRIPTS_DIR}/package/rpm-post-uninstall.sh" )
 
 set( CPACK_RPM_RUNTIME_PACKAGE_REQUIRES "sos >= 3.2" )
 
 include( CPack )
-
-get_directory_property( DirIncs INCLUDE_DIRECTORIES )
-get_directory_property( DirDefs COMPILE_DEFINITIONS )
-get_directory_property( DirOpts COMPILE_OPTIONS )
-
-message(STATUS "Compiler flags:")
-message(STATUS "  INCLUDE_DIRECTORIES    = ${DirIncs}")
-message(STATUS "  COMPILE_DEFINITIONS    = ${DirDefs}")
-message(STATUS "  COMPILE_OPTIONS        = ${DirOpts}")
-message(STATUS "  CMAKE_C_FLAGS          = ${CMAKE_C_FLAGS}")
-message(STATUS "Add the following compiler flags based on build type:")
-message(STATUS "  CMAKE_C_FLAGS_DEBUG          = ${CMAKE_C_FLAGS_DEBUG}")
-message(STATUS "  CMAKE_C_FLAGS_RELEASE        = ${CMAKE_C_FLAGS_RELEASE}")
-message(STATUS "  CMAKE_C_FLAGS_RELASSERT      = ${CMAKE_C_FLAGS_RELASSERT}")
-message(STATUS "  CMAKE_C_FLAGS_RELWITHDEBINFO = ${CMAKE_C_FLAGS_RELWITHDEBINFO}")
-message(STATUS "  CMAKE_C_FLAGS_OPTDEBUG       = ${CMAKE_C_FLAGS_OPTDEBUG}")
-message(STATUS "Linker flags:")
-message(STATUS "  CMAKE_EXE_LINKER_FLAGS = ${CMAKE_EXE_LINKER_FLAGS}")
-message(STATUS "Notes:")
-message(STATUS "  * Build with: 'make VERBOSE=1' to verify compiler flags")

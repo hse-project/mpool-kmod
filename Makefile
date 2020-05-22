@@ -43,12 +43,10 @@ Configuration Variables:
     BUILD_NUMBER  -- Build job number; defaults to 0 if not set.
                      Deliberately named to inherit the BUILD_NUMBER
 	             environment variable in Jenkins.
-    BUILD_SHA     -- abbreviated git SHA to use in packaging
     DEPGRAPH      -- Set to "--graphviz=<filename_prefix>" to generate
                      graphviz dependency graph files
     KDIR          -- Location of pre-built Linux Kernel source tree
                      Typically <linux source tree>/builds/<config name>.
-    REL_CANDIDATE -- When set builds a release candidate.
 
   Rules of use:
     * The 'config' target uses CFILE, KDIR, and BUILD_DIR.
@@ -66,9 +64,7 @@ Configuration Variables:
     BTOPDIR        = $(BTOPDIR_DEFAULT)
     BUILD_DIR      = $$(BTOPDIR)/$$(BDIR)
     BUILD_NUMBER   = $(BUILD_NUMBER_DEFAULT)
-    BUILD_SHA      = <none>
     CFILE          = $(CFILE_DEFAULT)
-    REL_CANDIDATE  = $(REL_CANDIDATE_DEFAULT)
 
 Get info about the build:
 
@@ -184,7 +180,6 @@ endif
 BTOPDIR_DEFAULT       := $(MPOOL_SRC_DIR)/builds
 BUILD_DIR_DEFAULT     := $(BTOPDIR_DEFAULT)/$(BDIR_DEFAULT)
 BUILD_NUMBER_DEFAULT  := 0
-REL_CANDIDATE_DEFAULT := false
 
 ################################################################
 #
@@ -196,7 +191,6 @@ BDIR          ?= $(BDIR_DEFAULT)
 BUILD_DIR     ?= $(BTOPDIR)/$(BDIR)
 CFILE         ?= $(CFILE_DEFAULT)
 BUILD_NUMBER  ?= $(BUILD_NUMBER_DEFAULT)
-REL_CANDIDATE ?= $(REL_CANDIDATE_DEFAULT)
 
 KARCH ?= $(shell uname -m)
 KDIR  ?= /lib/modules/$(shell uname -r)/build
@@ -230,8 +224,7 @@ define config-show
 	  echo 'KDIR="$(KDIR)"';\
 	  echo 'KREL="$(KREL)"';\
 	  echo 'KARCH="$(KARCH)"';\
-	  echo 'BUILD_NUMBER="$(BUILD_NUMBER)"';\
-	  echo 'REL_CANDIDATE="$(REL_CANDIDATE)"')
+	  echo 'BUILD_NUMBER="$(BUILD_NUMBER)"')
 endef
 
 define config-gen =
@@ -243,12 +236,6 @@ define config-gen =
 	echo 'Set( KREL "$(KREL)" CACHE STRING "" )' ;\
 	echo 'Set( KARCH "$(KARCH)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_NUMBER "$(BUILD_NUMBER)" CACHE STRING "" )' ;\
-	echo 'Set( REL_CANDIDATE "$(REL_CANDIDATE)" CACHE STRING "" )' ;\
-	if test "$(BUILD_SHA)"; then \
-		echo ;\
-		echo '# Use input SHA' ;\
-		echo 'Set( MPOOL_SHA "$(BUILD_SHA)" CACHE STRING "")' ;\
-	fi ;\
 	echo ;\
 	echo '# Linux distro detection' ;\
 	echo ;\
