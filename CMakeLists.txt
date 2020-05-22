@@ -100,25 +100,25 @@ string( TOLOWER "${CMAKE_BUILD_TYPE}" MPOOL_BUILD_TYPE )
 if( "${MPOOL_BUILD_TYPE}" STREQUAL "debug" )
   add_definitions( -DMPOOL_BUILD_DEBUG )
   add_definitions( -DDEBUG_RCU )
-  set( BUILD_NUMBER "d${BUILD_NUMBER}" )
+  set( BUILD_TYPE "d" )
 
 elseif( "${MPOOL_BUILD_TYPE}" STREQUAL "optdebug" )
   add_definitions( -DMPOOL_BUILD_DEBUG )
-  set( BUILD_NUMBER "o${BUILD_NUMBER}" )
+  set( BUILD_TYPE "o" )
 
 elseif( "${MPOOL_BUILD_TYPE}" STREQUAL "release" )
   add_definitions( -DMPOOL_BUILD_RELEASE )
   add_definitions( -DNDEBUG )
-  set( BUILD_NUMBER "r${BUILD_NUMBER}" )
+  set( BUILD_TYPE "r" )
 
 elseif( "${MPOOL_BUILD_TYPE}" STREQUAL "relassert" )
   add_definitions( -DMPOOL_BUILD_RELASSERT )
-  set( BUILD_NUMBER "a${BUILD_NUMBER}" )
+  set( BUILD_TYPE "a" )
 
 elseif( "${MPOOL_BUILD_TYPE}" STREQUAL "relwithdebinfo" )
   add_definitions( -DMPOOL_BUILD_RELEASE )
   add_definitions( -DNDEBUG )
-  set( BUILD_NUMBER "i${BUILD_NUMBER}" )
+  set( BUILD_TYPE "i" )
 
 else()
   message( FATAL_ERROR "Invalid build type [${CMAKE_BUILD_TYPE}]" )
@@ -139,126 +139,6 @@ find_package(Git)
 set( MPOOL_VERSION_MAJOR 1 )
 set( MPOOL_VERSION_MINOR 7 )
 set( MPOOL_VERSION_PATCH 1 )
-
-# Create our template for the header file
-#
-file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.h.in
-"#define MPOOL_VERSION_LEN 61\n"
-"static const char mpool_version[MPOOL_VERSION_LEN] = \"@MPOOL_VERSION@\";\n"
-"static const char mpool_branch[] = \"@MPOOL_BRANCH@\";\n"
-"static const char mpool_tag[] = \"@MPOOL_TAG@\";\n"
-"static const char mpool_buildserver[] = \"@MPOOL_BUILDSERVER@\";\n"
-)
-
-# Create cmake code to transform input template into target header file.
-#
-file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
-"set(MPOOL_SHA ${MPOOL_SHA})
- if( NOT DEFINED MPOOL_SHA )
-   execute_process(
-      COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
-      WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-      OUTPUT_VARIABLE MPOOL_SHA
-      OUTPUT_STRIP_TRAILING_WHITESPACE
-   )
- endif()
- execute_process(
-    COMMAND ${GIT_EXECUTABLE} describe --dirty --always --tags
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    OUTPUT_VARIABLE MPOOL_TAG
-    OUTPUT_STRIP_TRAILING_WHITESPACE
- )
- execute_process(
-    COMMAND ${GIT_EXECUTABLE} rev-parse --abbrev-ref HEAD
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    OUTPUT_VARIABLE MPOOL_BRANCH
-    OUTPUT_STRIP_TRAILING_WHITESPACE
- )
- execute_process(
-    COMMAND hostname -f
-    OUTPUT_VARIABLE MPOOL_BUILDSERVER
-    OUTPUT_STRIP_TRAILING_WHITESPACE
- )
-
- # cmake DIST doesn't work in 3.6.2.
- #
- execute_process(
-   COMMAND rpm --eval %{dist}
-  OUTPUT_VARIABLE PACKAGE_DIST
-  OUTPUT_STRIP_TRAILING_WHITESPACE
- )
- set( MPOOL_KMOD_DIST \${PACKAGE_DIST})
-
- if( \${MPOOL_TAG} MATCHES \"dirty$\" )
-  set( MPOOL_DIRTYTAG \".dirty\" )
- endif( )
-
-# Keep this line--we need it in release branches
-# set( MPOOL_MAJORMINORPATCH ${MPOOL_VERSION_MAJOR}.${MPOOL_VERSION_MINOR}.${MPOOL_VERSION_PATCH} )
- set( MPOOL_MAJORMINORPATCH \"master\" )
-
- set( MPOOL_RELEASE         ${BUILD_NUMBER}.\${MPOOL_SHA}\${MPOOL_DIRTYTAG} )
-
- if (REL_CANDIDATE)
-  set( MPOOL_RELEASE        ${BUILD_NUMBER} )
- endif()
-
- set( MPOOL_KMOD_RELEASE    ${BUILD_NUMBER}.\${MPOOL_SHA}\${MPOOL_DIRTYTAG} )
-
- # MPOOL_SHA varibale may not be populated when user is downloading
- # source code from tarball on the github website instead of cloning the repo
- #
- if( NOT MPOOL_SHA )
-   set( MPOOL_KMOD_RELEASE  ${BUILD_NUMBER}.\${MPOOL_DIRTYTAG} )
-   set( MPOOL_RELEASE       ${BUILD_NUMBER}.\${MPOOL_DIRTYTAG} )
- endif()
-
- if (REL_CANDIDATE)
-  set( MPOOL_KMOD_RELEASE ${BUILD_NUMBER} )
- endif()
-
- # There's a little bit of horribleness in that Fedora/RedHat do not
- # permit hyphens in release strings.  We want the kernel version in
- # the release string in any RPM that contains a kernel module.  Our
- # compromise will be to substitute dots for hyphens in the kernel
- # module for the Release: field of the RPM, but for ease of scripting,
- # we'll leave the hyphen in the RPM file name.
- #
- execute_process(
-  COMMAND bash -c \"echo \${MPOOL_KMOD_RELEASE} | sed 's/\-/./g'\"
-  OUTPUT_VARIABLE MPOOL_KMOD_RPM_RELEASE
-  OUTPUT_STRIP_TRAILING_WHITESPACE
- )
-
- set( MPOOL_VERSION \${MPOOL_MAJORMINORPATCH}-\${MPOOL_RELEASE} )
-
- if( NOT MPOOL_VERSION_CMAKE_INCLUDEONLY )
-   if (EXISTS \${DST})
-   	configure_file(\${SRC} \${CMAKE_BINARY_DIR}/mpool_version.h.tmp @ONLY)
-   	file(SHA256 \${CMAKE_BINARY_DIR}/mpool_version.h.tmp NEWSHA)
-   	file(SHA256 \${DST} OLDSHA)
-   	# Replace mpool_version.h file with a newer only if the content changed.
-   	if (NOT \${OLDSHA} EQUAL \${NEWSHA})
-     		configure_file(\${SRC} \${DST} @ONLY)
-   	endif()
-   else()
-     	configure_file(\${SRC} \${DST} @ONLY)
-   endif()
-
- endif( )
-"
-)
-
-# Set up custom target
-#
-add_custom_target(
-    mpool_version
-    COMMAND ${CMAKE_COMMAND} -E make_directory ${MPOOL_STAGE_INSTALL_PREFIX}/install
-    COMMAND ${CMAKE_COMMAND} -D SRC=${CMAKE_BINARY_DIR}/mpool_version.h.in
-                     -D DST=${MPOOL_STAGE_INSTALL_PREFIX}/include/mpool_version.h
-                     -P ${CMAKE_BINARY_DIR}/mpool_version.cmake
-)
-
 
 ################################################################
 #
@@ -289,10 +169,6 @@ add_subdirectory( scripts/sysctl.d )
 # This *should* be OK for a while, since we expect our build server to clone a
 # a fresh tree before every build.
 
-set( MPOOL_VERSION_CMAKE_INCLUDEONLY "ON" )
-include( ${CMAKE_BINARY_DIR}/mpool_version.cmake )
-set( MPOOL_VERSION_CMAKE_INCLUDEONLY "OFF" )
-
 # Package options
 #
 set( CPACK_GENERATOR              "RPM" )
@@ -309,14 +185,82 @@ set( CPACK_RPM_PACKAGE_VENDOR     "Unspecified" )
 # Explicitly set CPACK_PACKAGE_VERSION first, otherwise CMake may generate
 # nonsense version strings within generated spec files
 
-set( CPACK_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}" )
+set( CPACK_PACKAGE_VERSION
+    "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}" )
+
+set( CPACK_RPM_PACKAGE_VERSION      "${CPACK_PACKAGE_VERSION}" )
+set( CPACK_RPM_PACKAGE_RELEASE      "${BUILD_NUMBER}" )
+set( CPACK_RPM_COMPONENT_INSTALL    "ON" )
+set( CPACK_RPM_PACKAGE_RELOCATABLE  "ON" )
+set( CPACK_RPM_RELOCATION_PATHS     /usr /etc )
 
 
-set( CPACK_RPM_PACKAGE_VERSION "${CPACK_PACKAGE_VERSION}" )
-set( CPACK_RPM_PACKAGE_RELEASE "${MPOOL_RELEASE}${PACKAGE_DIST}")
-set( CPACK_RPM_COMPONENT_INSTALL "ON" )
-set( CPACK_RPM_PACKAGE_RELOCATABLE "ON" )
-set( CPACK_RPM_RELOCATION_PATHS /usr /etc )
+# Create our template for the header file
+#
+file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.h.in
+    "static const char mpool_version[] = \"@MPOOL_TAG@\";\n"
+)
+
+# Create cmake code to transform input template into target header file.
+#
+file(WRITE ${CMAKE_BINARY_DIR}/mpool_version.cmake
+"
+ execute_process(
+    COMMAND ${GIT_EXECUTABLE} describe --dirty --always --tags
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+    OUTPUT_VARIABLE MPOOL_TAG
+    ERROR_VARIABLE ERROR
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+ )
+
+ if( \"\${MPOOL_TAG}\" STREQUAL \"\" )
+     set( MPOOL_TAG \"${CPACK_PACKAGE_VERSION}\" )
+ endif()
+
+ if( NOT MPOOL_VERSION_CMAKE_INCLUDEONLY )
+   if (EXISTS \${DST})
+   	configure_file(\${SRC} \${CMAKE_BINARY_DIR}/mpool_version.h.tmp @ONLY)
+   	file(SHA256 \${CMAKE_BINARY_DIR}/mpool_version.h.tmp NEWSHA)
+   	file(SHA256 \${DST} OLDSHA)
+   	# Replace mpool_version.h file with a newer only if the content changed.
+   	if (NOT \${OLDSHA} EQUAL \${NEWSHA})
+     		configure_file(\${SRC} \${DST} @ONLY)
+   	endif()
+   else()
+     	configure_file(\${SRC} \${DST} @ONLY)
+   endif()
+ endif( )
+"
+)
+
+# Set up custom target
+#
+add_custom_target(
+    mpool_version
+    COMMAND ${CMAKE_COMMAND} -E make_directory ${MPOOL_STAGE_INSTALL_PREFIX}/install
+    COMMAND ${CMAKE_COMMAND} -D SRC=${CMAKE_BINARY_DIR}/mpool_version.h.in
+                     -D DST=${MPOOL_STAGE_INSTALL_PREFIX}/include/mpool_version.h
+                     -P ${CMAKE_BINARY_DIR}/mpool_version.cmake
+)
+
+
+set( MPOOL_VERSION_CMAKE_INCLUDEONLY "ON" )
+include( ${CMAKE_BINARY_DIR}/mpool_version.cmake )
+set( MPOOL_VERSION_CMAKE_INCLUDEONLY "OFF" )
+
+
+# If it's a managed build (e.g, Jenkins) or a dirty git clone
+# then include the build number and git describe tag in the
+# package file name.  Otherwise, the file name will contain
+# only the simple version and no build type/number.
+#
+if( BUILD_NUMBER GREATER 0 OR "${MPOOL_TAG}" MATCHES "dirty$" )
+    set( BUILD_NUMBER "-${BUILD_TYPE}${BUILD_NUMBER}" )
+else()
+    set( MPOOL_TAG "${CPACK_PACKAGE_VERSION}" )
+    set( BUILD_NUMBER  "" )
+endif()
+
 
 # We don't want to claim ownership of these directories, lest there be
 # conflicts.
@@ -360,10 +304,10 @@ set( CPACK_RPM_RUNTIME_PACKAGE_SUMMARY
     "Object Storage Media Pool (mpool) ${MPOOL_BUILD_TYPE} kernel module" )
 
 set( CPACK_RPM_RUNTIME_PACKAGE_DESCRIPTION
-    "${CPACK_RPM_RUNTIME_PACKAGE_SUMMARY} for kernel ${KREL}")
+    "${CPACK_RPM_RUNTIME_PACKAGE_SUMMARY} ${MPOOL_TAG} for kernel ${KREL}")
 
 set( CPACK_RPM_RUNTIME_FILE_NAME
-    "${CPACK_RPM_RUNTIME_PACKAGE_NAME}-${CPACK_RPM_PACKAGE_VERSION}-${MPOOL_KMOD_RELEASE}${MPOOL_KMOD_DIST}.${KARCH}.rpm" )
+    "${CPACK_RPM_RUNTIME_PACKAGE_NAME}-${MPOOL_TAG}${BUILD_NUMBER}.${KARCH}.rpm" )
 
 set( CPACK_RPM_RUNTIME_PACKAGE_RELEASE "${CPACK_RPM_PACKAGE_RELEASE}")
 set( CPACK_RPM_RUNTIME_USER_BINARY_SPECFILE "${MPOOL_TREE_SCRIPTS_DIR}/package/mpool.spec.in")
