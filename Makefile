@@ -89,14 +89,6 @@ Debug and Release Convenience Targets:
 
 Examples:
 
-  Use 'config-preview' to preview a configuration without modifying any
-  files or directories.  This will show you which kernel is used, where
-  the build outputs are located, etc.
-
-    make config-preview
-    make config-preview release
-    make config-preview BTOPDIR=~/builds BDIR=yoyo
-
   Rebuild everything:
 
     make distclean all
@@ -215,19 +207,10 @@ ifeq (${RC},force)
 endif
 endif
 
-CONFIG_CMAKE = $(BUILD_DIR)/mpool_config.cmake-${KREL}
+CONFIG_CMAKE = $(BUILD_DIR)/${KREL}/mpool_config.cmake
 
 
-define config-show
-	(echo 'BUILD_DIR="$(BUILD_DIR)"';\
-	  echo 'CFILE="$(CFILE)"';\
-	  echo 'KDIR="$(KDIR)"';\
-	  echo 'KREL="$(KREL)"';\
-	  echo 'KARCH="$(KARCH)"';\
-	  echo 'BUILD_NUMBER="$(BUILD_NUMBER)"')
-endef
-
-define config-gen =
+define config-cmake =
 	(echo '# Note: When a variable is set multiple times in this file,' ;\
 	echo '#       it is the *first* setting that sticks!' ;\
 	echo ;\
@@ -236,8 +219,6 @@ define config-gen =
 	echo 'Set( KREL "$(KREL)" CACHE STRING "" )' ;\
 	echo 'Set( KARCH "$(KARCH)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_NUMBER "$(BUILD_NUMBER)" CACHE STRING "" )' ;\
-	echo ;\
-	echo '# Linux distro detection' ;\
 	echo ;\
 	echo '# BEGIN: $(CFILE)' ;\
 	cat  "$(CFILE)" ;\
@@ -265,8 +246,8 @@ BTYPESDEP := ${.DEFAULT_GOAL}
 endif
 
 .PHONY: all allv ${BTYPES}
-.PHONY: clean config config-preview distclean
-.PHONY: help install install-pre maintainer-clean
+.PHONY: clean config distclean
+.PHONY: help install maintainer-clean
 .PHONY: load package rebuild scrub unload
 
 
@@ -283,13 +264,17 @@ endif
 
 clean: MAKEFLAGS += --no-print-directory
 clean:
+	-$(MAKE) -C $(BUILD_DIR)/${KREL} clean
 	$(MAKE) -C $(KDIR) M=`pwd` clean
 	$(MAKE) -C config clean
-	rm -rf "$(BUILD_DIR)"/*.rpm
+	rm -rf $(BUILD_DIR)/${KREL}/*.rpm
 	rm -rf src/mpool_config.h
 
-config-preview:
-	@$(config-show)
+${CONFIG_CMAKE}:
+	mkdir -p $(BUILD_DIR)/${KREL}
+	@$(config-cmake) > $@.tmp
+	(cd $(BUILD_DIR)/${KREL} && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_SRC_DIR)")
+	@mv $@.tmp $@
 
 ${CONFIG_H_GEN}:
 	${MAKE} -j -C config KDIR=${KDIR} KREL=${KREL}  all
@@ -297,20 +282,12 @@ ${CONFIG_H_GEN}:
 src/mpool_config.h: ${CONFIG_H_GEN}
 	cp $< $@
 
-${CONFIG_CMAKE}: src/mpool_config.h
-	mkdir -p "$(BUILD_DIR)"
-	rm -rf "${BUILD_DIR}"/*
-	@$(config-show) > $(BUILD_DIR)/config.sh
-	@$(config-gen) > $@.tmp
-	(cd "$(BUILD_DIR)" && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_SRC_DIR)")
-	@mv $@.tmp $@
-
-config: ${CONFIG_CMAKE}
+config: src/mpool_config.h
 
 distclean scrub: MAKEFLAGS += --no-print-directory
 distclean scrub: clean
 	${MAKE} -C config distclean
-	rm -rf "$(BUILD_DIR)"
+	rm -rf $(BUILD_DIR)
 
 help:
 	$(info $(HELP_TEXT))
@@ -318,7 +295,6 @@ help:
 
 install: all
 	$(MAKE) -C $(KDIR) M=`pwd` modules_install
-	depmod -a || exit 1
 	-modprobe -r mpool
 	modprobe mpool
 
@@ -329,9 +305,8 @@ load:
 maintainer-clean: distclean
 	@true
 
-package: all
-	rm -f "$(BUILD_DIR)"/mpool*.rpm
-	$(MAKE) -C "$(BUILD_DIR)" package
+package: all ${CONFIG_CMAKE}
+	$(MAKE) -C $(BUILD_DIR)/${KREL} package
 
 rebuild: distclean all
 
