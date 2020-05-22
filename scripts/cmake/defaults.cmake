@@ -39,11 +39,3 @@
 # See http://www.cmake.org/cmake/help/v3.0/manual/cmake-variables.7.html
 # for more info:
 Set( CMAKE_BUILD_TYPE        "Release"    CACHE STRING "" )
-
-# Controls verbosity when building kernel modules:
-#   TRUE  - more verbose
-#   FALSE - less verbose
-Set( MPOOL_KERNEL_VERBOSE      FALSE      CACHE BOOL "")
-
-# Set to location of pre-built kernel tree
-Set( MPOOL_KERNEL_DIR          ""         CACHE STRING "" )

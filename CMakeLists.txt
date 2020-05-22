@@ -5,9 +5,6 @@
 #
 
 cmake_minimum_required(VERSION 3.6)
-if(${CMAKE_MAJOR_VERSION} GREATER 2)
-    cmake_policy(SET CMP0046 OLD)
-endif()
 
 set (CMAKE_C_STANDARD 99)
 

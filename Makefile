@@ -122,9 +122,9 @@ Examples:
 
     make debug
 
-  Build against currently running kernel:
+  Build against a debug kernel that is not currently booted:
 
-    make debug KDIR=/lib/modules/`uname -r`/build
+    make debug KDIR=/lib/modules/`uname -r`+debug/build
     make debug all
 
   Custom everything:
