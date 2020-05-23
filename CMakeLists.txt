@@ -20,7 +20,6 @@ set( CMAKE_INSTALL_PREFIX /usr )
 #       with git, etc.)
 #
 set( MPOOL_SCRIPTS_DIR      ${PROJECT_SOURCE_DIR}/scripts)
-set( MPOOL_INCLUDE_DIRS     ${PROJECT_SOURCE_DIR}/include)
 
 
 # Edit these lines when we cut a release branch.
@@ -31,20 +30,18 @@ set( MPOOL_VERSION_PATCH 0 )
 
 # Decode build type...
 #
-string( TOLOWER "${CMAKE_BUILD_TYPE}" MPOOL_BUILD_TYPE )
-
-if( "${MPOOL_BUILD_TYPE}" STREQUAL "release" )
-  set( BUILD_TYPE "r" )
-elseif( "${MPOOL_BUILD_TYPE}" STREQUAL "relassert" )
-  set( BUILD_TYPE "a" )
-elseif( "${MPOOL_BUILD_TYPE}" STREQUAL "debug" )
-  set( BUILD_TYPE "d" )
-elseif( "${MPOOL_BUILD_TYPE}" STREQUAL "optdebug" )
-  set( BUILD_TYPE "o" )
-elseif( "${MPOOL_BUILD_TYPE}" STREQUAL "relwithdebinfo" )
-  set( BUILD_TYPE "i" )
+if( "${BUILD_TYPE}" STREQUAL "release" )
+    set( BUILD_STYPE "r" )
+elseif( "${BUILD_TYPE}" STREQUAL "relassert" )
+    set( BUILD_STYPE "a" )
+elseif( "${BUILD_TYPE}" STREQUAL "debug" )
+    set( BUILD_STYPE "d" )
+elseif( "${BUILD_TYPE}" STREQUAL "optdebug" )
+    set( BUILD_STYPE "o" )
+elseif( "${BUILD_TYPE}" STREQUAL "relwithdebinfo" )
+    set( BUILD_STYPE "i" )
 else()
-  message( FATAL_ERROR "Invalid build type [${CMAKE_BUILD_TYPE}]" )
+    message( FATAL_ERROR "Invalid build type [${BUILD_TYPE}]" )
 endif()
 
 
@@ -103,7 +100,7 @@ endif()
 # only the simple version and no build type/number.
 #
 if( BUILD_NUMBER GREATER 0 OR "${MPOOL_TAG}" MATCHES "dirty$" )
-    set( BUILD_NUMBER "-${BUILD_TYPE}${BUILD_NUMBER}" )
+    set( BUILD_NUMBER "-${BUILD_STYPE}${BUILD_NUMBER}" )
 else()
     set( MPOOL_TAG "${CPACK_PACKAGE_VERSION}" )
     set( BUILD_NUMBER  "" )
@@ -139,7 +136,7 @@ SET( CPACK_COMPONENTS_ALL runtime )
 set( CPACK_RPM_RUNTIME_PACKAGE_NAME  "${CPACK_PACKAGE_NAME}" )
 
 set( CPACK_RPM_RUNTIME_PACKAGE_SUMMARY
-    "Object Storage Media Pool (mpool) ${MPOOL_BUILD_TYPE} kernel module" )
+    "Object Storage Media Pool (mpool) ${BUILD_TYPE} kernel module" )
 
 set(CPACK_RPM_RUNTIME_PACKAGE_DESCRIPTION
     "${CPACK_RPM_RUNTIME_PACKAGE_SUMMARY} ${MPOOL_TAG} for kernel ${KREL}")

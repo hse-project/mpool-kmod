@@ -10,92 +10,58 @@
 
 define HELP_TEXT
 
-mpool Makefile Help
+mpool kmod Makefile Help
 -------------------
 
 Primary Targets:
 
-    all       -- Build binaries, libraries, tests, etc.
-    clean     -- Delete most build outputs (saves external repos).
-    config    -- Create build output directory and run cmake config.
-    distclean -- Delete all build outputs (i.e., start over).
-    install   -- Install build artifacts locally
+    all       -- Build mpool module
+    clean     -- Delete most build outputs
+    distclean -- Delete all build outputs
+    install   -- Install mpool kmod locally
     package   -- Build "all" and generate RPMs
     help      -- Print this message.
 
 Configuration Variables:
 
-  These configuration variables can be set on the command line
-  or in ~/mpool-kmod.mk to customize the build.
+  The following configuration variables can be set on the command line
+  to customize the build.
 
-  Used 'config' as well as 'clean', 'all', etc:
-    BUILD_DIR -- The build output directory.  The default value is
-                 BTOPDIR/BDIR.  BUILD_DIR can be set directly, in which
-                 case BTOPDIR and BDIR are ignored, or BUILD_DIR can be
-                 set indirectly via BTOPDIR and BDIR.  A common use case
-                 is to set BTOPDIR in ~/mpool-kmod.mk and BDIR on the command
-                 line.
-    BTOPDIR   -- See BUILD_DIR.
-    BDIR      -- See BUILD_DIR.
+  Used by all targets:
+    BUILD_DIR -- The top-level build output directory for package building
+    KDIR      -- Location of pre-built Linux Kernel source tree
+                 Typically <linux source tree>/builds/<config name>.
 
-  Used only by 'config':
-    CFILE         -- Name of file containing mpool config parameters.
+  Used only by 'package':
     BUILD_NUMBER  -- Build job number; defaults to 0 if not set.
                      Deliberately named to inherit the BUILD_NUMBER
-	             environment variable in Jenkins.
+	             environment variable from Jenkins.
     DEPGRAPH      -- Set to "--graphviz=<filename_prefix>" to generate
                      graphviz dependency graph files
-    KDIR          -- Location of pre-built Linux Kernel source tree
-                     Typically <linux source tree>/builds/<config name>.
-
-  Rules of use:
-    * The 'config' target uses CFILE, KDIR, and BUILD_DIR.
-      It creates the build output directory (BUILD_DIR)
-      and stores the values of CFILE, and KDIR in
-      BUILD_DIR/mpool_config.cmake.
-    * Other build-related targets ('clean', 'all', etc.)
-      require BUILD_DIR and ignore CFILE, and KDIR
-      as their values are retrieved from BUILD_DIR/mpool_config.cmake.
-    * A side-effect of the "clean" target it that config must be re-run,
-      which means you have to keep specifying KDIR for that step.
 
   Defaults:
-    BDIR           = $(BDIR_DEFAULT)
-    BTOPDIR        = $(BTOPDIR_DEFAULT)
-    BUILD_DIR      = $$(BTOPDIR)/$$(BDIR)
-    BUILD_NUMBER   = $(BUILD_NUMBER_DEFAULT)
-    CFILE          = $(CFILE_DEFAULT)
-
-Get info about the build:
-
-Customizations:
-
-  The behavior of this makefile can be customized by creating the following files in your home directory:
-
-    ~/mpool-kmod.mk  -- included at the top of this makefile, can be
-                  used to change default build directory, default
-                  build targe, etc.
-    ~/mpool-kmod1.mk  -- included at the end of this makefile, can be used
-                  to extend existing targets or to create your own
-                  custom targets
-
-Debug and Release Convenience Targets:
-
-  Convenience targets are keyboard shortcuts aimed at reducing the
-  incidence of carpal tunnel syndrome among our highly valued
-  development staff.  Including 'release' (or 'debug') on the command
-  line changes the defaults for CFILE, BDIR to produce a release (or
-  debug) build.
+    BUILD_DIR     ${BUILD_DIR}
+    BUILD_SUBDIR  ${BUILD_SUBDIR}
+    BUILD_NUMBER  ${BUILD_NUMBER}
+    BUILD_TYPE    ${BUILD_TYPE}
+    KCFLAGS       ${KCFLAGS}
+    KDIR          ${KDIR}
+    KREL          ${KREL}
+    KARCH         ${KARCH}
 
 Examples:
 
-  Rebuild everything:
+  Build just the mpool module:
 
-    make distclean all
+    make -j all
 
-  Rebuild the bulk of mpool code:
+  Build the mpool module and generate an RPM package:
 
-    make clean all
+    make -j package
+
+  Rebuild the bulk of mpool module code:
+
+    make -j clean all
 
   Incremental rebuild after modifications to mpool code:
 
@@ -105,11 +71,6 @@ Examples:
 
     make (or make release)
 
-  Work in the 'release' build output dir, but with your own configuration file:
-
-    make release CFILE=myconfig.cmake
-    make release all
-
   Create a 'debug' build:
 
     make debug
@@ -117,12 +78,6 @@ Examples:
   Build against a debug kernel that is not currently booted:
 
     make debug KDIR=/lib/modules/`uname -r`+debug/build
-    make debug all
-
-  Custom everything:
-
-    make BDIR=mybuild CFILE=mybuild.cmake KDIR=~/linux-stable
-    make BDIR=mybuild all
 
 endef
 
@@ -132,61 +87,35 @@ endef
 .NOTPARALLEL:
 
 
-# MPOOL_SRC_DIR is set to the top of the mpool source tree.
-MPOOL_SRC_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
+# Find the top-level directory of the mpool kmod source tree
+MPOOL_TOP_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 
-# Other dirs commonly accessed w/in this makefile:
-S=$(MPOOL_SRC_DIR)/scripts
-
-################################################################
+# Set vars according to build type...
 #
-# Set config var defaults.
-#
-################################################################
 ifeq ($(findstring release,$(MAKECMDGOALS)),release)
-  BDIR_DEFAULT  := release
-  CFILE_DEFAULT := $(S)/cmake/release.cmake
-  KCFLAGS_DEFAULT += "-O2 -DNDEBUG"
-else ifeq ($(findstring relwithdebug,$(MAKECMDGOALS)),relwithdebug)
-  BDIR_DEFAULT  := relwithdebug
-  CFILE_DEFAULT := $(S)/cmake/relwithdebug.cmake
-  KCFLAGS_DEFAULT += "-O2 -DNDEBUG -g"
+	BUILD_TYPE := release
+	KCFLAGS += -O2 -DNDEBUG
 else ifeq ($(findstring relassert,$(MAKECMDGOALS)),relassert)
-  BDIR_DEFAULT  := relassert
-  CFILE_DEFAULT := $(S)/cmake/relassert.cmake
-  KCFLAGS_DEFAULT += -O2
+	BUILD_TYPE := relassert
+	KCFLAGS += -O2
+else ifeq ($(findstring relwithdebug,$(MAKECMDGOALS)),relwithdebug)
+	BUILD_TYPE := relwithdebug
+	KCFLAGS += -O2 -DNDEBUG -g
 else ifeq ($(findstring optdebug,$(MAKECMDGOALS)),optdebug)
-  BDIR_DEFAULT  := optdebug
-  CFILE_DEFAULT := $(S)/cmake/optdebug.cmake
-  KCFLAGS_DEFAULT += -Og
+	BUILD_TYPE := optdebug
+	KCFLAGS += -Og
 else ifeq ($(findstring debug,$(MAKECMDGOALS)),debug)
-  BDIR_DEFAULT  := debug
-  CFILE_DEFAULT := $(S)/cmake/debug.cmake
-  KCFLAGS_DEFAULT += -g
+	BUILD_TYPE := debug
+	KCFLAGS += -g
 else
-  BDIR_DEFAULT  := release
-  CFILE_DEFAULT := $(S)/cmake/release.cmake
-  KCFLAGS_DEFAULT += "-O2 -DNDEBUG"
+	BUILD_TYPE := release
+	KCFLAGS += -O2 -DNDEBUG
 endif
 
-BTOPDIR_DEFAULT       := $(MPOOL_SRC_DIR)/builds
-BUILD_DIR_DEFAULT     := $(BTOPDIR_DEFAULT)/$(BDIR_DEFAULT)
-BUILD_NUMBER_DEFAULT  := 0
 
-################################################################
-#
-# Set config var from defaults unless set by user on the command line.
-#
-################################################################
-BTOPDIR       ?= $(BTOPDIR_DEFAULT)
-BDIR          ?= $(BDIR_DEFAULT)
-BUILD_DIR     ?= $(BTOPDIR)/$(BDIR)
-CFILE         ?= $(CFILE_DEFAULT)
-BUILD_NUMBER  ?= $(BUILD_NUMBER_DEFAULT)
-
-KARCH ?= $(shell uname -m)
 KDIR  ?= /lib/modules/$(shell uname -r)/build
 KREL  ?= $(patsubst /lib/modules/%/build,%,${KDIR})
+KARCH ?= $(shell uname -m)
 
 ifeq (${KREL},${KDIR})
   KREL := $(patsubst /usr/src/kernels/%,%,${KDIR})
@@ -195,6 +124,7 @@ endif
 ifeq (${KREL},${KDIR})
   $(error "Unable to determine kernel release from KDIR.  Try setting it via the KREL= variable")
 endif
+
 
 # Compare mpool_config.h to CONFIG_H_GEN.  If they differ, mark
 # mpool_config.h as a phony target so that it will be rebuilt.
@@ -207,26 +137,25 @@ ifeq (${RC},force)
 endif
 endif
 
-CONFIG_CMAKE = $(BUILD_DIR)/${KREL}/mpool_config.cmake
 
+# Set up for cmake configuration...
+#
+BUILD_DIR     ?= $(MPOOL_TOP_DIR)/builds
+BUILD_SUBDIR  := $(BUILD_DIR)/${KREL}/$(BUILD_TYPE)
+BUILD_NUMBER  ?= 0
+
+CONFIG_CMAKE = $(BUILD_SUBDIR)/mpool_config.cmake
 
 define config-cmake =
 	(echo '# Note: When a variable is set multiple times in this file,' ;\
 	echo '#       it is the *first* setting that sticks!' ;\
 	echo ;\
-	echo '# building kernel modules' ;\
 	echo 'Set( KDIR "$(KDIR)" CACHE STRING "" )' ;\
 	echo 'Set( KREL "$(KREL)" CACHE STRING "" )' ;\
 	echo 'Set( KARCH "$(KARCH)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_TYPE "$(BUILD_TYPE)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_NUMBER "$(BUILD_NUMBER)" CACHE STRING "" )' ;\
-	echo ;\
-	echo '# BEGIN: $(CFILE)' ;\
-	cat  "$(CFILE)" ;\
-	echo '# END:   $(CFILE)' ;\
-	echo ;\
-	echo '# BEGIN: $(S)/cmake/defaults.cmake' ;\
-	cat  "$(S)/cmake/defaults.cmake" ;\
-	echo '# END:   $(S)/cmake/defaults.cmake')
+	)
 endef
 
 
@@ -255,7 +184,7 @@ endif
 #
 allv: V=1
 allv all: config
-	KCFLAGS=$(KCFLAGS_DEFAULT) $(MAKE) -C $(KDIR) M=`pwd` V=$V modules
+	KCFLAGS="${KCFLAGS}" $(MAKE) -C $(KDIR) M=`pwd` V=$V modules
 
 ifneq (${BTYPES},)
 ${BTYPES}: ${BTYPESDEP}
@@ -264,16 +193,15 @@ endif
 
 clean: MAKEFLAGS += --no-print-directory
 clean:
-	-$(MAKE) -C $(BUILD_DIR)/${KREL} clean
+	-[ -f ${CONFIG_CMAKE} ] && $(MAKE) -C $(BUILD_SUBDIR) clean
 	$(MAKE) -C $(KDIR) M=`pwd` clean
 	$(MAKE) -C config clean
-	rm -rf $(BUILD_DIR)/${KREL}/*.rpm
-	rm -rf src/mpool_config.h
+	rm -rf kmod-mpool-$(KREL)*.rpm src/mpool_config.h .tmp_versions
 
 ${CONFIG_CMAKE}:
-	mkdir -p $(BUILD_DIR)/${KREL}
+	mkdir -p $(BUILD_SUBDIR)
 	@$(config-cmake) > $@.tmp
-	(cd $(BUILD_DIR)/${KREL} && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_SRC_DIR)")
+	(cd $(BUILD_SUBDIR) && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_TOP_DIR)")
 	@mv $@.tmp $@
 
 ${CONFIG_H_GEN}:
@@ -287,7 +215,7 @@ config: src/mpool_config.h
 distclean scrub: MAKEFLAGS += --no-print-directory
 distclean scrub: clean
 	${MAKE} -C config distclean
-	rm -rf $(BUILD_DIR)
+	rm -rf $(BUILD_DIR) *.rpm
 
 help:
 	$(info $(HELP_TEXT))
@@ -306,7 +234,8 @@ maintainer-clean: distclean
 	@true
 
 package: all ${CONFIG_CMAKE}
-	$(MAKE) -C $(BUILD_DIR)/${KREL} package
+	$(MAKE) -C $(BUILD_SUBDIR) package
+	mv ${BUILD_SUBDIR}/*.rpm .
 
 rebuild: distclean all
 
