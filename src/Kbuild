@@ -1,6 +1,6 @@
 obj-m = mpool.o
 
-mpool-objs = src/evc.o src/init.o src/mblock.o src/mclass.o src/merr.o src/mlog.o src/mp.o src/mpcore_params.o src/omf.o src/pd.o src/pmd.o src/sb.o src/smap.o src/upgrade.o src/mpctl.o src/mpctl_params.o src/mpctl_reap.o src/mdc.o
+mpool-objs = evc.o init.o mblock.o mclass.o merr.o mlog.o mp.o mpcore_params.o omf.o pd.o pmd.o sb.o smap.o upgrade.o mpctl.o mpctl_params.o mpctl_reap.o mdc.o
 
 ccflags-y += -Wall
 ccflags-y += -Werror
@@ -14,4 +14,4 @@ ccflags-y += -Wno-sign-conversion
 ccflags-y += -Wno-sign-compare
 ccflags-y += -Wno-unused-parameter
 
-ccflags-y +=  -I$M/include -I$M/src -I$M/src/include
+ccflags-y += -I$M -I$M/include -I$M/../include

@@ -207,7 +207,7 @@ endif
 #
 allv: V=1
 allv all: config
-	KCFLAGS="${KCFLAGS}" $(MAKE) -C $(KDIR) M=`pwd` V=$V modules
+	KCFLAGS="${KCFLAGS}" $(MAKE) -C $(KDIR) M=$${PWD}/src V=$V modules
 
 ifneq (${BTYPES},)
 ${BTYPES}: ${BTYPESDEP}
@@ -217,7 +217,7 @@ endif
 clean: MAKEFLAGS += --no-print-directory
 clean:
 	-[ -f "${CONFIG_CMAKE}" ] && $(MAKE) -C $(BUILD_SUBDIR) clean
-	$(MAKE) -C $(KDIR) M=`pwd` clean
+	$(MAKE) -C $(KDIR) M=$${PWD}/src clean
 	$(MAKE) -C config clean
 	rm -rf kmod-mpool-$(KREL)*.rpm src/mpool_config.h .tmp_versions
 
@@ -245,7 +245,7 @@ help:
 	@true
 
 install: all
-	$(MAKE) -C $(KDIR) M=`pwd` modules_install
+	$(MAKE) -C $(KDIR) M=$${PWD}/src modules_install
 	-modprobe -r mpool
 	modprobe mpool
 

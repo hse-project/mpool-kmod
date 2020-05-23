@@ -4,26 +4,20 @@
 # Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
 #
 
+message(STATUS "Configuring mpool kmod RPM packaging...")
+
 cmake_minimum_required(VERSION 3.6)
 
-set (CMAKE_C_STANDARD 99)
-
-message(STATUS "Configuring mpool-kmod project")
-
 # used to generate RPM package names
-project( mpool-kmod )
+project( kmod-mpool )
 
+set( CMAKE_C_STANDARD 99 )
 set( CMAKE_INSTALL_PREFIX /usr )
 
-# MPOOL_SCRIPTS_DIR
-#     - Scripts related to the mpool-kmod source tree (building it, working
-#       with git, etc.)
-#
-set( MPOOL_SCRIPTS_DIR      ${PROJECT_SOURCE_DIR}/scripts)
-
+set( MPOOL_SCRIPTS_DIR  ${PROJECT_SOURCE_DIR}/scripts/package)
 
 INSTALL(
-    FILES "${PROJECT_SOURCE_DIR}/mpool.ko"
+    FILES "${PROJECT_SOURCE_DIR}/src/mpool.ko"
     DESTINATION lib/modules/${KREL}/extra
     COMPONENT runtime
     )
@@ -107,14 +101,14 @@ set(CPACK_RPM_RUNTIME_PACKAGE_DESCRIPTION
 set( CPACK_RPM_RUNTIME_FILE_NAME
     "${CPACK_RPM_RUNTIME_PACKAGE_NAME}-${MPOOL_TAG}${BUILD_NUMBER}.${KARCH}.rpm" )
 
-message(STATUS "Configuring rpm file ${CPACK_RPM_RUNTIME_FILE_NAME}")
+message(STATUS "Configuring RPM file ${CPACK_RPM_RUNTIME_FILE_NAME}")
 
 set( CPACK_RPM_RUNTIME_PACKAGE_RELEASE             "${CPACK_RPM_PACKAGE_RELEASE}")
-set( CPACK_RPM_RUNTIME_USER_BINARY_SPECFILE        "${MPOOL_SCRIPTS_DIR}/package/mpool.spec.in")
-set( CPACK_RPM_RUNTIME_PRE_INSTALL_SCRIPT_FILE     "${MPOOL_SCRIPTS_DIR}/package/rpm-pre-install.sh" )
-set( CPACK_RPM_RUNTIME_POST_INSTALL_SCRIPT_FILE    "${MPOOL_SCRIPTS_DIR}/package/rpm-post-install.sh" )
-set( CPACK_RPM_RUNTIME_PRE_UNINSTALL_SCRIPT_FILE   "${MPOOL_SCRIPTS_DIR}/package/rpm-pre-uninstall.sh" )
-set( CPACK_RPM_RUNTIME_POST_UNINSTALL_SCRIPT_FILE  "${MPOOL_SCRIPTS_DIR}/package/rpm-post-uninstall.sh" )
+set( CPACK_RPM_RUNTIME_USER_BINARY_SPECFILE        "${MPOOL_SCRIPTS_DIR}/mpool.spec.in")
+set( CPACK_RPM_RUNTIME_PRE_INSTALL_SCRIPT_FILE     "${MPOOL_SCRIPTS_DIR}/rpm-pre-install.sh" )
+set( CPACK_RPM_RUNTIME_POST_INSTALL_SCRIPT_FILE    "${MPOOL_SCRIPTS_DIR}/rpm-post-install.sh" )
+set( CPACK_RPM_RUNTIME_PRE_UNINSTALL_SCRIPT_FILE   "${MPOOL_SCRIPTS_DIR}/rpm-pre-uninstall.sh" )
+set( CPACK_RPM_RUNTIME_POST_UNINSTALL_SCRIPT_FILE  "${MPOOL_SCRIPTS_DIR}/rpm-post-uninstall.sh" )
 
 set( CPACK_RPM_RUNTIME_PACKAGE_REQUIRES "sos >= 3.2" )
 
