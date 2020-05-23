@@ -22,39 +22,6 @@ set( CMAKE_INSTALL_PREFIX /usr )
 set( MPOOL_SCRIPTS_DIR      ${PROJECT_SOURCE_DIR}/scripts)
 
 
-# Edit these lines when we cut a release branch.
-set( MPOOL_VERSION_MAJOR 1 )
-set( MPOOL_VERSION_MINOR 8 )
-set( MPOOL_VERSION_PATCH 0 )
-
-
-# Decode build type...
-#
-if( "${BUILD_TYPE}" STREQUAL "release" )
-    set( BUILD_STYPE "r" )
-elseif( "${BUILD_TYPE}" STREQUAL "relassert" )
-    set( BUILD_STYPE "a" )
-elseif( "${BUILD_TYPE}" STREQUAL "debug" )
-    set( BUILD_STYPE "d" )
-elseif( "${BUILD_TYPE}" STREQUAL "optdebug" )
-    set( BUILD_STYPE "o" )
-elseif( "${BUILD_TYPE}" STREQUAL "relwithdebinfo" )
-    set( BUILD_STYPE "i" )
-else()
-    message( FATAL_ERROR "Invalid build type [${BUILD_TYPE}]" )
-endif()
-
-
-find_package(Git)
-
-execute_process(
-    COMMAND ${GIT_EXECUTABLE} describe --dirty --always --tags
-    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
-    OUTPUT_VARIABLE MPOOL_TAG
-    ERROR_VARIABLE ERROUT
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-    )
-
 INSTALL(
     FILES "${PROJECT_SOURCE_DIR}/mpool.ko"
     DESTINATION lib/modules/${KREL}/extra
@@ -89,10 +56,6 @@ set( CPACK_RPM_COMPONENT_INSTALL    "ON" )
 set( CPACK_RPM_PACKAGE_RELOCATABLE  "ON" )
 set( CPACK_RPM_RELOCATION_PATHS     /usr /etc )
 
-
-if( "${MPOOL_TAG}" STREQUAL "" )
-    set( MPOOL_TAG "${CPACK_PACKAGE_VERSION}" )
-endif()
 
 # If it's a managed build (e.g, Jenkins) or a dirty git clone
 # then include the build number and git describe tag in the

@@ -40,14 +40,18 @@ Configuration Variables:
                      graphviz dependency graph files
 
   Defaults:
-    BUILD_DIR     ${BUILD_DIR}
-    BUILD_SUBDIR  ${BUILD_SUBDIR}
-    BUILD_NUMBER  ${BUILD_NUMBER}
-    BUILD_TYPE    ${BUILD_TYPE}
-    KCFLAGS       ${KCFLAGS}
-    KDIR          ${KDIR}
-    KREL          ${KREL}
-    KARCH         ${KARCH}
+    BUILD_DIR            ${BUILD_DIR}
+    BUILD_SUBDIR         ${BUILD_SUBDIR}
+    BUILD_NUMBER         ${BUILD_NUMBER}
+    BUILD_TYPE           ${BUILD_TYPE}
+    KCFLAGS              ${KCFLAGS}
+    KDIR                 ${KDIR}
+    KREL                 ${KREL}
+    KARCH                ${KARCH}
+    MPOOL_TAG            ${MPOOL_TAG}
+    MPOOL_VERSION_MAJOR  ${MPOOL_VERSION_MAJOR}
+    MPOOL_VERSION_MINOR  ${MPOOL_VERSION_MINOR}
+    MPOOL_VERSION_PATCH  ${MPOOL_VERSION_PATCH}
 
 Examples:
 
@@ -63,15 +67,11 @@ Examples:
 
     make -j clean all
 
-  Incremental rebuild after modifications to mpool code:
-
-    make
-
-  Create a 'release' build:
+  Create a 'release' mpool module:
 
     make (or make release)
 
-  Create a 'debug' build:
+  Create a 'debug' mpool module:
 
     make debug
 
@@ -86,6 +86,16 @@ endef
 .DELETE_ON_ERROR:
 .NOTPARALLEL:
 
+# Edit these lines when we cut a release branch.
+MPOOL_VERSION_MAJOR := 1
+MPOOL_VERSION_MINOR := 8
+MPOOL_VERSION_PATCH := 0
+MPOOL_VERSION := ${MPOOL_VERSION_MAJOR}.${MPOOL_VERSION_MINOR}.${MPOOL_VERSION_PATCH}
+
+MPOOL_TAG := $(shell [ -d ".git" ] && git describe --dirty --always --tags)
+ifeq (${MPOOL_TAG},)
+MPOOL_TAG := ${MPOOL_VERSION}
+endif
 
 # Find the top-level directory of the mpool kmod source tree
 MPOOL_TOP_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
@@ -94,23 +104,31 @@ MPOOL_TOP_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 #
 ifeq ($(findstring release,$(MAKECMDGOALS)),release)
 	BUILD_TYPE := release
+	BUILD_STYPE := r
 	KCFLAGS += -O2 -DNDEBUG
 else ifeq ($(findstring relassert,$(MAKECMDGOALS)),relassert)
 	BUILD_TYPE := relassert
+	BUILD_STYPE := a
 	KCFLAGS += -O2
 else ifeq ($(findstring relwithdebug,$(MAKECMDGOALS)),relwithdebug)
 	BUILD_TYPE := relwithdebug
+	BUILD_STYPE := i
 	KCFLAGS += -O2 -DNDEBUG -g
 else ifeq ($(findstring optdebug,$(MAKECMDGOALS)),optdebug)
 	BUILD_TYPE := optdebug
+	BUILD_STYPE := o
 	KCFLAGS += -Og
 else ifeq ($(findstring debug,$(MAKECMDGOALS)),debug)
 	BUILD_TYPE := debug
+	BUILD_STYPE := d
 	KCFLAGS += -g
 else
 	BUILD_TYPE := release
+	BUILD_STYPE := r
 	KCFLAGS += -O2 -DNDEBUG
 endif
+
+KCFLAGS += -DMPOOL_VERSION='\"${KREL}-${MPOOL_TAG}-${BUILD_STYPE}${BUILD_NUMBER}\"'
 
 
 KDIR  ?= /lib/modules/$(shell uname -r)/build
@@ -154,7 +172,12 @@ define config-cmake =
 	echo 'Set( KREL "$(KREL)" CACHE STRING "" )' ;\
 	echo 'Set( KARCH "$(KARCH)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_TYPE "$(BUILD_TYPE)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_STYPE "$(BUILD_STYPE)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_NUMBER "$(BUILD_NUMBER)" CACHE STRING "" )' ;\
+	echo 'Set( MPOOL_TAG "$(MPOOL_TAG)" CACHE STRING "" )' ;\
+	echo 'Set( MPOOL_VERSION_MAJOR "$(MPOOL_VERSION_MAJOR)" CACHE STRING "" )' ;\
+	echo 'Set( MPOOL_VERSION_MINOR "$(MPOOL_VERSION_MINOR)" CACHE STRING "" )' ;\
+	echo 'Set( MPOOL_VERSION_PATCH "$(MPOOL_VERSION_PATCH)" CACHE STRING "" )' ;\
 	)
 endef
 
@@ -193,18 +216,18 @@ endif
 
 clean: MAKEFLAGS += --no-print-directory
 clean:
-	-[ -f ${CONFIG_CMAKE} ] && $(MAKE) -C $(BUILD_SUBDIR) clean
+	-[ -f "${CONFIG_CMAKE}" ] && $(MAKE) -C $(BUILD_SUBDIR) clean
 	$(MAKE) -C $(KDIR) M=`pwd` clean
 	$(MAKE) -C config clean
 	rm -rf kmod-mpool-$(KREL)*.rpm src/mpool_config.h .tmp_versions
 
-${CONFIG_CMAKE}:
+${CONFIG_CMAKE}: CMakeLists.txt Makefile
 	mkdir -p $(BUILD_SUBDIR)
 	@$(config-cmake) > $@.tmp
 	(cd $(BUILD_SUBDIR) && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_TOP_DIR)")
 	@mv $@.tmp $@
 
-${CONFIG_H_GEN}:
+${CONFIG_H_GEN}: Makefile
 	${MAKE} -j -C config KDIR=${KDIR} KREL=${KREL}  all
 
 src/mpool_config.h: ${CONFIG_H_GEN}
@@ -235,7 +258,7 @@ maintainer-clean: distclean
 
 package: all ${CONFIG_CMAKE}
 	$(MAKE) -C $(BUILD_SUBDIR) package
-	mv ${BUILD_SUBDIR}/*.rpm .
+	cp ${BUILD_SUBDIR}/*.rpm .
 
 rebuild: distclean all
 

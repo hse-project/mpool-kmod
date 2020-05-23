@@ -4283,6 +4283,7 @@ static __init int mpc_init(void)
 	idr_replace(&ss->ss_unitmap, ctlunit, MINOR(ctlunit->un_devno));
 	mutex_unlock(&ss->ss_lock);
 
+	dev_info(ctlunit->un_device, "version %s", MPOOL_VERSION);
 	mpc_unit_put(ctlunit);
 
 errout:
