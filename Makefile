@@ -14,7 +14,6 @@ mpool kmod Makefile Help
 -------------------
 
 Primary Targets:
-
     all       -- Build mpool module
     clean     -- Delete most build outputs
     distclean -- Delete all build outputs
@@ -23,32 +22,26 @@ Primary Targets:
     help      -- Print this message.
 
 Configuration Variables:
-
   The following configuration variables can be set on the command line
   to customize the build.
 
-  Used by all targets:
-    BUILD_DIR -- The top-level build output directory for package building
-    KDIR      -- Location of pre-built Linux Kernel source tree
-                 Typically <linux source tree>/builds/<config name>.
+    BUILD_DIR    -- The top-level build output directory for building packages
+    BUILD_PKG    -- The type of package to build (rpm, deb)
+    BUILD_NUMBER -- Build job number (as set by Jenkins)
+    KCFLAGS      -- kmod build CFLAGS
+    KDIR         -- Location of pre-built Linux kernel source tree
 
-  Used only by 'package':
-    BUILD_NUMBER  -- Build job number; defaults to 0 if not set.
-                     Deliberately named to inherit the BUILD_NUMBER
-	             environment variable from Jenkins.
-    DEPGRAPH      -- Set to "--graphviz=<filename_prefix>" to generate
-                     graphviz dependency graph files
+  Defaults (not all are customizable):
+    BUILD_DIR     ${BUILD_DIR}
+    BUILD_PKG     ${BUILD_PKG}
+    BUILD_NUMBER  ${BUILD_NUMBER}
+    BUILD_TYPE    ${BUILD_TYPE}
+    KCFLAGS       ${KCFLAGS}
+    KDIR          ${KDIR}
+    KREL          ${KREL}
+    KARCH         ${KARCH}
+    MPOOL_TAG     ${MPOOL_TAG}
 
-  Defaults:
-    BUILD_DIR            ${BUILD_DIR}
-    BUILD_SUBDIR         ${BUILD_SUBDIR}
-    BUILD_NUMBER         ${BUILD_NUMBER}
-    BUILD_TYPE           ${BUILD_TYPE}
-    KCFLAGS              ${KCFLAGS}
-    KDIR                 ${KDIR}
-    KREL                 ${KREL}
-    KARCH                ${KARCH}
-    MPOOL_TAG            ${MPOOL_TAG}
     MPOOL_VERSION_MAJOR  ${MPOOL_VERSION_MAJOR}
     MPOOL_VERSION_MINOR  ${MPOOL_VERSION_MINOR}
     MPOOL_VERSION_PATCH  ${MPOOL_VERSION_PATCH}
@@ -57,9 +50,9 @@ Examples:
 
   Build just the mpool module:
 
-    make -j all
+    make -j
 
-  Build the mpool module and generate an RPM package:
+  Build the mpool module and generate a package (.rpm or .deb):
 
     make -j package
 
@@ -67,15 +60,15 @@ Examples:
 
     make -j clean all
 
-  Create a 'release' mpool module:
+  Create a 'release-assert' mpool module:
 
-    make (or make release)
+    make -j relassert
 
   Create a 'debug' mpool module:
 
     make debug
 
-  Build against a debug kernel that is not currently booted:
+  Build against a debug kernel that is not the running kernel:
 
     make debug KDIR=/lib/modules/`uname -r`+debug/build
 
@@ -158,13 +151,17 @@ endif
 
 # Set up for cmake configuration...
 #
-BUILD_DIR      ?= $(MPOOL_TOP_DIR)/builds
-BUILD_RPM_DIR  := $(BUILD_DIR)/${KREL}/rpm/$(BUILD_TYPE)
-BUILD_DEB_DIR  := $(BUILD_DIR)/${KREL}/deb/$(BUILD_TYPE)
-BUILD_NUMBER   ?= 0
+BUILD_DIR    ?= $(MPOOL_TOP_DIR)/builds
+BUILD_NUMBER ?= 0
 
-CONFIG_RPM = $(BUILD_RPM_DIR)/mpool_config.cmake
-CONFIG_DEB = $(BUILD_DEB_DIR)/mpool_config.cmake
+ifneq ($(shell grep -i 'id=ubuntu' /etc/os-release /etc/lsb-release),)
+BUILD_PKG ?= deb
+else
+BUILD_PKG ?= rpm
+endif
+
+BUILD_PKG_DIR := $(BUILD_DIR)/${KREL}/${BUILD_PKG}/$(BUILD_TYPE)
+CONFIG_PKG = $(BUILD_PKG_DIR)/config.cmake
 
 define config-cmake =
 	(echo '# Note: When a variable is set multiple times in this file,' ;\
@@ -189,15 +186,23 @@ endef
 MPOOL_CUSTOM_INC_DIR ?= $(HOME)
 -include $(MPOOL_CUSTOM_INC_DIR)/mpool-kmod.mk
 
+
 # If MAKECMDGOALS contains no goals other than any combination
 # of BTYPES then make the given goals depend on the default goal.
+# Otherwise they have no effect other than to set BUILD_TYPE.
 #
 BTYPES := debug release relwithdebug relassert optdebug
 BTYPES := $(filter ${BTYPES},${MAKECMDGOALS})
 
+ifneq (${BTYPES},)
 ifeq ($(filter-out ${BTYPES},${MAKECMDGOALS}),)
 BTYPESDEP := ${.DEFAULT_GOAL}
 endif
+
+${BTYPES}: ${BTYPESDEP}
+	@true
+endif
+
 
 .PHONY: all allv ${BTYPES}
 .PHONY: clean config distclean
@@ -208,46 +213,28 @@ endif
 # Goals in mostly alphabetical order.
 #
 allv: V=1
-allv all: config
+allv all: src/mpool_config.h
 	KCFLAGS="${KCFLAGS}" $(MAKE) -C $(KDIR) M=$${PWD}/src V=$V modules
-
-ifneq (${BTYPES},)
-${BTYPES}: ${BTYPESDEP}
-	@true
-endif
 
 clean: MAKEFLAGS += --no-print-directory
 clean:
-	-[ -f "${CONFIG_RPM}" ] && $(MAKE) -C $(BUILD_RPM_DIR) clean
-	-[ -f "${CONFIG_DEB}" ] && $(MAKE) -C $(BUILD_DEB_DIR) clean
+	-[ -f "${CONFIG_PKG}" ] && $(MAKE) -C $(BUILD_PKG_DIR) clean
 	$(MAKE) -C $(KDIR) M=$${PWD}/src clean
 	$(MAKE) -C config clean
-	rm -rf kmod-mpool-$(KREL)*.rpm kmod-mpool-$(KREL)*.deb src/mpool_config.h
-
-${CONFIG_RPM}: rpm/CMakeLists.txt Makefile
-	mkdir -p $(@D)
-	@$(config-cmake) > $@.tmp
-	(cd $(@D) && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_TOP_DIR)/rpm")
-	@mv $@.tmp $@
-
-${CONFIG_DEB}: deb/CMakeLists.txt Makefile
-	mkdir -p $(@D)
-	@$(config-cmake) > $@.tmp
-	(cd $(@D) && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_TOP_DIR)/deb")
-	@mv $@.tmp $@
+	rm -rf kmod-mpool-$(KREL)*.${BUILD_PKG} src/mpool_config.h
 
 ${CONFIG_H_GEN}: Makefile
-	${MAKE} -j -C config KDIR=${KDIR} KREL=${KREL}  all
+	${MAKE} -j -C config KDIR=${KDIR} KREL=${KREL} all
 
 src/mpool_config.h: ${CONFIG_H_GEN}
 	cp $< $@
 
-config: src/mpool_config.h
+config: src/mpool_config.h ${CONFIG_PKG}
 
 distclean scrub: MAKEFLAGS += --no-print-directory
 distclean scrub: clean
 	${MAKE} -C config distclean
-	rm -rf $(BUILD_DIR) *.rpm
+	rm -rf $(BUILD_DIR) *.rpm *.deb
 
 help:
 	$(info $(HELP_TEXT))
@@ -265,15 +252,16 @@ load:
 maintainer-clean: distclean
 	@true
 
-package: rpm
+${CONFIG_PKG}: ${BUILD_PKG}/CMakeLists.txt Makefile
+	mkdir -p $(@D)
+	rm -rf $(@D)/*
+	@$(config-cmake) > $@.tmp
+	(cd $(@D) && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_TOP_DIR)/${BUILD_PKG}")
+	mv $@.tmp $@
 
-rpm: all ${CONFIG_RPM}
-	$(MAKE) -C $(BUILD_RPM_DIR) package
-	cp ${BUILD_RPM_DIR}/*.rpm .
-
-deb: all ${CONFIG_DEB}
-	$(MAKE) -C $(BUILD_DEB_DIR) package
-	cp ${BUILD_DEB_DIR}/*.deb .
+package ${BUILD_PKG}: all ${CONFIG_PKG}
+	$(MAKE) -C $(BUILD_PKG_DIR) package
+	cp ${BUILD_PKG_DIR}/*.${BUILD_PKG} .
 
 rebuild: distclean all
 

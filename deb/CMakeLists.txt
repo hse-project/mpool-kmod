@@ -4,12 +4,13 @@
 # Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
 #
 
-project( kmod-mpool )
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required( VERSION 3.12 )
 
-message(STATUS "Configuring mpool kmod DEB packaging...")
+project( kmod-mpool NONE )
 
 set( CMAKE_INSTALL_PREFIX /usr )
+
+message( STATUS "Configuring ${PROJECT_NAME}-${KREL} ..." )
 
 INSTALL(
     FILES "${PROJECT_SOURCE_DIR}/../src/mpool.ko"
@@ -19,7 +20,7 @@ INSTALL(
 
 # Package options
 #
-set( CPACK_PACKAGE_NAME           "kmod-mpool-${KREL}" )
+set( CPACK_PACKAGE_NAME           "${PROJECT_NAME}-${KREL}" )
 set( CPACK_PACKAGE_VERSION_MAJOR  "${MPOOL_VERSION_MAJOR}" )
 set( CPACK_PACKAGE_VERSION_MINOR  "${MPOOL_VERSION_MINOR}" )
 set( CPACK_PACKAGE_VERSION_PATCH  "${MPOOL_VERSION_PATCH}" )
@@ -29,10 +30,6 @@ set( CPACK_PACKAGE_VERSION_PATCH  "${MPOOL_VERSION_PATCH}" )
 
 set( CPACK_PACKAGE_VERSION
     "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}" )
-
-message(STATUS "Configuring package ${CPACK_PACKAGE_NAME}" )
-message(STATUS "Configuring version ${CPACK_PACKAGE_VERSION}")
-
 
 set( CPACK_GENERATOR                   "DEB" )
 set( CPACK_DEBIAN_PACKAGE_URL          "https://github.com/hse-project/mpool-kmod" )
@@ -46,6 +43,7 @@ set( CPACK_DEBIAN_COMPONENT_INSTALL    "ON" )
 set( CPACK_DEBIAN_PACKAGE_RELOCATABLE  "ON" )
 set( CPACK_DEBIAN_RELOCATION_PATHS     /usr /etc )
 
+message(STATUS "Configuring ${BUILD_NUMBER} ${CPACK_DEBIAN_PACKAGE_RELEASE}")
 
 # If it's a managed build (e.g, Jenkins) or a dirty git clone
 # then include the build number and git describe tag in the
@@ -88,6 +86,4 @@ set(CPACK_DEBIAN_PACKAGE_DESCRIPTION
 set( CPACK_DEBIAN_FILE_NAME
     "${CPACK_DEBIAN_PACKAGE_NAME}-${MPOOL_TAG}${BUILD_NUMBER}.${KARCH}.deb" )
 
-
-message(STATUS "Configuring DEB file ${CPACK_DEBIAN_FILE_NAME}")
 include( CPack )
