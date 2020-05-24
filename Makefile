@@ -158,11 +158,13 @@ endif
 
 # Set up for cmake configuration...
 #
-BUILD_DIR     ?= $(MPOOL_TOP_DIR)/builds
-BUILD_SUBDIR  := $(BUILD_DIR)/${KREL}/$(BUILD_TYPE)
-BUILD_NUMBER  ?= 0
+BUILD_DIR      ?= $(MPOOL_TOP_DIR)/builds
+BUILD_RPM_DIR  := $(BUILD_DIR)/${KREL}/rpm/$(BUILD_TYPE)
+BUILD_DEB_DIR  := $(BUILD_DIR)/${KREL}/deb/$(BUILD_TYPE)
+BUILD_NUMBER   ?= 0
 
-CONFIG_CMAKE = $(BUILD_SUBDIR)/mpool_config.cmake
+CONFIG_RPM = $(BUILD_RPM_DIR)/mpool_config.cmake
+CONFIG_DEB = $(BUILD_DEB_DIR)/mpool_config.cmake
 
 define config-cmake =
 	(echo '# Note: When a variable is set multiple times in this file,' ;\
@@ -216,15 +218,22 @@ endif
 
 clean: MAKEFLAGS += --no-print-directory
 clean:
-	-[ -f "${CONFIG_CMAKE}" ] && $(MAKE) -C $(BUILD_SUBDIR) clean
+	-[ -f "${CONFIG_RPM}" ] && $(MAKE) -C $(BUILD_RPM_DIR) clean
+	-[ -f "${CONFIG_DEB}" ] && $(MAKE) -C $(BUILD_DEB_DIR) clean
 	$(MAKE) -C $(KDIR) M=$${PWD}/src clean
 	$(MAKE) -C config clean
-	rm -rf kmod-mpool-$(KREL)*.rpm src/mpool_config.h .tmp_versions
+	rm -rf kmod-mpool-$(KREL)*.rpm kmod-mpool-$(KREL)*.deb src/mpool_config.h
 
-${CONFIG_CMAKE}: CMakeLists.txt Makefile
-	mkdir -p $(BUILD_SUBDIR)
+${CONFIG_RPM}: rpm/CMakeLists.txt Makefile
+	mkdir -p $(@D)
 	@$(config-cmake) > $@.tmp
-	(cd $(BUILD_SUBDIR) && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_TOP_DIR)")
+	(cd $(@D) && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_TOP_DIR)/rpm")
+	@mv $@.tmp $@
+
+${CONFIG_DEB}: deb/CMakeLists.txt Makefile
+	mkdir -p $(@D)
+	@$(config-cmake) > $@.tmp
+	(cd $(@D) && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_TOP_DIR)/deb")
 	@mv $@.tmp $@
 
 ${CONFIG_H_GEN}: Makefile
@@ -256,9 +265,15 @@ load:
 maintainer-clean: distclean
 	@true
 
-package: all ${CONFIG_CMAKE}
-	$(MAKE) -C $(BUILD_SUBDIR) package
-	cp ${BUILD_SUBDIR}/*.rpm .
+package: rpm
+
+rpm: all ${CONFIG_RPM}
+	$(MAKE) -C $(BUILD_RPM_DIR) package
+	cp ${BUILD_RPM_DIR}/*.rpm .
+
+deb: all ${CONFIG_DEB}
+	$(MAKE) -C $(BUILD_DEB_DIR) package
+	cp ${BUILD_DEB_DIR}/*.deb .
 
 rebuild: distclean all
 

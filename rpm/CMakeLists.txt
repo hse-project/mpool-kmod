@@ -4,20 +4,15 @@
 # Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
 #
 
-message(STATUS "Configuring mpool kmod RPM packaging...")
-
+project( kmod-mpool )
 cmake_minimum_required(VERSION 3.6)
 
-# used to generate RPM package names
-project( kmod-mpool )
+message(STATUS "Configuring mpool kmod RPM packaging...")
 
-set( CMAKE_C_STANDARD 99 )
 set( CMAKE_INSTALL_PREFIX /usr )
 
-set( MPOOL_SCRIPTS_DIR  ${PROJECT_SOURCE_DIR}/scripts/package)
-
 INSTALL(
-    FILES "${PROJECT_SOURCE_DIR}/src/mpool.ko"
+    FILES "${PROJECT_SOURCE_DIR}/../src/mpool.ko"
     DESTINATION lib/modules/${KREL}/extra
     COMPONENT runtime
     )
@@ -104,11 +99,11 @@ set( CPACK_RPM_RUNTIME_FILE_NAME
 message(STATUS "Configuring RPM file ${CPACK_RPM_RUNTIME_FILE_NAME}")
 
 set( CPACK_RPM_RUNTIME_PACKAGE_RELEASE             "${CPACK_RPM_PACKAGE_RELEASE}")
-set( CPACK_RPM_RUNTIME_USER_BINARY_SPECFILE        "${MPOOL_SCRIPTS_DIR}/mpool.spec.in")
-set( CPACK_RPM_RUNTIME_PRE_INSTALL_SCRIPT_FILE     "${MPOOL_SCRIPTS_DIR}/rpm-pre-install.sh" )
-set( CPACK_RPM_RUNTIME_POST_INSTALL_SCRIPT_FILE    "${MPOOL_SCRIPTS_DIR}/rpm-post-install.sh" )
-set( CPACK_RPM_RUNTIME_PRE_UNINSTALL_SCRIPT_FILE   "${MPOOL_SCRIPTS_DIR}/rpm-pre-uninstall.sh" )
-set( CPACK_RPM_RUNTIME_POST_UNINSTALL_SCRIPT_FILE  "${MPOOL_SCRIPTS_DIR}/rpm-post-uninstall.sh" )
+#set( CPACK_RPM_RUNTIME_USER_BINARY_SPECFILE        "${PROJECT_SOURCE_DIR}/mpool.spec.in")
+set( CPACK_RPM_RUNTIME_PRE_INSTALL_SCRIPT_FILE     "${PROJECT_SOURCE_DIR}/rpm-pre-install.sh" )
+set( CPACK_RPM_RUNTIME_POST_INSTALL_SCRIPT_FILE    "${PROJECT_SOURCE_DIR}/rpm-post-install.sh" )
+set( CPACK_RPM_RUNTIME_PRE_UNINSTALL_SCRIPT_FILE   "${PROJECT_SOURCE_DIR}/rpm-pre-uninstall.sh" )
+set( CPACK_RPM_RUNTIME_POST_UNINSTALL_SCRIPT_FILE  "${PROJECT_SOURCE_DIR}/rpm-post-uninstall.sh" )
 
 set( CPACK_RPM_RUNTIME_PACKAGE_REQUIRES "sos >= 3.2" )
 
