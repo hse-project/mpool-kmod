@@ -23,7 +23,6 @@ INSTALL(
 set( CPACK_PACKAGE_NAME           "${PROJECT_NAME}-${KREL}" )
 set( CPACK_PACKAGE_LICENSE        "GPLv2 and MIT" )
 set( CPACK_PACKAGE_HOMEPAGE_URL   "https://github.com/hse-project/mpool-kmod" )
-set( CPACK_PACKAGE_VENDOR         "Unspecified" )
 
 set( CPACK_PACKAGE_VERSION_MAJOR  "${MPOOL_VERSION_MAJOR}" )
 set( CPACK_PACKAGE_VERSION_MINOR  "${MPOOL_VERSION_MINOR}" )
@@ -34,7 +33,6 @@ set( CPACK_PACKAGE_VERSION_PATCH  "${MPOOL_VERSION_PATCH}" )
 
 set( CPACK_PACKAGE_VERSION
     "${CPACK_PACKAGE_VERSION_MAJOR}.${CPACK_PACKAGE_VERSION_MINOR}.${CPACK_PACKAGE_VERSION_PATCH}" )
-
 
 # If it's a managed build (e.g, Jenkins) or a dirty git clone
 # then include the build number and git describe tag in the
@@ -53,6 +51,9 @@ set( CPACK_PACKAGE_DESCRIPTION_SUMMARY
 
 set( CPACK_PACKAGE_DESCRIPTION
     "${CPACK_PACKAGE_DESCRIPTION_SUMMARY} ${MPOOL_TAG} for kernel ${KREL}" )
+
+set( CPACK_PACKAGE_FILE_NAME
+    "${CPACK_PACKAGE_NAME}-${MPOOL_TAG}${BUILD_STYPE}.${KARCH}" )
 
 include( ${BUILD_PKG}/CMakeLists.txt )
 
