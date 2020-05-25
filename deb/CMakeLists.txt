@@ -43,7 +43,6 @@ set( CPACK_DEBIAN_COMPONENT_INSTALL    "ON" )
 set( CPACK_DEBIAN_PACKAGE_RELOCATABLE  "ON" )
 set( CPACK_DEBIAN_RELOCATION_PATHS     /usr /etc )
 
-message(STATUS "Configuring ${BUILD_NUMBER} ${CPACK_DEBIAN_PACKAGE_RELEASE}")
 
 # If it's a managed build (e.g, Jenkins) or a dirty git clone
 # then include the build number and git describe tag in the

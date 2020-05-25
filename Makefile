@@ -85,7 +85,7 @@ MPOOL_VERSION_MINOR := 8
 MPOOL_VERSION_PATCH := 0
 MPOOL_VERSION := ${MPOOL_VERSION_MAJOR}.${MPOOL_VERSION_MINOR}.${MPOOL_VERSION_PATCH}
 
-MPOOL_TAG := $(shell [ -d ".git" ] && git describe --dirty --always --tags)
+MPOOL_TAG := $(shell test -d ".git" && git describe --dirty --always --tags)
 ifeq (${MPOOL_TAG},)
 MPOOL_TAG := ${MPOOL_VERSION}
 endif
@@ -121,7 +121,7 @@ else
 	KCFLAGS += -O2 -DNDEBUG
 endif
 
-KCFLAGS += -DMPOOL_VERSION='\"${KREL}-${MPOOL_TAG}-${BUILD_STYPE}${BUILD_NUMBER}\"'
+KCFLAGS += -DMPOOL_VERSION='\"${MPOOL_TAG}-${BUILD_STYPE}${BUILD_NUMBER}\"'
 
 
 KDIR  ?= /lib/modules/$(shell uname -r)/build
@@ -137,12 +137,12 @@ ifeq (${KREL},${KDIR})
 endif
 
 
-# Compare mpool_config.h to CONFIG_H_GEN.  If they differ, mark
+# Compare mpool_config.h to CONFIG_H.  If they differ, mark
 # mpool_config.h as a phony target so that it will be rebuilt.
 #
-CONFIG_H_GEN := config/config.h-${KREL}
-ifneq ($(wildcard ${CONFIG_H_GEN}),)
-RC := $(shell (cmp -s src/mpool_config.h ${CONFIG_H_GEN} || echo force))
+CONFIG_H := config/config.h-${KREL}
+ifneq ($(wildcard ${CONFIG_H}),)
+RC := $(shell (cmp -s src/mpool_config.h ${CONFIG_H} || echo force))
 ifeq (${RC},force)
 .PHONY: src/mpool_config.h
 endif
@@ -154,7 +154,7 @@ endif
 BUILD_DIR    ?= $(MPOOL_TOP_DIR)/builds
 BUILD_NUMBER ?= 0
 
-ifneq ($(shell grep -i 'id=ubuntu' /etc/os-release /etc/lsb-release),)
+ifneq ($(shell egrep -i 'id=(ubuntu|debian)' /etc/os-release),)
 BUILD_PKG ?= deb
 else
 BUILD_PKG ?= rpm
@@ -204,10 +204,9 @@ ${BTYPES}: ${BTYPESDEP}
 endif
 
 
-.PHONY: all allv ${BTYPES}
-.PHONY: clean config distclean
-.PHONY: help install maintainer-clean
-.PHONY: load package rebuild scrub unload
+.PHONY: all allv ${BTYPES} clean config distclean
+.PHONY: help install load maintainer-clean
+.PHONY: package rebuild scrub uninstall unload
 
 
 # Goals in mostly alphabetical order.
@@ -218,18 +217,18 @@ allv all: src/mpool_config.h
 
 clean: MAKEFLAGS += --no-print-directory
 clean:
-	-[ -f "${CONFIG_PKG}" ] && $(MAKE) -C $(BUILD_PKG_DIR) clean
+	-test -f "${CONFIG_PKG}" && $(MAKE) -C $(BUILD_PKG_DIR) clean
 	$(MAKE) -C $(KDIR) M=$${PWD}/src clean
 	$(MAKE) -C config clean
 	rm -rf kmod-mpool-$(KREL)*.${BUILD_PKG} src/mpool_config.h
 
-${CONFIG_H_GEN}: Makefile
+${CONFIG_H}: Makefile
 	${MAKE} -j -C config KDIR=${KDIR} KREL=${KREL} all
 
-src/mpool_config.h: ${CONFIG_H_GEN}
+src/mpool_config.h: ${CONFIG_H}
 	cp $< $@
 
-config: src/mpool_config.h ${CONFIG_PKG}
+config: ${CONFIG_H} ${CONFIG_PKG}
 
 distclean scrub: MAKEFLAGS += --no-print-directory
 distclean scrub: clean
@@ -242,11 +241,9 @@ help:
 
 install: all
 	$(MAKE) -C $(KDIR) M=$${PWD}/src modules_install
-	-modprobe -r mpool
-	modprobe mpool
+	depmod -A
 
 load:
-	-modprobe -r mpool
 	modprobe mpool
 
 maintainer-clean: distclean
@@ -256,7 +253,7 @@ ${CONFIG_PKG}: ${BUILD_PKG}/CMakeLists.txt Makefile
 	mkdir -p $(@D)
 	rm -rf $(@D)/*
 	@$(config-cmake) > $@.tmp
-	(cd $(@D) && cmake $(DEPGRAPH) -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_TOP_DIR)/${BUILD_PKG}")
+	(cd $(@D) && cmake -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_TOP_DIR)/${BUILD_PKG}")
 	mv $@.tmp $@
 
 package ${BUILD_PKG}: all ${CONFIG_PKG}
@@ -264,6 +261,10 @@ package ${BUILD_PKG}: all ${CONFIG_PKG}
 	cp ${BUILD_PKG_DIR}/*.${BUILD_PKG} .
 
 rebuild: distclean all
+
+uninstall:
+	-rm /lib/modules/${KREL}/extra/mpool.ko
+	depmod -A
 
 unload:
 	-modprobe -r mpool
