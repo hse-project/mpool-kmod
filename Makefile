@@ -136,6 +136,7 @@ ifeq (${KREL},${KDIR})
   $(error "Unable to determine kernel release from KDIR.  Try setting it via the KREL= variable")
 endif
 
+DESTDIR ?= /
 
 # Compare mpool_config.h to CONFIG_H.  If they differ, mark
 # mpool_config.h as a phony target so that it will be rebuilt.
@@ -170,6 +171,8 @@ define config-cmake =
 	echo 'Set( KDIR "$(KDIR)" CACHE STRING "" )' ;\
 	echo 'Set( KREL "$(KREL)" CACHE STRING "" )' ;\
 	echo 'Set( KARCH "$(KARCH)" CACHE STRING "" )' ;\
+	echo 'Set( DESTDIR "$(DESTDIR)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_PKG "$(BUILD_PKG)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_TYPE "$(BUILD_TYPE)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_STYPE "$(BUILD_STYPE)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_NUMBER "$(BUILD_NUMBER)" CACHE STRING "" )' ;\
@@ -240,7 +243,7 @@ help:
 	@true
 
 install: all
-	$(MAKE) -C $(KDIR) M=$${PWD}/src modules_install
+	$(MAKE) -C $(KDIR) M=$${PWD}/src INSTALL_MOD_PATH=${DESTDIR} modules_install
 	depmod -A
 
 load:
@@ -249,11 +252,11 @@ load:
 maintainer-clean: distclean
 	@true
 
-${CONFIG_PKG}: ${BUILD_PKG}/CMakeLists.txt Makefile
+${CONFIG_PKG}: $(wildcard ${BUILD_PKG}/*) Makefile
 	mkdir -p $(@D)
 	rm -rf $(@D)/*
 	@$(config-cmake) > $@.tmp
-	(cd $(@D) && cmake -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_TOP_DIR)/${BUILD_PKG}")
+	(cd $(@D) && cmake -C $@.tmp $(CMAKE_FLAGS) "$(MPOOL_TOP_DIR)")
 	mv $@.tmp $@
 
 package ${BUILD_PKG}: all ${CONFIG_PKG}
