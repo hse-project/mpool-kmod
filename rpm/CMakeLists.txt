@@ -17,10 +17,10 @@ set( CPACK_RPM_PACKAGE_RELOCATABLE  "ON" )
 set( CPACK_RPM_RELOCATION_PATHS     /usr /etc )
 
 set( CPACK_RPM_COMPONENT_INSTALL           "ON" )
-set( CPACK_RPM_PRE_INSTALL_SCRIPT_FILE     "${CCSD}/rpm/rpm-pre-install.sh" )
-set( CPACK_RPM_POST_INSTALL_SCRIPT_FILE    "${CCSD}/rpm/rpm-post-install.sh" )
-set( CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE   "${CCSD}/rpm/rpm-pre-uninstall.sh" )
-set( CPACK_RPM_POST_UNINSTALL_SCRIPT_FILE  "${CCSD}/rpm/rpm-post-uninstall.sh" )
+set( CPACK_RPM_PRE_INSTALL_SCRIPT_FILE     "${PKG_DIR}/rpm-pre-install.sh" )
+set( CPACK_RPM_POST_INSTALL_SCRIPT_FILE    "${PKG_DIR}/rpm-post-install.sh" )
+set( CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE   "${PKG_DIR}/rpm-pre-uninstall.sh" )
+set( CPACK_RPM_POST_UNINSTALL_SCRIPT_FILE  "${PKG_DIR}/rpm-post-uninstall.sh" )
 
 set( CPACK_RPM_PACKAGE_REQUIRES "sos >= 3.2" )
 

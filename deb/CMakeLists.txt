@@ -8,11 +8,11 @@ message( STATUS "Configuring ${PROJECT_NAME}-${KREL} deb ..." )
 
 set( CPACK_GENERATOR  "DEB" )
 
-set( CPACK_DEBIAN_PACKAGE_LICENSE        "${CPACK_PACKAGE_LICENSE}" )
-set( CPACK_DEBIAN_PACKAGE_RELEASE        "${BUILD_NUMBER}")
-set( CPACK_DEBIAN_PACKAGE_MAINTAINER     "Micron Technology, Inc." )
-set( CPACK_DEBIAN_PACKAGE_DESCRIPTION    "${CPACK_PACKAGE_DESCRIPTION}" )
-set( CPACK_DEBIAN_PACKAGE_SECTION        "kernel" )
+set( CPACK_DEBIAN_PACKAGE_LICENSE       "${CPACK_PACKAGE_LICENSE}" )
+set( CPACK_DEBIAN_PACKAGE_RELEASE       "${BUILD_NUMBER}")
+set( CPACK_DEBIAN_PACKAGE_MAINTAINER    "Micron Technology, Inc." )
+set( CPACK_DEBIAN_PACKAGE_DESCRIPTION   "${CPACK_PACKAGE_DESCRIPTION}" )
+set( CPACK_DEBIAN_PACKAGE_SECTION       "kernel" )
 
 set( CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
-    "${CCSD}/deb/preinst;${CCSD}/deb/postinst;${CCSD}/deb/prerm;${CCSD}/deb/postrm" )
+    "${PKG_DIR}/preinst;${PKG_DIR}/postinst;${PKG_DIR}/prerm;${PKG_DIR}/postrm" )
