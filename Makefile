@@ -126,14 +126,13 @@ KCFLAGS += -DMPOOL_VERSION='\"${MPOOL_TAG}-${BUILD_STYPE}${BUILD_NUMBER}\"'
 
 KDIR  ?= /lib/modules/$(shell uname -r)/build
 KREL  ?= $(patsubst /lib/modules/%/build,%,${KDIR})
-KARCH ?= $(shell uname -m)
 
 ifeq (${KREL},${KDIR})
-  KREL := $(patsubst /usr/src/kernels/%,%,${KDIR})
+KREL := $(patsubst /usr/src/kernels/%,%,${KDIR})
 endif
 
 ifeq (${KREL},${KDIR})
-  $(error "Unable to determine kernel release from KDIR.  Try setting it via the KREL= variable")
+$(error "Unable to determine kernel release from KDIR.  Try setting it via the KREL= variable")
 endif
 
 DESTDIR ?= /
@@ -157,8 +156,14 @@ BUILD_NUMBER ?= 0
 
 ifneq ($(shell egrep -i 'id=(ubuntu|debian)' /etc/os-release),)
 BUILD_PKG ?= deb
+KARCH ?= $(shell dpkg-architecture -q DEB_HOST_ARCH)
 else
 BUILD_PKG ?= rpm
+KARCH ?= $(shell uname -m)
+endif
+
+ifeq ($(wildcard ${BUILD_PKG}/CMakeLists.txt),)
+$(error "Unable to create a ${BUILD_PKG} package, try rpm or deb")
 endif
 
 BUILD_PKG_DIR := $(BUILD_DIR)/${KREL}/${BUILD_PKG}/$(BUILD_TYPE)

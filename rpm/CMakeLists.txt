@@ -11,11 +11,11 @@ set( CPACK_GENERATOR "RPM" )
 set( CPACK_RPM_PACKAGE_LICENSE      "${CPACK_PACKAGE_LICENSE}" )
 set( CPACK_RPM_PACKAGE_RELEASE      "${BUILD_NUMBER}")
 set( CPACK_RPM_PACKAGE_DESCRIPTION  "${CPACK_PACKAGE_DESCRIPTION}" )
+set( CPACK_RPM_PACKAGE_VENDOR       "Micron Technology, Inc." )
 
 set( CPACK_RPM_PACKAGE_RELOCATABLE  "ON" )
 set( CPACK_RPM_RELOCATION_PATHS     /usr /etc )
 
-set( CCSD                                  "${CMAKE_CURRENT_SOURCE_DIR}" )
 set( CPACK_RPM_COMPONENT_INSTALL           "ON" )
 set( CPACK_RPM_PRE_INSTALL_SCRIPT_FILE     "${CCSD}/rpm/rpm-pre-install.sh" )
 set( CPACK_RPM_POST_INSTALL_SCRIPT_FILE    "${CCSD}/rpm/rpm-post-install.sh" )

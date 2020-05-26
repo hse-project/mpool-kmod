@@ -10,6 +10,7 @@ project( kmod-mpool NONE )
 
 message( STATUS "Configuring ${PROJECT_NAME}-${KREL} common ..." )
 
+set( CCSD                            "${CMAKE_CURRENT_SOURCE_DIR}" )
 set( CPACK_PACKAGING_INSTALL_PREFIX  "${DESTDIR}" )
 
 INSTALL(
