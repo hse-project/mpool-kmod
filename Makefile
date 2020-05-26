@@ -162,7 +162,7 @@ BUILD_PKG ?= rpm
 KARCH ?= $(shell uname -m)
 endif
 
-ifeq ($(wildcard ${BUILD_PKG}/CMakeLists.txt),)
+ifeq ($(wildcard scripts/${BUILD_PKG}/CMakeLists.txt),)
 $(error "Unable to create a ${BUILD_PKG} package, try rpm or deb")
 endif
 
@@ -257,7 +257,7 @@ load:
 maintainer-clean: distclean
 	@true
 
-${CONFIG_PKG}: $(wildcard ${BUILD_PKG}/*) Makefile
+${CONFIG_PKG}: scripts/${BUILD_PKG}/CMakeLists.txt Makefile
 	mkdir -p $(@D)
 	rm -rf $(@D)/*
 	@$(config-cmake) > $@.tmp

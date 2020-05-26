@@ -10,7 +10,8 @@ project( kmod-mpool NONE )
 
 message( STATUS "Configuring ${PROJECT_NAME}-${KREL} common ..." )
 
-set( PKG_DIR                         "${CMAKE_CURRENT_SOURCE_DIR}/${BUILD_PKG}" )
+set( SCRIPTS_DIR  "${CMAKE_CURRENT_SOURCE_DIR}/scripts/${BUILD_PKG}" )
+
 set( CPACK_PACKAGING_INSTALL_PREFIX  "${DESTDIR}" )
 
 INSTALL(
@@ -56,6 +57,6 @@ set( CPACK_PACKAGE_DESCRIPTION
 set( CPACK_PACKAGE_FILE_NAME
     "${CPACK_PACKAGE_NAME}-${MPOOL_TAG}${BUILD_STYPE}.${KARCH}" )
 
-include( ${BUILD_PKG}/CMakeLists.txt )
+include( ${SCRIPTS_DIR}/CMakeLists.txt )
 
 include( CPack )

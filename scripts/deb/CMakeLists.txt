@@ -15,4 +15,4 @@ set( CPACK_DEBIAN_PACKAGE_DESCRIPTION   "${CPACK_PACKAGE_DESCRIPTION}" )
 set( CPACK_DEBIAN_PACKAGE_SECTION       "kernel" )
 
 set( CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
-    "${PKG_DIR}/preinst;${PKG_DIR}/postinst;${PKG_DIR}/prerm;${PKG_DIR}/postrm" )
+    "${SCRIPTS_DIR}/preinst;${SCRIPTS_DIR}/postinst;${SCRIPTS_DIR}/prerm;${SCRIPTS_DIR}/postrm" )
