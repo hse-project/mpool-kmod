@@ -1,3 +1,31 @@
 #!/bin/sh
+#
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Copyright (C) 2020 Micron Technology, Inc.  All rights reserved.
+#
+# https://www.debian.org/doc/debian-policy/ch-matainerscripts.html
 
-echo "postinst [$*]"
+PROG=${0##*/}
+PKG=${0%.*}
+
+echo "${PROG} [$*]"
+
+case $1 in
+    configure)
+        depmod -A
+        modprobe mpool
+        [ $? -eq 0 ] || echo "${PROG}: module mpool ${PKG} failed to load, run modprobe manually"
+        ;;
+
+    abort-upgrade|abort-remove|abort-deconfigure)
+        echo "${PROG}: dont know how to handle $1 for ${PKG}..." >&2
+        ;;
+
+    *)
+        echo "invalid command '$1'" >&2;
+        exit 1
+        ;;
+esac
+
+exit 0

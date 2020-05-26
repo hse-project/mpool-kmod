@@ -19,7 +19,7 @@ set( CPACK_DEBIAN_RELOCATION_PATHS       /usr /etc )
 set( CCSD  "${CMAKE_CURRENT_SOURCE_DIR}" )
 
 set( CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA
-    "${CCSD}/deb/postinst;${CCSD}/deb/prerm;${CCSD}/deb/postrm" )
+    "${CCSD}/deb/preinst;${CCSD}/deb/postinst;${CCSD}/deb/prerm;${CCSD}/deb/postrm" )
 
 set( CPACK_DEBIAN_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
     ${DESTDIR}
