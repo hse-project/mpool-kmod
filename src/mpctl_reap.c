@@ -38,7 +38,7 @@
 #include <mpcore/assert.h>
 #include <mpcore/evc.h>
 
-#include "mpctl_params.h"
+#include "mpctl_sys.h"
 #include "mpctl.h"
 
 #define REAP_ELEM_MAX       3
@@ -94,11 +94,9 @@ struct mpc_reap {
 	struct workqueue_struct    *reap_wq;
 
 	____cacheline_aligned
-	struct ctl_table_header    *reap_hdr;
-	struct ctl_table           *reap_tab;
-	int                         reap_mempct;
-	int                         reap_ttl;
-	int                         reap_debug;
+	unsigned int                reap_mempct;
+	unsigned int                reap_ttl;
+	unsigned int                reap_debug;
 
 	____cacheline_aligned
 	atomic_t                    reap_eidx;
@@ -393,65 +391,88 @@ static void mpc_reap_prune(struct work_struct *work)
 	queue_delayed_work(reap->reap_wq, &reap->reap_dwork, delay);
 }
 
-#define MPC_REAP_PARAMS_CNT    4
+#define REAP_MEMPCT_MIN    5
+#define REAP_MEMPCT_MAX    100
+#define REAP_TTL_MIN       100
+#define REAP_DEBUG_MAX     3
 
-static int reap_mempct_min = 5;
-static int reap_mempct_max = 100;
-static int reap_ttl_min    = 100;
-static int reap_ttl_max    = INT_MAX;
-static int reap_debug_min  = 0;
-static int reap_debug_max  = 3;
-
-static merr_t mpc_reap_params_register(struct mpc_reap *reap)
+static ssize_t
+mpc_reap_mempct_show(struct device *dev, struct device_attribute *da, char *buf)
 {
-	struct ctl_table   *tab, *oid;
-	merr_t              err;
-	int                 compc, tabc, oidc;
-
-	compc = MPC_SYSCTL_RCNT + MPC_SYSCTL_DCNT;
-	oidc  = MPC_REAP_PARAMS_CNT;
-	tabc  = compc + oidc;
-
-	tab = kcalloc(tabc, sizeof(*tab), GFP_KERNEL);
-	if (ev(!tab))
-		return merr(ENOMEM);
-
-	oid = tab + compc;
-
-	err = mpc_sysctl_path(tab, tab + MPC_SYSCTL_RCNT, NULL, oid,
-			      NULL, MPC_SYSCTL_DMODE);
-	if (ev(err))
-		goto errout;
-
-	mpc_sysctl_oid_minmax(oid++, "reap_mempct", 0644, &reap->reap_mempct,
-			      sizeof(reap->reap_mempct), proc_dointvec_minmax,
-			      &reap_mempct_min, &reap_mempct_max);
-
-	mpc_sysctl_oid_minmax(oid++, "reap_debug", 0644, &reap->reap_debug,
-			      sizeof(reap->reap_debug), proc_dointvec_minmax,
-			      &reap_debug_min, &reap_debug_max);
-
-	mpc_sysctl_oid_minmax(oid++, "reap_ttl", 0644, &reap->reap_ttl,
-			      sizeof(reap->reap_ttl), proc_dointvec_minmax,
-			      &reap_ttl_min, &reap_ttl_max);
-
-	reap->reap_hdr = mpc_sysctl_register(tab);
-	if (ev(!reap->reap_hdr))
-		goto errout;
-
-	reap->reap_tab = tab;
-
-	return 0;
-
-errout:
-	kfree(tab);
-	return err;
+	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_reap(dev)->reap_mempct);
 }
 
-static void mpc_reap_params_unregister(struct mpc_reap *reap)
+static ssize_t
+mpc_reap_mempct_store(struct device *dev, struct device_attribute *da,
+		      const char *buf, size_t count)
 {
-	mpc_sysctl_unregister(reap->reap_hdr);
-	kfree(reap->reap_tab);
+	struct mpc_reap    *reap;
+	unsigned int        val;
+	int                 rc;
+
+	rc = kstrtouint(buf, 10, &val);
+	if (rc || (val < REAP_MEMPCT_MIN || val > REAP_MEMPCT_MAX))
+		return -EINVAL;
+
+	reap = dev_to_reap(dev);
+	reap->reap_mempct = val;
+
+	return count;
+}
+
+static ssize_t
+mpc_reap_debug_show(struct device *dev, struct device_attribute *da, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_reap(dev)->reap_debug);
+}
+
+static ssize_t
+mpc_reap_debug_store(struct device *dev, struct device_attribute *da,
+		const char *buf, size_t count)
+{
+	struct mpc_reap    *reap;
+	unsigned int        val;
+	int                 rc;
+
+	rc = kstrtouint(buf, 10, &val);
+	if (rc || val > REAP_DEBUG_MAX)
+		return -EINVAL;
+
+	reap = dev_to_reap(dev);
+	reap->reap_debug = val;
+
+	return count;
+}
+
+static ssize_t
+mpc_reap_ttl_show(struct device *dev, struct device_attribute *da, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_reap(dev)->reap_ttl);
+}
+
+static ssize_t
+mpc_reap_ttl_store(struct device *dev, struct device_attribute *da,
+	      const char *buf, size_t count)
+{
+	struct mpc_reap    *reap;
+	unsigned int        val;
+	int                 rc;
+
+	rc = kstrtouint(buf, 10, &val);
+	if (rc || val < REAP_TTL_MIN)
+		return -EINVAL;
+
+	reap = dev_to_reap(dev);
+	reap->reap_ttl = val;
+
+	return count;
+}
+
+void mpc_reap_params_add(struct device_attribute *dattr)
+{
+	MPC_ATTR_RW(dattr++, reap_mempct);
+	MPC_ATTR_RW(dattr++, reap_debug);
+	MPC_ATTR_RW(dattr, reap_ttl);
 }
 
 static void mpc_reap_mempct_init(struct mpc_reap *reap)
@@ -485,7 +506,6 @@ merr_t mpc_reap_create(struct mpc_reap **reapp)
 	struct mpc_reap        *reap;
 
 	uint   flags, i;
-	merr_t err;
 
 	flags = WQ_UNBOUND | WQ_HIGHPRI | WQ_CPU_INTENSIVE;
 	*reapp = NULL;
@@ -525,13 +545,6 @@ merr_t mpc_reap_create(struct mpc_reap **reapp)
 	reap->reap_debug = 0;
 	mpc_reap_mempct_init(reap);
 
-	err = mpc_reap_params_register(reap);
-	if (ev(err)) {
-		destroy_workqueue(reap->reap_wq);
-		kfree(reap);
-		return err;
-	}
-
 	INIT_DELAYED_WORK(&reap->reap_dwork, mpc_reap_prune);
 	queue_delayed_work(reap->reap_wq, &reap->reap_dwork, 1);
 
@@ -569,7 +582,6 @@ void mpc_reap_destroy(struct mpc_reap *reap)
 	}
 
 	destroy_workqueue(reap->reap_wq);
-	mpc_reap_params_unregister(reap);
 	kfree(reap);
 }
 

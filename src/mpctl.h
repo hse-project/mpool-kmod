@@ -68,4 +68,11 @@ static inline size_t mpc_xvm_pglen(struct mpc_xvm *xvm)
 
 void mpc_xvm_free(struct mpc_xvm *xvm);
 
+static inline struct mpc_unit *dev_to_unit(struct device *dev)
+{
+	return dev_get_drvdata(dev);
+}
+
+struct mpc_reap *dev_to_reap(struct device *dev);
+
 #endif /* MPOOL_MPCTL_H */

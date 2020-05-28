@@ -39,7 +39,7 @@
 
 #include "mpool_config.h"
 #include "mpctl.h"
-#include "mpctl_params.h"
+#include "mpctl_sys.h"
 #include "mpctl_reap.h"
 #include "init.h"
 
@@ -124,8 +124,7 @@ struct mpc_unit {
 	struct mpc_reap            *un_ds_reap;
 	struct device              *un_device;
 	struct backing_dev_info    *un_saved_bdi;
-	struct ctl_table           *un_tab;
-	struct ctl_table_header    *un_hdr;
+	struct mpc_attr            *un_attr;
 	uint                        un_rawio;       /* log2(max_mblock_size) */
 	u64                         un_ds_oidv[2];
 	u32                         un_ra_pages_max;
@@ -491,6 +490,111 @@ mpool_to_mpcore_params(
 		mpc_params->mp_mdcnum = mdcnum;
 }
 
+struct mpc_reap *dev_to_reap(struct device *dev)
+{
+	return dev_to_unit(dev)->un_ds_reap;
+}
+
+#define MPC_MPOOL_PARAMS_CNT     7
+
+static ssize_t
+mpc_uid_show(struct device *dev, struct device_attribute *da, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_unit(dev)->un_uid);
+}
+
+static ssize_t
+mpc_gid_show(struct device *dev, struct device_attribute *da, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_unit(dev)->un_gid);
+}
+
+static ssize_t
+mpc_mode_show(struct device *dev, struct device_attribute *da, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "0%o\n", dev_to_unit(dev)->un_mode);
+}
+
+static ssize_t
+mpc_ra_show(struct device *dev, struct device_attribute *da, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%u\n",
+			 dev_to_unit(dev)->un_ra_pages_max);
+}
+
+static ssize_t
+mpc_label_show(struct device *dev, struct device_attribute *da, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%s\n", dev_to_unit(dev)->un_label);
+}
+
+static ssize_t
+mpc_vma_show(struct device *dev, struct device_attribute *da, char *buf)
+{
+	return scnprintf(buf, PAGE_SIZE, "%u\n", mpc_xvm_size_max);
+}
+
+static ssize_t
+mpc_type_show(struct device *dev, struct device_attribute *da, char *buf)
+{
+	struct mpool_uuid  uuid;
+	char               uuid_str[MPOOL_UUID_STRING_LEN + 1] = { };
+
+	memcpy(uuid.uuid, dev_to_unit(dev)->un_utype.b, MPOOL_UUID_SIZE);
+	mpool_unparse_uuid(&uuid, uuid_str);
+
+	return scnprintf(buf, PAGE_SIZE, "%s\n", uuid_str);
+}
+
+void mpc_mpool_params_add(struct device_attribute *dattr)
+{
+	MPC_ATTR_RO(dattr++, uid);
+	MPC_ATTR_RO(dattr++, gid);
+	MPC_ATTR_RO(dattr++, mode);
+	MPC_ATTR_RO(dattr++, ra);
+	MPC_ATTR_RO(dattr++, label);
+	MPC_ATTR_RO(dattr++, vma);
+	MPC_ATTR_RO(dattr,   type);
+}
+
+static merr_t mpc_params_register(struct mpc_unit *unit, int cnt)
+{
+	struct mpc_attr            *attr;
+	struct device_attribute    *dattr;
+	int                         rc;
+
+	attr = mpc_attr_create(unit->un_device, "parameters", cnt);
+	if (ev(!attr))
+		return merr(ENOMEM);
+
+	dattr = attr->a_dattr;
+
+	/* Per-mpool parameters */
+	if (mpc_unit_ismpooldev(unit))
+		mpc_mpool_params_add(dattr);
+
+	/* Common parameters */
+	if (mpc_unit_isctldev(unit))
+		mpc_reap_params_add(dattr);
+
+	rc = mpc_attr_group_create(attr);
+	if (ev(rc)) {
+		mpc_attr_destroy(attr);
+		return merr(rc);
+	}
+
+	unit->un_attr = attr;
+
+	return 0;
+}
+
+static void mpc_params_unregister(struct mpc_unit *unit)
+{
+	mpc_attr_group_destroy(unit->un_attr);
+	mpc_attr_destroy(unit->un_attr);
+	unit->un_attr = NULL;
+}
+
 /**
  * mpc_mpool_open() - Open the mpool specified by the given drive paths,
  *                    and then create an mpool object to track the
@@ -654,6 +758,9 @@ static void mpc_unit_release(struct kref *refp)
 
 	if (unit->un_mpool)
 		mpc_mpool_put(unit->un_mpool);
+
+	if (unit->un_attr)
+		mpc_params_unregister(unit);
 
 	if (unit->un_device)
 		device_destroy(ss->ss_class, unit->un_devno);
@@ -2069,73 +2176,6 @@ mpioc_mp_mclass_get(struct mpc_unit *unit, uint cmd, struct mpioc_mclass *mcl)
 	return rc ? merr(EFAULT) : 0;
 }
 
-#define MPC_PARAMS_CNT     8
-
-static merr_t mpc_params_register(struct mpc_unit *unit)
-{
-	struct ctl_table   *tab, *oid;
-	merr_t              err;
-	int                 compc, tabc, oidc;
-
-	if (ev(!unit))
-		return merr(EINVAL);
-
-	compc = MPC_SYSCTL_RCNT + 2 * MPC_SYSCTL_DCNT;
-	oidc  = MPC_PARAMS_CNT;
-	tabc  = compc + oidc;
-
-	tab = kcalloc(tabc, sizeof(*tab), GFP_KERNEL);
-	if (ev(!tab))
-		return merr(ENOMEM);
-
-	oid = tab + compc;
-
-	err = mpc_sysctl_path(tab, tab + MPC_SYSCTL_RCNT,
-			      tab + MPC_SYSCTL_RCNT + MPC_SYSCTL_DCNT, oid,
-			      unit->un_mpool->mp_name, MPC_SYSCTL_DMODE);
-	if (ev(err))
-		goto errout;
-
-	mpc_sysctl_oid(oid++, "uid", 0444, &unit->un_uid,
-		       sizeof(unit->un_uid), proc_dointvec);
-
-	mpc_sysctl_oid(oid++, "gid", 0444, &unit->un_gid,
-		       sizeof(unit->un_gid), proc_dointvec);
-
-	mpc_sysctl_oid(oid++, "mode", 0444, &unit->un_mode,
-		       sizeof(unit->un_mode), mpc_mode_proc_handler);
-
-	mpc_sysctl_oid(oid++, "ra", 0444, &unit->un_ra_pages_max,
-		       sizeof(unit->un_ra_pages_max), proc_douintvec);
-
-	mpc_sysctl_oid(oid++, "label", 0444, &unit->un_label,
-		       sizeof(unit->un_label), proc_dostring);
-
-	mpc_sysctl_oid(oid++, "vma", 0444, &mpc_xvm_size_max,
-		       sizeof(mpc_xvm_size_max), proc_douintvec);
-
-	mpc_sysctl_oid(oid++, "type", 0444, unit->un_utype.b,
-		       sizeof(unit->un_utype.b), mpc_uuid_proc_handler);
-
-	unit->un_hdr = mpc_sysctl_register(tab);
-	if (ev(!unit->un_hdr))
-		goto errout;
-
-	unit->un_tab = tab;
-
-	return 0;
-
-errout:
-	kfree(tab);
-	return err;
-}
-
-static void mpc_params_unregister(struct mpc_unit *unit)
-{
-	mpc_sysctl_unregister(unit->un_hdr);
-	kfree(unit->un_tab);
-}
-
 /**
  * mpioc_mp_create() - create an mpool.
  * @mp:      mpool parameter block
@@ -2285,7 +2325,7 @@ mpioc_mp_create(
 	mp->mp_params.mp_oidv[0] = cfg.mc_oid1;
 	mp->mp_params.mp_oidv[1] = cfg.mc_oid2;
 
-	err = mpc_params_register(unit);
+	err = mpc_params_register(unit, MPC_MPOOL_PARAMS_CNT);
 	if (ev(err)) {
 		mpc_unit_put(unit); /* drop birth ref */
 		goto errout;
@@ -2407,7 +2447,7 @@ mpioc_mp_activate(
 	strlcpy(mp->mp_params.mp_label, cfg.mc_label,
 		sizeof(mp->mp_params.mp_label));
 
-	err = mpc_params_register(unit);
+	err = mpc_params_register(unit, MPC_MPOOL_PARAMS_CNT);
 	if (ev(err)) {
 		mpc_unit_put(unit); /* drop birth ref */
 		goto errout;
@@ -2488,10 +2528,8 @@ mp_deactivate_impl(
 	}
 	mutex_unlock(&ss->ss_lock);
 
-	if (!err) {
-		mpc_params_unregister(unit);
+	if (!err)
 		mpc_unit_put(unit); /* drop birth ref */
-	}
 
 	mpc_unit_put(unit); /* drop lookup ref */
 
@@ -4279,11 +4317,19 @@ static __init int mpc_init(void)
 		goto errout;
 	}
 
+	ctlunit->un_ds_reap = mpc_reap;
+	err = mpc_params_register(ctlunit, MPC_REAP_PARAMS_CNT);
+	if (ev(err)) {
+		errmsg = "cannot register common parameters";
+		goto errout;
+	}
+
 	mutex_lock(&ss->ss_lock);
 	idr_replace(&ss->ss_unitmap, ctlunit, MINOR(ctlunit->un_devno));
 	mutex_unlock(&ss->ss_lock);
 
 	dev_info(ctlunit->un_device, "version %s", MPOOL_VERSION);
+
 	mpc_unit_put(ctlunit);
 
 errout:
