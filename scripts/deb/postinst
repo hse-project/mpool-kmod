@@ -7,25 +7,24 @@
 # https://www.debian.org/doc/debian-policy/ch-matainerscripts.html
 
 PROG=${0##*/}
-PKG=${0%.*}
+PKG=$(basename ${0%.*})
 
 echo "${PROG} [$*]"
 
 case $1 in
     configure)
         depmod -A
-        modprobe mpool
-        [ $? -eq 0 ] || echo "${PROG}: module mpool ${PKG} failed to load, run modprobe manually"
-        ;;
 
-    abort-upgrade|abort-remove|abort-deconfigure)
-        echo "${PROG}: dont know how to handle $1 for ${PKG}..." >&2
+        modprobe mpool || echo "Failed to load mpool module, run modprobe manually"
+
+        # Clean up if we did a "force install" via /tmp/mpool-force-install
+        if [ -f /tmp/mpool-needs-reboot ]; then
+            rm -vf /tmp/mpool-force-install
+            rm -f /tmp/mpool-needs-reboot
+        fi
         ;;
 
     *)
-        echo "invalid command '$1'" >&2;
-        exit 1
-        ;;
 esac
 
 exit 0

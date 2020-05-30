@@ -7,38 +7,20 @@
 # https://www.debian.org/doc/debian-policy/ch-matainerscripts.html
 
 PROG=${0##*/}
-PKG=${0%.*}
+PKG=$(basename ${0%.*})
 
 echo "${PROG} [$*]"
 
-do_remove() {
-    modinfo mpool >/dev/null 2>&1 || return 0
-    modprobe -r -q mpool && return 0
-    echo "${PROG}: Failed to remove the mpool kernel module."
-    echo "${PROG} You must manually remove it after uninstall completes."
-}
-
-
 case $1 in
-    remove)
-        do_remove
+    remove|purge)
         depmod -A
         ;;
 
-    purge)
-        depmod -A
-        ;;
-
-    upgrade|disappear|failed-upgrade|abort-upgrade|abort-install)
-        echo "${PROG}: dont know how to handle $1 for ${PKG} ..." >&2
+    abort-upgrade)
+        modprobe mpool ||:
         ;;
 
     *)
-        echo "invalid command '$1'" >&2
-        exit 1
-        ;;
 esac
 
 exit 0
-
-

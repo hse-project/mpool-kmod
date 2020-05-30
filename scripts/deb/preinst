@@ -7,22 +7,96 @@
 # https://www.debian.org/doc/debian-policy/ch-matainerscripts.html
 
 PROG=${0##*/}
-PKG=${0%.*}
+PKG=$(basename ${0%.*})
 
 echo "${PROG} [$*]"
 
-case $1 in
-    install)
-        ;;
+echo_error_cannot_unload_modules()
+{
+    if dpkg-query -W systemd >/dev/null 2>&1
+    then
+        PERSISTENT_MODULE_FILE="/etc/modules-load.d/mpool.conf"
+    else
+        PERSISTENT_MODULE_FILE="/etc/sysconfig/modules/mpool.modules"
+    fi
 
-    upgrade|abort-upgrade)
-        echo "${PROG}: dont know how to handle $1 for ${PKG} ..." >&2
+    echo
+    echo "Failed to unload kernel modules from a previous install."
+    echo
+    echo "How to resolve this issue:"
+    echo
+    echo "1. This is likely because an application has open references to a"
+    echo "   activated mpool.  You must stop the application, or ensure it has"
+    echo "   no open references to an mpool, before updating the kernel"
+    echo "   modules."
+    echo
+    echo "   The following command may help identify processes with an open"
+    echo "   reference to an mpool:"
+    echo
+    echo "   sudo lsof | grep '/dev/mpool'"
+    echo
+    echo
+    echo "2. If the kernel modules still cannot be unloaded, ensure the file"
+    echo "   ${PERSISTENT_MODULE_FILE} is removed or disabled (to stop"
+    echo "   modules from loading at boot time), then reboot:"
+    echo
+    echo "   sudo rm -f ${PERSISTENT_MODULE_FILE}"
+    echo "   sudo reboot"
+    echo
+    echo
+    echo "3. If you must install this package now and reboot at a later time,"
+    echo "   create the file \"/tmp/mpool-force-install\" as follows:"
+    echo
+    echo "   sudo touch /tmp/mpool-force-install"
+    echo
+    echo "   If this file is present *AND* owned by root, the package install "
+    echo "   will proceed even if the old kernel modules are loaded."
+    echo "   After doing this, you MUST REBOOT to load the correct modules."
+    echo
+}
+
+check_force_install()
+{
+    if [ -f /tmp/mpool-force-install ]; then
+        OWNER=`/usr/bin/stat -c '%u' /tmp/mpool-force-install`
+        if [ $OWNER -eq 0 ]; then
+            echo "*** WARNING ***"
+            echo "/tmp/mpool-force-install exists, forcing install to " \
+                 "continue without removing old modules"
+
+            # Leave a marker file for post-install to look for
+            touch /tmp/mpool-needs-reboot
+        else
+            echo_error_cannot_unload_modules
+            echo "*** WARNING ***"
+            echo "/tmp/mpool-force-install exists, but is not owned by root."
+            echo
+            echo "Change owner to root to force the package install to proceed."
+            echo
+            exit 1
+        fi
+    else
+        echo_error_cannot_unload_modules
+        exit 1
+    fi
+}
+
+do_unload() {
+    if [ -d /dev/mpool ]; then
+        mpool scan --deactivate >/dev/null 2>&1 ||:
+    fi
+
+    (modprobe -r -q mpool || rmmod mpool) && return 0
+
+    check_force_install
+}
+
+case $1 in
+    install|upgrade)
+        do_unload
         ;;
 
     *)
-        echo "invalid command '$1'" >&2
-        exit 1
-        ;;
 esac
 
 exit 0
