@@ -3081,35 +3081,6 @@ errout:
 	return err;
 }
 
-/**
- * mpioc_mb_props() - mblock getprops ioctl handler
- * @unit: dataset unit ptr
- * @mb:   mblock parameter block
- */
-static merr_t
-mpioc_mb_props(struct mpc_unit *unit, struct mpioc_mblock *mb)
-{
-	struct mblock_descriptor   *mblock;
-	struct mpool_descriptor    *mpool;
-	merr_t                      err;
-
-	if (!unit || !unit->un_mpool || !mb)
-		return merr(EINVAL);
-
-	if (!mblock_objid(mb->mb_objid))
-		return merr(EINVAL);
-
-	mpool = unit->un_mpool->mp_desc;
-
-	err = mblock_find_get(mpool, mb->mb_objid, 0, NULL, &mblock);
-	if (!err) {
-		err = mblock_get_props_ex(mpool, mblock, &mb->mb_props);
-		mblock_put(mpool, mblock);
-	}
-
-	return err;
-}
-
 /*
  * Mpctl mlog ioctl handlers
  */
@@ -3693,10 +3664,6 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	case MPIOC_MB_DELETE:
 	case MPIOC_MB_ABORT:
 		err = mpioc_mb_abcomdel(unit, cmd, argp);
-		break;
-
-	case MPIOC_MB_PROPS:
-		err = mpioc_mb_props(unit, argp);
 		break;
 
 	case MPIOC_MB_READ:
