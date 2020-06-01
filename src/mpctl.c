@@ -279,11 +279,7 @@ module_param(mpc_chunker_size, int, 0644);
 MODULE_PARM_DESC(mpc_chunker_size, "Chunking size (in bytes) for device I/O");
 
 
-static void
-mpc_errinfo(
-	struct mpioc_cmn   *cmn,
-	enum mpool_rc       rcode,
-	const char         *msg)
+static void mpc_errinfo(struct mpioc_cmn *cmn, enum mpool_rc rcode, const char *msg)
 {
 	size_t  len;
 	ulong   rc;
@@ -424,10 +420,7 @@ static void mpool_params_merge_defaults(struct mpool_params *params)
 	mpc_toascii(params->mp_label, sizeof(params->mp_label));
 }
 
-static bool
-mpool_params_merge_config(
-	struct mpool_params *params,
-	struct mpool_config *cfg)
+static bool mpool_params_merge_config(struct mpool_params *params, struct mpool_config *cfg)
 {
 	uuid_le uuidnull = { };
 	bool    changed = false;
@@ -465,10 +458,7 @@ mpool_params_merge_config(
 	return changed;
 }
 
-static void
-mpool_to_mpcore_params(
-	struct mpool_params    *params,
-	struct mpcore_params   *mpc_params)
+static void mpool_to_mpcore_params(struct mpool_params *params, struct mpcore_params *mpc_params)
 {
 	u64    mdc0cap;
 	u64    mdcncap;
@@ -497,45 +487,38 @@ struct mpc_reap *dev_to_reap(struct device *dev)
 
 #define MPC_MPOOL_PARAMS_CNT     7
 
-static ssize_t
-mpc_uid_show(struct device *dev, struct device_attribute *da, char *buf)
+static ssize_t mpc_uid_show(struct device *dev, struct device_attribute *da, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_unit(dev)->un_uid);
 }
 
-static ssize_t
-mpc_gid_show(struct device *dev, struct device_attribute *da, char *buf)
+static ssize_t mpc_gid_show(struct device *dev, struct device_attribute *da, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_unit(dev)->un_gid);
 }
 
-static ssize_t
-mpc_mode_show(struct device *dev, struct device_attribute *da, char *buf)
+static ssize_t mpc_mode_show(struct device *dev, struct device_attribute *da, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "0%o\n", dev_to_unit(dev)->un_mode);
 }
 
-static ssize_t
-mpc_ra_show(struct device *dev, struct device_attribute *da, char *buf)
+static ssize_t mpc_ra_show(struct device *dev, struct device_attribute *da, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "%u\n",
 			 dev_to_unit(dev)->un_ra_pages_max);
 }
 
-static ssize_t
-mpc_label_show(struct device *dev, struct device_attribute *da, char *buf)
+static ssize_t mpc_label_show(struct device *dev, struct device_attribute *da, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "%s\n", dev_to_unit(dev)->un_label);
 }
 
-static ssize_t
-mpc_vma_show(struct device *dev, struct device_attribute *da, char *buf)
+static ssize_t mpc_vma_show(struct device *dev, struct device_attribute *da, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "%u\n", mpc_xvm_size_max);
 }
 
-static ssize_t
-mpc_type_show(struct device *dev, struct device_attribute *da, char *buf)
+static ssize_t mpc_type_show(struct device *dev, struct device_attribute *da, char *buf)
 {
 	struct mpool_uuid  uuid;
 	char               uuid_str[MPOOL_UUID_STRING_LEN + 1] = { };
@@ -691,11 +674,7 @@ mpc_mpool_open(
  * Return:  Returns 0 if successful and sets *unitp.
  *          Returns -errno on error.
  */
-static merr_t
-mpc_unit_create(
-	const char             *name,
-	struct mpc_mpool       *mpool,
-	struct mpc_unit       **unitp)
+static merr_t mpc_unit_create(const char *name, struct mpc_mpool *mpool, struct mpc_unit **unitp)
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpc_unit        *unit;
@@ -784,8 +763,7 @@ static void mpc_unit_put(struct mpc_unit *unit)
  * Returns a referenced ptr to the unit (via *unitp) if found,
  * otherwise it sets *unitp to NULL.
  */
-static void
-mpc_unit_lookup(int minor, struct mpc_unit **unitp)
+static void mpc_unit_lookup(int minor, struct mpc_unit **unitp)
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpc_unit        *unit;
@@ -848,10 +826,7 @@ static int mpc_unit_lookup_by_name_itercb(int minor, void *item, void *arg)
  * is set to NULL.
  */
 static void
-mpc_unit_lookup_by_name(
-	struct mpc_unit    *parent,
-	const char         *name,
-	struct mpc_unit   **unitp)
+mpc_unit_lookup_by_name(struct mpc_unit *parent, const char *name, struct mpc_unit **unitp)
 {
 	struct mpc_softstate *ss = &mpc_softstate;
 	void   *argv[] = { parent, (void *)name, NULL };
@@ -1133,8 +1108,7 @@ static void mpc_vm_close(struct vm_area_struct *vma)
 	mpc_xvm_put(vma->vm_private_data);
 }
 
-static int
-mpc_alloc_and_readpage(struct vm_area_struct *vma, pgoff_t offset, gfp_t gfp)
+static int mpc_alloc_and_readpage(struct vm_area_struct *vma, pgoff_t offset, gfp_t gfp)
 {
 	struct file            *file;
 	struct page            *page;
@@ -1159,8 +1133,7 @@ mpc_alloc_and_readpage(struct vm_area_struct *vma, pgoff_t offset, gfp_t gfp)
 	return rc;
 }
 
-static bool
-mpc_lock_page_or_retry(struct page *page, struct mm_struct *mm, uint flags)
+static bool mpc_lock_page_or_retry(struct page *page, struct mm_struct *mm, uint flags)
 {
 	might_sleep();
 
@@ -1192,8 +1165,7 @@ mpc_lock_page_or_retry(struct page *page, struct mm_struct *mm, uint flags)
 	return true;
 }
 
-static int
-mpc_handle_page_error(struct page *page, struct vm_area_struct *vma)
+static int mpc_handle_page_error(struct page *page, struct vm_area_struct *vma)
 {
 	int     rc;
 
@@ -1211,8 +1183,7 @@ mpc_handle_page_error(struct page *page, struct vm_area_struct *vma)
 	return rc;
 }
 
-static vm_fault_t
-mpc_vm_fault_impl(struct vm_area_struct *vma, struct vm_fault *vmf)
+static vm_fault_t mpc_vm_fault_impl(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
 	struct address_space   *mapping;
 	struct inode           *inode;
@@ -1850,8 +1821,7 @@ static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
  * Return:  Returns 0 if successful,
  *          Returns merr_t otherwise...
  */
-static merr_t
-mpioc_mp_add(struct mpc_unit *unit, uint cmd, struct mpioc_drive *drv)
+static merr_t mpioc_mp_add(struct mpc_unit *unit, uint cmd, struct mpioc_drive *drv)
 {
 	struct mpool_descriptor    *desc = unit->un_mpool->mp_desc;
 	struct pd_prop             *pd_prop;
@@ -1994,8 +1964,7 @@ static merr_t mpc_mp_chown(struct mpc_unit *unit, struct mpool_params *params)
  * Return:  Returns 0 if successful
  *          Returns merr_t otherwise...
  */
-static merr_t
-mpioc_params_get(struct mpc_unit *unit, uint cmd, struct mpioc_params *get)
+static merr_t mpioc_params_get(struct mpc_unit *unit, uint cmd, struct mpioc_params *get)
 {
 	struct mpc_softstate       *ss = &mpc_softstate;
 	struct mpool_descriptor    *desc;
@@ -2055,8 +2024,7 @@ mpioc_params_get(struct mpc_unit *unit, uint cmd, struct mpioc_params *get)
  * Return:  Returns 0 if successful
  *          Returns merr_t otherwise...
  */
-static merr_t
-mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_params *set)
+static merr_t mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_params *set)
 {
 	struct mpc_softstate       *ss = &mpc_softstate;
 	struct mpool_descriptor    *mp;
@@ -2144,8 +2112,7 @@ mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_params *set)
  * Return:  Returns 0 if successful
  *          Returns merr_t otherwise...
  */
-static merr_t
-mpioc_mp_mclass_get(struct mpc_unit *unit, uint cmd, struct mpioc_mclass *mcl)
+static merr_t mpioc_mp_mclass_get(struct mpc_unit *unit, uint cmd, struct mpioc_mclass *mcl)
 {
 	struct mpool_descriptor   *desc = unit->un_mpool->mp_desc;
 	struct mpool_mclass_xprops mcxv[MP_MED_NUMBER];
@@ -2479,11 +2446,7 @@ errout:
  * MPIOC_MP_DEACTIVATE ioctl handler to deactivate an mpool.
  */
 static merr_t
-mp_deactivate_impl(
-	struct mpc_unit    *ctl,
-	uint                cmd,
-	struct mpioc_mpool *mp,
-	bool                locked)
+mp_deactivate_impl(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp, bool locked)
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpc_unit        *unit = NULL;
@@ -2540,14 +2503,12 @@ errout:
 	return err;
 }
 
-static merr_t
-mpioc_mp_deactivate(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
+static merr_t mpioc_mp_deactivate(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 {
 	return mp_deactivate_impl(ctl, cmd, mp, false);
 }
 
-static merr_t
-mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
+static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpc_unit        *unit = NULL;
@@ -2735,8 +2696,7 @@ errout:
  *
  * MPIOC_PROP_GET ioctl handler to retrieve properties for the specified device.
  */
-static void
-mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop, int cmd)
+static void mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop, int cmd)
 {
 	struct mpool_descriptor    *desc = unit->un_mpool->mp_desc;
 	struct mpool_params        *params;
@@ -2779,8 +2739,7 @@ mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop, int cmd)
  *
  * MPIOC_PROP_GET ioctl handler to retrieve properties for the specified device.
  */
-static merr_t
-mpioc_devprops_get(struct mpc_unit *unit, struct mpioc_devprops *devprops)
+static merr_t mpioc_devprops_get(struct mpc_unit *unit, struct mpioc_devprops *devprops)
 {
 	merr_t err = 0;
 
@@ -2801,8 +2760,7 @@ mpioc_devprops_get(struct mpc_unit *unit, struct mpioc_devprops *devprops)
  *
  * Return: Returns properties for each unit matching the input criteria.
  */
-static int
-mpioc_proplist_get_itercb(int minor, void *item, void *arg)
+static int mpioc_proplist_get_itercb(int minor, void *item, void *arg)
 {
 	struct mpc_unit    *unit = item;
 	struct mpioc_prop  *uprop, kprop;
@@ -2856,8 +2814,7 @@ mpioc_proplist_get_itercb(int minor, void *item, void *arg)
  *
  * Return:  Returns 0 if successful, errno via merr_t otherwise...
  */
-static merr_t
-mpioc_proplist_get(struct mpc_unit *unit, uint cmd, struct mpioc_list *ls)
+static merr_t mpioc_proplist_get(struct mpc_unit *unit, uint cmd, struct mpioc_list *ls)
 {
 	struct mpc_softstate *ss = &mpc_softstate;
 	merr_t      err = 0;
@@ -2885,8 +2842,7 @@ mpioc_proplist_get(struct mpc_unit *unit, uint cmd, struct mpioc_list *ls)
  *
  * Return:  Returns 0 if successful, errno via merr_t otherwise...
  */
-static merr_t
-mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
+static merr_t mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
 {
 	struct mblock_descriptor   *mblock;
 	struct mpool_descriptor    *mpool;
@@ -2919,8 +2875,7 @@ mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
  *
  * Return:  Returns 0 if successful, errno via merr_t otherwise...
  */
-static merr_t
-mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
+static merr_t mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
 {
 	struct mblock_descriptor   *mblock;
 	struct mpool_descriptor    *mpool;
@@ -2958,8 +2913,7 @@ mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
  *
  * Return:  Returns 0 if successful, errno via merr_t otherwise...
  */
-static merr_t
-mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_id *mi)
+static merr_t mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_id *mi)
 {
 	struct mblock_descriptor   *mblock;
 	struct mpool_descriptor    *mpool;
@@ -3084,8 +3038,7 @@ errout:
 /*
  * Mpctl mlog ioctl handlers
  */
-merr_t
-mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
+merr_t mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 {
 	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
@@ -3144,8 +3097,7 @@ merr_t mpioc_mlog_find(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 	return err;
 }
 
-merr_t
-mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mlog_id *mi)
+merr_t mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mlog_id *mi)
 {
 	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
@@ -3197,8 +3149,7 @@ mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mlog_id *mi)
 }
 
 __attribute__((__noinline__))
-merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi,
-		     void *stkbuf, size_t stkbufsz)
+merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi, void *stkbuf, size_t stkbufsz)
 {
 	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
@@ -3764,8 +3715,7 @@ struct vcache {
 
 static struct vcache mpc_physio_vcache;
 
-static void *
-mpc_vcache_alloc(struct vcache *vc, size_t sz)
+static void *mpc_vcache_alloc(struct vcache *vc, size_t sz)
 {
 	void *p;
 
@@ -3780,8 +3730,7 @@ mpc_vcache_alloc(struct vcache *vc, size_t sz)
 	return p;
 }
 
-static void
-mpc_vcache_free(struct vcache *vc, void *p)
+static void mpc_vcache_free(struct vcache *vc, void *p)
 {
 	if (!vc || !p)
 		return;
@@ -3792,8 +3741,7 @@ mpc_vcache_free(struct vcache *vc, void *p)
 	spin_unlock(&vc->vc_lock);
 }
 
-static merr_t
-mpc_vcache_init(struct vcache *vc, size_t sz, size_t n)
+static merr_t mpc_vcache_init(struct vcache *vc, size_t sz, size_t n)
 {
 	if (!vc || sz < PAGE_SIZE || n < 1)
 		return merr(EINVAL);
@@ -3808,8 +3756,7 @@ mpc_vcache_init(struct vcache *vc, size_t sz, size_t n)
 	return vc->vc_head ? 0 : merr(ENOMEM);
 }
 
-static void
-mpc_vcache_fini(struct vcache *vc)
+static void mpc_vcache_fini(struct vcache *vc)
 {
 	void *p;
 

@@ -291,8 +291,7 @@ bool omf_logblock_empty_le(char *lbuf);
  *
  * Return: 0 if successful, merr_t otherwise
  */
-merr_t
-omf_logblock_header_pack_htole(struct omf_logblock_header *lbh, char *lbuf);
+merr_t omf_logblock_header_pack_htole(struct omf_logblock_header *lbh, char *lbuf);
 
 /**
  * omf_logblock_header_len_le() - Determine header length of log block
@@ -314,10 +313,7 @@ int omf_logblock_header_len_le(char *lbuf);
  *
  * Return: 0 if successful, merr_t (EINVAL) if invalid log block header vers
  */
-merr_t
-omf_logblock_header_unpack_letoh(
-	struct omf_logblock_header *lbh,
-	const char                 *inbuf);
+merr_t omf_logblock_header_unpack_letoh(struct omf_logblock_header *lbh, const char *inbuf);
 
 /**
  * omf_logrec_desc_pack_htole() - pack log record descriptor
@@ -328,8 +324,7 @@ omf_logblock_header_unpack_letoh(
  *
  * Return: 0 if successful, merr_t (EINVAL) if invalid log rec type
  */
-merr_t
-omf_logrec_desc_pack_htole(struct omf_logrec_descriptor *lrd, char *outbuf);
+merr_t omf_logrec_desc_pack_htole(struct omf_logrec_descriptor *lrd, char *outbuf);
 
 /**
  * omf_logrec_desc_unpack_letoh() - unpack log record descriptor
@@ -338,10 +333,7 @@ omf_logrec_desc_pack_htole(struct omf_logrec_descriptor *lrd, char *outbuf);
  *
  * Unpack little-endian log record descriptor from inbuf into lrd.
  */
-void
-omf_logrec_desc_unpack_letoh(
-	struct omf_logrec_descriptor   *lrd,
-	const char                     *inbuf);
+void omf_logrec_desc_unpack_letoh(struct omf_logrec_descriptor *lrd, const char *inbuf);
 
 /**
  * omf_mdcrec_pack_htole() - pack mdc record
@@ -354,11 +346,7 @@ omf_logrec_desc_unpack_letoh(
  *
  * Return: bytes packed if successful, -EINVAL otherwise
  */
-int
-omf_mdcrec_pack_htole(
-	struct mpool_descriptor    *mp,
-	struct omf_mdcrec_data     *cdr,
-	char                       *outbuf);
+int omf_mdcrec_pack_htole(struct mpool_descriptor *mp, struct omf_mdcrec_data *cdr, char *outbuf);
 
 /**
  * omf_mdcrec_unpack_letoh() - unpack mdc record

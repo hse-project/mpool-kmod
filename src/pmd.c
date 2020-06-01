@@ -30,10 +30,7 @@ pmd_write_meta_to_latest_version(
 	bool                        permitted,
 	struct mpool_devrpt        *devrpt);
 
-static void
-pmd_layout_unprovision(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout);
+static void pmd_layout_unprovision(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 static merr_t
 pmd_obj_alloc_cmn(
@@ -115,8 +112,7 @@ void pmd_layout_release(struct kref *refp)
 	kmem_cache_free(cache, layout);
 }
 
-static struct pmd_layout *
-pmd_layout_find(struct rb_root *root, u64 key)
+static struct pmd_layout *pmd_layout_find(struct rb_root *root, u64 key)
 {
 	struct rb_node *node = root->rb_node;
 	struct pmd_layout *this;
@@ -135,10 +131,7 @@ pmd_layout_find(struct rb_root *root, u64 key)
 	return NULL;
 }
 
-static struct pmd_layout *
-pmd_layout_insert(
-	struct rb_root     *root,
-	struct pmd_layout  *item)
+static struct pmd_layout* pmd_layout_insert(struct rb_root *root, struct pmd_layout *item)
 {
 	struct rb_node **pos = &root->rb_node, *parent = NULL;
 	struct pmd_layout *this;
@@ -192,24 +185,19 @@ static inline void pmd_co_wunlock(struct pmd_mdc_info *cinfo)
 	up_write(&cinfo->mmi_co_lock);
 }
 
-static inline struct pmd_layout *
-pmd_co_find(struct pmd_mdc_info *cinfo, u64 objid)
+static inline struct pmd_layout *pmd_co_find(struct pmd_mdc_info *cinfo, u64 objid)
 {
 	return pmd_layout_find(&cinfo->mmi_co_root, objid);
 }
 
 static inline struct pmd_layout *
-pmd_co_insert(
-	struct pmd_mdc_info    *cinfo,
-	struct pmd_layout      *layout)
+pmd_co_insert(struct pmd_mdc_info *cinfo, struct pmd_layout *layout)
 {
 	return pmd_layout_insert(&cinfo->mmi_co_root, layout);
 }
 
 static inline struct pmd_layout *
-pmd_co_remove(
-	struct pmd_mdc_info    *cinfo,
-	struct pmd_layout      *layout)
+pmd_co_remove(struct pmd_mdc_info *cinfo, struct pmd_layout *layout)
 {
 	struct pmd_layout *found;
 
@@ -233,24 +221,19 @@ static inline void pmd_uc_unlock(struct pmd_mdc_info *cinfo)
 	mutex_unlock(&cinfo->mmi_uc_lock);
 }
 
-static inline struct pmd_layout *
-pmd_uc_find(struct pmd_mdc_info *cinfo, u64 objid)
+static inline struct pmd_layout *pmd_uc_find(struct pmd_mdc_info *cinfo, u64 objid)
 {
 	return pmd_layout_find(&cinfo->mmi_uc_root, objid);
 }
 
 static inline struct pmd_layout *
-pmd_uc_insert(
-	struct pmd_mdc_info    *cinfo,
-	struct pmd_layout     *layout)
+pmd_uc_insert(struct pmd_mdc_info *cinfo, struct pmd_layout *layout)
 {
 	return pmd_layout_insert(&cinfo->mmi_uc_root, layout);
 }
 
 static inline struct pmd_layout *
-pmd_uc_remove(
-	struct pmd_mdc_info    *cinfo,
-	struct pmd_layout      *layout)
+pmd_uc_remove(struct pmd_mdc_info *cinfo, struct pmd_layout *layout)
 {
 	struct pmd_layout *found;
 
@@ -261,11 +244,7 @@ pmd_uc_remove(
 	return found;
 }
 
-struct pmd_layout *
-pmd_obj_find_get(
-	struct mpool_descriptor    *mp,
-	u64                         objid,
-	int                         which)
+struct pmd_layout *pmd_obj_find_get(struct mpool_descriptor *mp, u64 objid, int which)
 {
 	struct pmd_mdc_info    *cinfo;
 	struct pmd_layout      *found;
@@ -301,10 +280,7 @@ pmd_obj_find_get(
 	return found;
 }
 
-void
-pmd_obj_put(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout)
+void pmd_obj_put(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	kref_put(&layout->eld_ref, pmd_layout_release);
 }
@@ -360,10 +336,7 @@ static void pmd_mda_init(struct mpool_descriptor *mp)
 }
 
 static merr_t
-pmd_mdc0_init(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *mdc01,
-	struct pmd_layout          *mdc02)
+pmd_mdc0_init(struct mpool_descriptor *mp, struct pmd_layout *mdc01, struct pmd_layout *mdc02)
 {
 	struct pmd_mdc_info    *cinfo = &mp->pds_mda.mdi_slotv[0];
 	merr_t                  err;
@@ -468,8 +441,7 @@ static const char *msg_unavail1 __maybe_unused =
 static const char *msg_unavail2 __maybe_unused =
 	"defunct and available drive still belong to the mpool";
 
-static merr_t
-pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
+static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 {
 	struct omf_mdcrec_data          cdr;
 	struct pmd_mdc_info            *cinfo = NULL;
@@ -694,10 +666,7 @@ pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 	return err;
 }
 
-static merr_t
-pmd_smap_insert(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout)
+static merr_t pmd_smap_insert(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	merr_t  err;
 	u16     pdh;
@@ -953,11 +922,7 @@ pmd_update_mdc_stats(
 	mutex_unlock(&cinfo->mmi_stats_lock);
 }
 
-static merr_t
-pmd_objs_load(
-	struct mpool_descriptor    *mp,
-	u8                          cslot,
-	struct mpool_devrpt        *devrpt)
+static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot, struct mpool_devrpt *devrpt)
 {
 	u64                         argv[2] = { 0 };
 	struct omf_mdcrec_data      cdr;
@@ -1340,8 +1305,7 @@ static void pmd_objs_load_worker(struct work_struct *ws)
  * On the other hand, we don't want to start all the jobs at once.
  * If any one fails, we don't have to start others.
  */
-static merr_t
-pmd_objs_load_parallel(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
+static merr_t pmd_objs_load_parallel(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 {
 	struct pmd_obj_load_work   *olwv;
 	volatile merr_t             err = 0;
@@ -1500,12 +1464,7 @@ void pmd_mpool_deactivate(struct mpool_descriptor *mp)
 	mutex_unlock(&pmd_s_lock);
 }
 
-merr_t
-pmd_mdc_append(
-	struct mpool_descriptor    *mp,
-	u8                          cslot,
-	struct omf_mdcrec_data     *cdr,
-	int                         sync)
+merr_t pmd_mdc_append(struct mpool_descriptor *mp, u8 cslot, struct omf_mdcrec_data *cdr, int sync)
 {
 	merr_t                  err;
 	struct pmd_mdc_info    *cinfo = &mp->pds_mda.mdi_slotv[cslot];
@@ -1532,11 +1491,7 @@ pmd_mdc_append(
  * @total: output
  */
 static merr_t
-pmd_log_all_mdc_cobjs(
-	struct mpool_descriptor    *mp,
-	u8                          cslot,
-	u32                        *compacted,
-	u32                        *total)
+pmd_log_all_mdc_cobjs(struct mpool_descriptor *mp, u8 cslot, u32 *compacted, u32 *total)
 {
 	struct pmd_mdc_info    *cinfo;
 	struct pmd_layout      *layout;
@@ -1769,11 +1724,7 @@ static merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 	return err;
 }
 
-static merr_t
-pmd_mdc_addrec(
-	struct mpool_descriptor    *mp,
-	u8                          cslot,
-	struct omf_mdcrec_data     *cdr)
+static merr_t pmd_mdc_addrec(struct mpool_descriptor *mp, u8 cslot, struct omf_mdcrec_data *cdr)
 {
 	merr_t err;
 
@@ -1794,10 +1745,7 @@ pmd_mdc_addrec(
 	return err;
 }
 
-static merr_t
-pmd_log_delete(
-	struct mpool_descriptor    *mp,
-	u64                         objid)
+static merr_t pmd_log_delete(struct mpool_descriptor *mp, u64 objid)
 {
 	struct omf_mdcrec_data  cdr;
 
@@ -1806,10 +1754,7 @@ pmd_log_delete(
 	return pmd_mdc_addrec(mp, objid_slot(objid), &cdr);
 }
 
-static merr_t
-pmd_log_create(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout)
+static merr_t pmd_log_create(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	struct omf_mdcrec_data  cdr;
 
@@ -1888,10 +1833,7 @@ pmd_obj_realloc(
 				 ocap, mclassp, 1, true, layoutp);
 }
 
-merr_t
-pmd_obj_commit(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout)
+merr_t pmd_obj_commit(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	struct pmd_mdc_info    *cinfo;
 	struct pmd_layout      *found;
@@ -1993,10 +1935,7 @@ static void pmd_obj_erase_cb(struct work_struct *work)
 	pmd_layout_unprovision(mp, layout);
 }
 
-static void
-pmd_obj_erase_start(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout)
+static void pmd_obj_erase_start(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	struct pmd_obj_erase_work   oefbuf, *oef;
 	bool                        async = true;
@@ -2019,10 +1958,7 @@ pmd_obj_erase_start(
 		flush_work(&oef->oef_wqstruct);
 }
 
-merr_t
-pmd_obj_abort(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout)
+merr_t pmd_obj_abort(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	struct pmd_mdc_info    *cinfo;
 	struct pmd_layout      *found;
@@ -2062,10 +1998,7 @@ pmd_obj_abort(
 	return 0;
 }
 
-merr_t
-pmd_obj_delete(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout)
+merr_t pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	struct pmd_mdc_info    *cinfo;
 	struct pmd_layout      *found;
@@ -2164,10 +2097,7 @@ merr_t pmd_log_erase(struct mpool_descriptor *mp, u64 objid, u64 gen)
  * and SB0 is the authoritative replica. The other 3 replicas of MDC0 metadata
  * are not used when the mpool activates.
  */
-static merr_t
-pmd_mdc0_meta_update(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout)
+static merr_t pmd_mdc0_meta_update(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	struct omf_sb_descriptor   *sb;
 	struct mpool_dev_info      *pd;
@@ -2219,11 +2149,7 @@ pmd_mdc0_meta_update(
 	return err;
 }
 
-merr_t
-pmd_obj_erase(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	u64                         gen)
+merr_t pmd_obj_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, u64 gen)
 {
 	merr_t err;
 	u64    objid = layout->eld_objid;
@@ -2295,11 +2221,7 @@ pmd_obj_erase(
 	return err;
 }
 
-merr_t
-pmd_mdc_alloc(
-	struct mpool_descriptor    *mp,
-	u64                         mincap,
-	u32                         iter)
+merr_t pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter)
 {
 	struct pmd_obj_capacity ocap;
 	enum mp_media_classp    mclassp;
@@ -2534,12 +2456,7 @@ exit:
 	return err;
 }
 
-void
-pmd_mdc_cap(
-	struct mpool_descriptor    *mp,
-	u64                        *mdcmax,
-	u64                        *mdccap,
-	u64                        *mdc0cap)
+void pmd_mdc_cap(struct mpool_descriptor *mp, u64 *mdcmax, u64 *mdccap, u64 *mdc0cap)
 {
 	struct pmd_mdc_info    *cinfo = NULL;
 	struct pmd_layout      *layout = NULL;
@@ -2595,11 +2512,7 @@ pmd_mdc_cap(
 	*mdc0cap = *mdc0cap >> 1;
 }
 
-merr_t
-pmd_prop_mcconfig(
-	struct mpool_descriptor    *mp,
-	struct mpool_dev_info      *pd,
-	bool			    compacting)
+merr_t pmd_prop_mcconfig(struct mpool_descriptor *mp, struct mpool_dev_info *pd, bool compacting)
 {
 	merr_t                  err;
 	struct omf_mdcrec_data  cdr;
@@ -2655,10 +2568,7 @@ pmd_prop_mcspare(
 }
 
 merr_t
-pmd_prop_mpconfig(
-	struct mpool_descriptor    *mp,
-	const struct mpool_config  *cfg,
-	bool                        compacting)
+pmd_prop_mpconfig(struct mpool_descriptor *mp, const struct mpool_config *cfg, bool compacting)
 {
 	struct omf_mdcrec_data  cdr = { };
 	merr_t                  err;
@@ -2674,10 +2584,7 @@ pmd_prop_mpconfig(
 	return ev(err);
 }
 
-static void
-pmd_layout_unprovision(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout)
+static void pmd_layout_unprovision(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	merr_t  err;
 	u16     pdh;
@@ -2815,11 +2722,7 @@ pmd_layout_rw(
 	return err;
 }
 
-merr_t
-pmd_layout_erase(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	int                         flags)
+merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, int flags)
 {
 	struct mpool_dev_info  *pd;
 	merr_t                  err;
@@ -2889,11 +2792,7 @@ static merr_t pmd_log_idckpt(struct mpool_descriptor *mp, u64 objid)
  * The bias in the round robin allows to recover. After a while all MDCs ends
  * up again with about the same number of objects.
  */
-static merr_t
-pmd_alloc_idgen(
-	struct mpool_descriptor    *mp,
-	enum obj_type_omf           otype,
-	u64                        *objid)
+static merr_t pmd_alloc_idgen(struct mpool_descriptor *mp, enum obj_type_omf otype, u64 *objid)
 {
 	struct pmd_mdc_info    *cinfo = NULL;
 
@@ -2946,8 +2845,7 @@ pmd_alloc_idgen(
 	return 0;
 }
 
-static merr_t
-pmd_realloc_idvalidate(struct mpool_descriptor *mp, u64 objid)
+static merr_t pmd_realloc_idvalidate(struct mpool_descriptor *mp, u64 objid)
 {
 	merr_t                  err = 0;
 	u8                      cslot = objid_slot(objid);
@@ -3300,8 +3198,7 @@ static int pmd_compare_free_space(const void *first, const void *second)
  * Locking: no lock need to be held when calling this function.
  *
  */
-static void
-pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slotnum)
+static void pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slotnum)
 {
 	struct mdc_credit_set  *cset, *cs;
 	struct pmd_mdc_info    *cinfo;
@@ -3566,11 +3463,7 @@ static void pmd_mdc_alloc_set(struct mpool_descriptor *mp)
  *	as a result of not holding lock the result may be off if a compaction
  *	of MDCi (with i = cslot) is taking place at the same time.
  */
-static bool pmd_need_compact(
-	struct mpool_descriptor    *mp,
-	u8                          cslot,
-	char                       *msgbuf,
-	size_t                      msgsz)
+static bool pmd_need_compact(struct mpool_descriptor *mp, u8 cslot, char *msgbuf, size_t msgsz)
 {
 	struct pre_compact_ctrs    *pco_cnt;
 	struct pmd_mdc_info        *cinfo;
@@ -3723,8 +3616,7 @@ static int pmd_mlogid2cslot(u64 mlogid)
 	return(uniq/2);
 }
 
-void
-pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 cap)
+void pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 cap)
 {
 	struct pre_compact_ctrs    *pco_cnt;
 	struct pmd_mdc_info        *cinfo;

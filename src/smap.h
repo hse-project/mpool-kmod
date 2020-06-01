@@ -188,11 +188,7 @@ void smap_mpool_free(struct mpool_descriptor *mp);
  *
  * Return: 0 if successful, merr_t otherwise...
  */
-void
-smap_mpool_usage(
-	struct mpool_descriptor    *mp,
-	u8                          mclass,
-	struct mp_usage            *usage);
+void smap_mpool_usage(struct mpool_descriptor *mp, u8 mclass, struct mp_usage *usage);
 
 /**
  * smap_drive_spares() - Set percentage of zones to set aside as spares
@@ -208,11 +204,7 @@ smap_mpool_usage(
  *
  * Return: 0 if successful; merr_t otherwise
  */
-merr_t
-smap_drive_spares(
-	struct mpool_descriptor *mp,
-	enum mp_media_classp	 mclassp,
-	u8			 spzone);
+merr_t smap_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8 spzone);
 
 /**
  * smap_drive_usage() - Fill in a given drive's portion of dprop struct.
@@ -224,11 +216,7 @@ smap_drive_spares(
  *
  * Return: 0 if successful, merr_t otherwise
  */
-merr_t
-smap_drive_usage(
-	struct mpool_descriptor    *mp,
-	u16                         pdh,
-	struct mp_devprops         *dprop);
+merr_t smap_drive_usage(struct mpool_descriptor *mp, u16 pdh, struct mp_devprops *dprop);
 
 /**
  * smap_drive_init() - Initialize a specific drive within a mpool_descriptor
@@ -241,11 +229,7 @@ smap_drive_usage(
  *
  * Return: 0 if successful, merr_t otherwise
  */
-merr_t
-smap_drive_init(
-	struct mpool_descriptor    *mp,
-	struct mc_smap_parms       *mcsp,
-	u16                         pdh);
+merr_t smap_drive_init(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh);
 
 /**
  * smap_drive_free() - Release resources for a specific drive
@@ -273,8 +257,7 @@ void smap_drive_free(struct mpool_descriptor *mp, u16 pdh);
  *
  * Return: 0 if successful, merr_t otherwise
  */
-merr_t
-smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonecnt);
+merr_t smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonecnt);
 
 /**
  * smap_alloc() - Allocate a new contiguous zone range on a specific drive
@@ -311,17 +294,12 @@ smap_alloc(
  *
  * Return: 0 if successful, merr_t otherwise
  */
-merr_t
-smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt);
+merr_t smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt);
 
 /*
  * smap internal functions
  */
-merr_t
-smap_drive_alloc(
-	struct mpool_descriptor    *mp,
-	struct mc_smap_parms       *mcsp,
-	u16                         pdh);
+merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh);
 
 /**
  * smap_mpool_usage() - Get the media class usage for a given mclass.
@@ -333,11 +311,7 @@ smap_drive_alloc(
  * Locking: the caller should hold the pds_pdvlock at least in read to
  *	to be protected against media classes updates.
  */
-void
-smap_mclass_usage(
-	struct mpool_descriptor    *mp,
-	u8                          mclass,
-	struct mp_usage            *usage);
+void smap_mclass_usage(struct mpool_descriptor *mp, u8 mclass, struct mp_usage *usage);
 
 /**
  * smap_log_mpool_usage() - check drive mpool free usable space %, and log

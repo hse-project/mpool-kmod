@@ -95,28 +95,19 @@ struct mdc_props {
  * @mdc_out:  MDC handle
  */
 uint64_t
-mp_mdc_open(
-	struct mpool_descriptor     *mp,
-	u64                          logid1,
-	u64                          logid2,
-	u8                           flags,
-	struct mp_mdc              **mdc_out);
+mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struct mp_mdc **mdc_out);
 
 /**
  * mp_mdc_close() - Close MDC
  * @mdc:      MDC handle
  */
-uint64_t
-mp_mdc_close(
-	struct mp_mdc  *mdc);
+uint64_t mp_mdc_close(struct mp_mdc *mdc);
 
 /**
  * mp_mdc_rewind() - Rewind MDC to first record
  * @mdc:      MDC handle
  */
-uint64_t
-mp_mdc_rewind(
-	struct mp_mdc  *mdc);
+uint64_t mp_mdc_rewind(struct mp_mdc *mdc);
 
 /**
  * mp_mdc_read() - Read next record from MDC
@@ -130,12 +121,7 @@ mp_mdc_rewind(
  *   "data" is too small and must be resized according to the value returned
  *   in "rdlen".
  */
-uint64_t
-mp_mdc_read(
-	struct mp_mdc  *mdc,
-	void           *data,
-	size_t          len,
-	size_t         *rdlen);
+uint64_t mp_mdc_read(struct mp_mdc *mdc, void *data, size_t len, size_t *rdlen);
 
 /**
  * mp_mdc_append() - append record to MDC
@@ -144,12 +130,7 @@ mp_mdc_read(
  * @len:      length of data
  * @sync:     flag to defer return until IO is complete
  */
-uint64_t
-mp_mdc_append(
-	struct mp_mdc  *mdc,
-	void           *data,
-	ssize_t         len,
-	bool            sync);
+uint64_t mp_mdc_append(struct mp_mdc *mdc, void *data, ssize_t len, bool sync);
 
 /**
  * mp_mdc_cstart() - Initiate MDC compaction
@@ -158,9 +139,7 @@ mp_mdc_append(
  * Swap active (ostensibly full) and inactive (empty) mlogs
  * Append a compaction start marker to newly active mlog
  */
-uint64_t
-mp_mdc_cstart(
-	struct mp_mdc  *mdc);
+uint64_t mp_mdc_cstart(struct mp_mdc *mdc);
 
 /**
  * mp_mdc_cend() - End MDC compactions
@@ -168,8 +147,6 @@ mp_mdc_cstart(
  *
  * Append a compaction end marker to the active mlog
  */
-uint64_t
-mp_mdc_cend(
-	struct mp_mdc  *mdc);
+uint64_t mp_mdc_cend(struct mp_mdc *mdc);
 
 #endif /* MPOOL_MDC_PRIV_H */

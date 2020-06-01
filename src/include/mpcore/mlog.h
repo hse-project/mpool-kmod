@@ -87,35 +87,19 @@ merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
  *
  * Returns: 0 if successful, merr_t otherwise
  */
-merr_t
-mlog_open(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	u8                          flags,
-	u64                        *gen);
+merr_t mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 flags, u64 *gen);
 
 merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-merr_t
-mlog_gen(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *gen);
+merr_t mlog_gen(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *gen);
 
-merr_t
-mlog_empty(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	bool                       *empty);
+merr_t mlog_empty(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool *empty);
 
-merr_t
-mlog_erase(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	u64                         mingen);
+merr_t mlog_erase(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 mingen);
 
-merr_t
-mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
+merr_t mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-merr_t
-mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
+merr_t mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
 merr_t
 mlog_append_data(
@@ -125,8 +109,7 @@ mlog_append_data(
 	u64                         buflen,
 	int                         sync);
 
-merr_t
-mlog_read_data_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
+merr_t mlog_read_data_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
 /**
  * mlog_read_data_next()
@@ -150,10 +133,7 @@ mlog_read_data_next(
 	u64                        *rdlen);
 
 merr_t
-mlog_get_props(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	struct mlog_props          *prop);
+mlog_get_props(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, struct mlog_props *prop);
 
 merr_t
 mlog_get_props_ex(
@@ -161,8 +141,7 @@ mlog_get_props_ex(
 	struct mlog_descriptor     *mlh,
 	struct mlog_props_ex       *prop);
 
-void
-mlog_precompact_alsz(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
+void mlog_precompact_alsz(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
 merr_t
 mlog_rw_raw(

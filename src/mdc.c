@@ -79,8 +79,7 @@ static inline void mdc_invalidate(struct mp_mdc *mdc)
  * @mpname: buffer to store the mpool name (output)
  * @mplen:  buffer len
  */
-static merr_t
-mdc_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
+static merr_t mdc_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
 {
 	if (!mp || !mpname)
 		return merr(EINVAL);
@@ -117,22 +116,14 @@ mdc_find_get(
  * mdc_put() - Wrapper around put for mlog pair.
  */
 static void
-mdc_put(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh1,
-	struct mlog_descriptor     *mlh2)
+mdc_put(struct mpool_descriptor *mp, struct mlog_descriptor *mlh1, struct mlog_descriptor *mlh2)
 {
 	mlog_put(mp, mlh1);
 	mlog_put(mp, mlh2);
 }
 
 uint64_t
-mp_mdc_open(
-	struct mpool_descriptor     *mp,
-	u64                          logid1,
-	u64                          logid2,
-	u8                           flags,
-	struct mp_mdc              **mdc_out)
+mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struct mp_mdc **mdc_out)
 {
 	struct mlog_props           props[2];
 	struct mlog_descriptor     *mlh[2];

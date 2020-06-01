@@ -98,12 +98,7 @@ static int mpool_debug_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static ssize_t
-mpool_debug_read(
-	struct file    *file,
-	char __user    *buf,
-	size_t          nbytes,
-	loff_t         *ppos)
+static ssize_t mpool_debug_read(struct file *file, char __user *buf, size_t nbytes, loff_t *ppos)
 {
 	return simple_read_from_buffer(buf, nbytes, ppos, file->private_data,
 				       i_size_read(file->f_mapping->host));

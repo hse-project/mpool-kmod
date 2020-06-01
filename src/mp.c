@@ -538,8 +538,7 @@ mpool_dev_init_all(
 	return err;
 }
 
-static int
-uuid_to_mpdesc_insert(struct rb_root *root, struct mpool_descriptor *data)
+static int uuid_to_mpdesc_insert(struct rb_root *root, struct mpool_descriptor *data)
 {
 	struct rb_node    **new = &(root->rb_node), *parent = NULL;
 
@@ -567,8 +566,7 @@ uuid_to_mpdesc_insert(struct rb_root *root, struct mpool_descriptor *data)
 	return true;
 }
 
-static void
-mpool_mdc_cap_init(struct mpool_descriptor *mp, struct mpool_dev_info *pd)
+static void mpool_mdc_cap_init(struct mpool_descriptor *mp, struct mpool_dev_info *pd)
 {
 	u64    zonesz;
 	u64    defmbsz;
@@ -1874,11 +1872,7 @@ void mpool_mclass_get_cnt(struct mpool_descriptor *mp, u32 *cnt)
 	up_read(&mp->pds_pdvlock);
 }
 
-merr_t
-mpool_mclass_get(
-	struct mpool_descriptor    *mp,
-	u32                        *mcxc,
-	struct mpool_mclass_xprops *mcxv)
+merr_t mpool_mclass_get(struct mpool_descriptor *mp, u32 *mcxc, struct mpool_mclass_xprops *mcxv)
 {
 	int    i, n;
 
@@ -1918,10 +1912,7 @@ mpool_mclass_get(
 }
 
 merr_t
-mpool_drive_spares(
-	struct mpool_descriptor    *mp,
-	enum mp_media_classp        mclassp,
-	u8                          drive_spares)
+mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8 drive_spares)
 {
 	struct media_class *mc;
 
@@ -1989,8 +1980,7 @@ skip_update:
 	return err;
 }
 
-void
-mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops)
+void mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops)
 {
 	struct media_class *mc;
 
@@ -2046,11 +2036,7 @@ mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops)
 		ftmax ? MPOOL_STAT_FAULTED : MPOOL_STAT_OPTIMAL;
 }
 
-static void
-fill_in_devprops(
-	struct mpool_descriptor    *mp,
-	u64                         pdh,
-	struct mp_devprops         *dprop)
+static void fill_in_devprops(struct mpool_descriptor *mp, u64 pdh, struct mp_devprops *dprop)
 {
 	merr_t			err;
 	struct mpool_dev_info  *pd;
@@ -2071,10 +2057,7 @@ fill_in_devprops(
 }
 
 merr_t
-mpool_get_devprops_by_name(
-	struct mpool_descriptor    *mp,
-	char                       *pdname,
-	struct mp_devprops         *dprop)
+mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname, struct mp_devprops *dprop)
 {
 	int    i;
 
@@ -2091,10 +2074,7 @@ mpool_get_devprops_by_name(
 }
 
 void
-mpool_get_usage(
-	struct mpool_descriptor    *mp,
-	enum mp_media_classp        mclassp,
-	struct mp_usage            *usage)
+mpool_get_usage(struct mpool_descriptor *mp, enum mp_media_classp mclassp, struct mp_usage *usage)
 {
 	memset(usage, 0, sizeof(*usage));
 
@@ -2194,13 +2174,7 @@ void mpool_devrpt_init(struct mpool_devrpt *devrpt)
 	devrpt->mdr_msg[0] = '\000';
 }
 
-void
-mpool_devrpt(
-	struct mpool_devrpt    *devrpt,
-	enum mpool_rc           rcode,
-	int                     off,
-	const char             *fmt,
-	...)
+void mpool_devrpt(struct mpool_devrpt *devrpt, enum mpool_rc rcode, int off, const char *fmt, ...)
 {
 	va_list ap;
 
@@ -2269,9 +2243,7 @@ static void mpool_desc_free(struct mpool_descriptor *mp)
 }
 
 merr_t
-mpool_desc_unavail_add(
-	struct mpool_descriptor        *mp,
-	struct omf_devparm_descriptor  *omf_devparm)
+mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_descriptor *omf_devparm)
 {
 	char                    uuid_str[40];
 	merr_t                  err;
@@ -2308,8 +2280,7 @@ mpool_desc_unavail_add(
 	return 0;
 }
 
-merr_t
-mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config *cfg)
+merr_t mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config *cfg)
 {
 	merr_t err;
 
@@ -2326,8 +2297,7 @@ mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config *cfg)
 	return err;
 }
 
-merr_t
-mpool_config_fetch(struct mpool_descriptor *mp, struct mpool_config *cfg)
+merr_t mpool_config_fetch(struct mpool_descriptor *mp, struct mpool_config *cfg)
 {
 	if (ev(!mp || !cfg))
 		return merr(EINVAL);

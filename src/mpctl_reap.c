@@ -396,15 +396,14 @@ static void mpc_reap_prune(struct work_struct *work)
 #define REAP_TTL_MIN       100
 #define REAP_DEBUG_MAX     3
 
-static ssize_t
-mpc_reap_mempct_show(struct device *dev, struct device_attribute *da, char *buf)
+static ssize_t mpc_reap_mempct_show(struct device *dev, struct device_attribute *da, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_reap(dev)->reap_mempct);
 }
 
 static ssize_t
-mpc_reap_mempct_store(struct device *dev, struct device_attribute *da,
-		      const char *buf, size_t count)
+mpc_reap_mempct_store(struct device *dev, struct device_attribute *da, const char *buf,
+		      size_t count)
 {
 	struct mpc_reap    *reap;
 	unsigned int        val;
@@ -420,15 +419,13 @@ mpc_reap_mempct_store(struct device *dev, struct device_attribute *da,
 	return count;
 }
 
-static ssize_t
-mpc_reap_debug_show(struct device *dev, struct device_attribute *da, char *buf)
+static ssize_t mpc_reap_debug_show(struct device *dev, struct device_attribute *da, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_reap(dev)->reap_debug);
 }
 
 static ssize_t
-mpc_reap_debug_store(struct device *dev, struct device_attribute *da,
-		const char *buf, size_t count)
+mpc_reap_debug_store(struct device *dev, struct device_attribute *da, const char *buf, size_t count)
 {
 	struct mpc_reap    *reap;
 	unsigned int        val;
@@ -444,15 +441,13 @@ mpc_reap_debug_store(struct device *dev, struct device_attribute *da,
 	return count;
 }
 
-static ssize_t
-mpc_reap_ttl_show(struct device *dev, struct device_attribute *da, char *buf)
+static ssize_t mpc_reap_ttl_show(struct device *dev, struct device_attribute *da, char *buf)
 {
 	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_reap(dev)->reap_ttl);
 }
 
 static ssize_t
-mpc_reap_ttl_store(struct device *dev, struct device_attribute *da,
-	      const char *buf, size_t count)
+mpc_reap_ttl_store(struct device *dev, struct device_attribute *da, const char *buf, size_t count)
 {
 	struct mpc_reap    *reap;
 	unsigned int        val;

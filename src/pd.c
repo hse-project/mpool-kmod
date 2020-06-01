@@ -118,12 +118,11 @@ static merr_t pd_bio_discard(struct mpool_dev_info  *pd, u64 off, size_t len)
 /**
  * pd_bio_wrt_zero() - write zeros to a zone-aligned region
  * @pd:
- * @zoneaddr:
+ * @zaddr:
  * @zonecnt:
  * @afp:
  */
-static merr_t
-pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
+static merr_t pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt)
 {
 	struct block_device    *bdev;
 
@@ -141,7 +140,7 @@ pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
 	}
 
 	zonelen = (u64)pd->pdi_parm.dpr_zonepg << PAGE_SHIFT;
-	sector = (zoneaddr * zonelen) >> SECTOR_SHIFT;
+	sector = (zaddr * zonelen) >> SECTOR_SHIFT;
 	nr_sects = (zonecnt * zonelen) >> SECTOR_SHIFT;
 
 	/*
@@ -167,29 +166,24 @@ pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zoneaddr, u32 zonecnt)
 /**
  * pd_zone_erase() - issue write-zeros or discard commands to erase PD
  * @pd
- * @zoneaddr:
+ * @zaddr:
  * @zonecnt:
  * @flag:
  * @afp:
  */
-merr_t
-pd_zone_erase(
-	struct mpool_dev_info  *pd,
-	u64                     zoneaddr,
-	u32                     zonecnt,
-	enum pd_erase_flags     flags)
+merr_t pd_zone_erase(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt, enum pd_erase_flags flags)
 {
 	merr_t          err = 0;
 	u64             cmdopt;
 
 	/* validate args against zone param */
-	if (zoneaddr >= pd->pdi_parm.dpr_zonetot)
+	if (zaddr >= pd->pdi_parm.dpr_zonetot)
 		return merr(EINVAL);
 
 	if (zonecnt == 0)
-		zonecnt = pd->pdi_parm.dpr_zonetot - zoneaddr;
+		zonecnt = pd->pdi_parm.dpr_zonetot - zaddr;
 
-	if (zonecnt > (pd->pdi_parm.dpr_zonetot - zoneaddr))
+	if (zonecnt > (pd->pdi_parm.dpr_zonetot - zaddr))
 		return merr(EINVAL);
 
 	if (zonecnt == 0)
@@ -204,13 +198,13 @@ pd_zone_erase(
 	 */
 	cmdopt = pd->pdi_cmdopt;
 	if (flags & PD_ERASE_FZERO) {
-		err = pd_bio_wrt_zero(pd, zoneaddr, zonecnt);
+		err = pd_bio_wrt_zero(pd, zaddr, zonecnt);
 	} else if ((cmdopt & PD_CMD_DISCARD) &&
 		   CAN_BE_DISCARDED(cmdopt, flags)) {
 		size_t zlen;
 
 		zlen = pd->pdi_parm.dpr_zonepg << PAGE_SHIFT;
-		err = pd_bio_discard(pd, zoneaddr * zlen, zonecnt * zlen);
+		err = pd_bio_discard(pd, zaddr * zlen, zonecnt * zlen);
 	}
 
 	return ev(err);
@@ -227,18 +221,13 @@ pd_zone_erase(
 
 
 static __always_inline void
-pd_bio_init(
-	struct bio             *bio,
-	struct block_device    *bdev,
-	int                     rw,
-	loff_t                  off,
-	int                     op_flags)
+pd_bio_init(struct bio *bio, struct block_device *bdev, int rw, loff_t off, int opflags)
 {
 #if HAVE_BIO_SET_OP_ATTRS
-	bio_set_op_attrs(bio, rw, op_flags);
+	bio_set_op_attrs(bio, rw, opflags);
 	bio->bi_iter.bi_sector = off >> SECTOR_SHIFT;
 #else
-	bio->bi_rw = op_flags;
+	bio->bi_rw = opflags;
 	bio->bi_sector = off >> SECTOR_SHIFT;
 #endif
 
@@ -250,11 +239,7 @@ pd_bio_init(
 }
 
 static __always_inline struct bio *
-pd_bio_chain(
-	struct bio         *target,
-	int                 op,
-	unsigned int        nr_pages,
-	gfp_t               gfp)
+pd_bio_chain(struct bio *target, int op, unsigned int nr_pages, gfp_t gfp)
 {
 	struct bio *new;
 
@@ -290,7 +275,7 @@ pd_bio_chain(
  * @iovcnt:
  * @off: offset in bytes on disk
  * @rw:
- * @op_flags:
+ * @opflags:
  *
  * NOTE:
  * If the size of an I/O is bigger than "Max data transfer size(MDTS),
@@ -303,13 +288,7 @@ pd_bio_chain(
  * In order to use DIF with stock linux kernel, do not IOs larger than MDTS.
  */
 static merr_t
-pd_bio_rw(
-	struct mpool_dev_info  *pd,
-	struct iovec           *iov,
-	int                     iovcnt,
-	loff_t                  off,
-	int                     rw,
-	int                     op_flags)
+pd_bio_rw(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, loff_t off, int rw, int opflags)
 {
 	struct block_device    *bdev;
 	struct bio             *bio;
@@ -416,7 +395,7 @@ pd_bio_rw(
 				if (!bio)
 					return merr(ENOMEM);
 
-				pd_bio_init(bio, bdev, rw, off, op_flags);
+				pd_bio_init(bio, bdev, rw, off, opflags);
 			}
 
 			len = min_t(size_t, PAGE_SIZE, iov_len);
@@ -461,18 +440,18 @@ pd_zone_pwritev(
 	struct mpool_dev_info  *pd,
 	struct iovec           *iov,
 	int                     iovcnt,
-	u64                     zoneaddr,
+	u64                     zaddr,
 	loff_t                  boff,
-	int                     op_flags)
+	int                     opflags)
 {
 	loff_t woff;
 
 	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
 		return merr(ev(EIO));
 
-	woff = ((u64)pd->pdi_zonepg << PAGE_SHIFT) * zoneaddr + boff;
+	woff = ((u64)pd->pdi_zonepg << PAGE_SHIFT) * zaddr + boff;
 
-	return pd_bio_rw(pd, iov, iovcnt, woff, REQ_OP_WRITE, op_flags);
+	return pd_bio_rw(pd, iov, iovcnt, woff, REQ_OP_WRITE, opflags);
 }
 
 merr_t
@@ -480,13 +459,13 @@ pd_zone_pwritev_sync(
 	struct mpool_dev_info  *pd,
 	struct iovec           *iov,
 	int                     iovcnt,
-	u64                     zoneaddr,
+	u64                     zaddr,
 	loff_t                  boff)
 {
 	merr_t		        err;
 	struct block_device    *bdev;
 
-	err = pd_zone_pwritev(pd, iov, iovcnt, zoneaddr, boff, REQ_FUA);
+	err = pd_zone_pwritev(pd, iov, iovcnt, zaddr, boff, REQ_FUA);
 	if (ev(err))
 		return err;
 
@@ -504,27 +483,19 @@ pd_zone_pwritev_sync(
 }
 
 merr_t
-pd_zone_preadv(
-	struct mpool_dev_info  *pd,
-	struct iovec           *iov,
-	int                     iovcnt,
-	u64                     zoneaddr,
-	loff_t                  boff)
+pd_zone_preadv(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, u64 zaddr, loff_t boff)
 {
 	loff_t roff;
 
 	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
 		return merr(ev(EIO));
 
-	roff = ((u64)pd->pdi_zonepg << PAGE_SHIFT) * zoneaddr + boff;
+	roff = ((u64)pd->pdi_zonepg << PAGE_SHIFT) * zaddr + boff;
 
 	return pd_bio_rw(pd, iov, iovcnt, roff, REQ_OP_READ, 0);
 }
 
-void
-pd_dev_set_unavail(
-	struct pd_dev_parm            *dparm,
-	struct omf_devparm_descriptor *omf_devparm)
+void pd_dev_set_unavail(struct pd_dev_parm *dparm, struct omf_devparm_descriptor *omf_devparm)
 {
 	struct pd_prop     *pd_prop = &(dparm->dpr_prop);
 

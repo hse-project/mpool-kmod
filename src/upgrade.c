@@ -125,14 +125,7 @@ bool omfu_mdcver_cmp(struct omf_mdcver *a, char *op, struct omf_mdcver *b)
 	return false;
 }
 
-bool
-omfu_mdcver_cmp2(
-	struct omf_mdcver  *a,
-	char               *op,
-	u16                 major,
-	u16                 minor,
-	u16                 patch,
-	u16                 dev)
+bool omfu_mdcver_cmp2(struct omf_mdcver *a, char *op, u16 major, u16 minor, u16 patch, u16 dev)
 {
 	struct omf_mdcver  b;
 

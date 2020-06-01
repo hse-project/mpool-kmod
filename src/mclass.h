@@ -75,20 +75,14 @@ void mc_pd_prop2mc_parms(struct pd_prop *pd_prop, struct mc_parms *mc_parms);
  * @omf_devparm: input
  * @mc_parms: output
  */
-void
-mc_omf_devparm2mc_parms(
-	struct omf_devparm_descriptor  *omf_devparm,
-	struct mc_parms	               *mc_parms);
+void mc_omf_devparm2mc_parms(struct omf_devparm_descriptor *omf_devparm, struct mc_parms *mc_parms);
 
 /**
  * mc_parms2omf_devparm() - convert a mc_parms in a omf_devparm_descriptor
  * @mc_parms: input
  * @omf_devparm: output
  */
-void
-mc_parms2omf_devparm(
-	struct mc_parms                *mc_parms,
-	struct omf_devparm_descriptor  *omf_devparm);
+void mc_parms2omf_devparm(struct mc_parms *mc_parms, struct omf_devparm_descriptor *omf_devparm);
 
 /**
  * mc_cmp_omf_devparm() - check if two omf_devparm_descriptor corresponds
@@ -98,10 +92,7 @@ mc_parms2omf_devparm(
  *
  * Returns 0 if in same media class.
  */
-int
-mc_cmp_omf_devparm(
-	struct omf_devparm_descriptor *omf_devparm1,
-	struct omf_devparm_descriptor *omf_devparm2);
+int mc_cmp_omf_devparm(struct omf_devparm_descriptor *omfd1, struct omf_devparm_descriptor *omfd2);
 
 /**
  * mc_init_class() - initialize a media class
@@ -109,11 +100,7 @@ mc_cmp_omf_devparm(
  * @mc_parms: parameters of the media class
  * @mcsp:     smap parameters for mc
  */
-void
-mc_init_class(
-	struct media_class     *mc,
-	struct mc_parms        *mc_parms,
-	struct mc_smap_parms   *mcsp);
+void mc_init_class(struct media_class *mc, struct mc_parms *mc_parms, struct mc_smap_parms *mcsp);
 
 /**
  * mc_set_spzone() - set the percent spare on the media class mclass.
@@ -123,11 +110,7 @@ mc_init_class(
  *
  * Return: 0, or merr(ENOENT) if the specified mclass doesn't exist.
  */
-merr_t
-mc_set_spzone(
-	struct mpool_descriptor *mp,
-	enum mp_media_classp     mclass,
-	u8                       spzone);
+merr_t mc_set_spzone(struct mpool_descriptor *mp, enum mp_media_classp mclass, u8 spzone);
 
 /**
  * mclass_isvalid() - Return true if the media class is valid.
@@ -136,7 +119,7 @@ mc_set_spzone(
 static inline bool mclass_isvalid(enum mp_media_classp mclass)
 {
 	return (mclass >= 0 && mclass < MP_MED_NUMBER);
-};
+}
 
 /**
  * mc_smap_parms_get() - get space map params for the specified mclass.

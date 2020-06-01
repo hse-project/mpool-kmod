@@ -934,10 +934,7 @@ bool omf_sb_has_magic_le(const char *inbuf)
  * Return: bytes packed if successful, -EINVAL otherwise
  */
 static u64
-omf_mdcrec_objcmn_pack_htole(
-	struct mpool_descriptor    *mp,
-	struct omf_mdcrec_data     *cdr,
-	char                       *outbuf)
+omf_mdcrec_objcmn_pack_htole(struct mpool_descriptor *mp, struct omf_mdcrec_data *cdr, char *outbuf)
 {
 	struct pmd_layout *layout = cdr->u.obj.omd_layout;
 	struct mdcrec_data_odelete_omf *odel_omf;
@@ -1064,8 +1061,7 @@ omf_mdcrec_objcmn_unpack_letoh(
  *
  * Return: bytes packed.
  */
-static u64
-omf_mdcrec_mcconfig_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
+static u64 omf_mdcrec_mcconfig_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
 {
 	struct mdcrec_data_mcconfig_omf    *mc_omf;
 
@@ -1213,8 +1209,7 @@ omf_mdcrec_mcspare_unpack_letoh(
  *
  * Return: bytes packed.
  */
-static u64
-omf_mdcrec_mpconfig_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
+static u64 omf_mdcrec_mpconfig_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
 {
 	struct mdcrec_data_mpconfig_omf    *cfg_omf;
 	struct mpool_config                *cfg;
@@ -1249,8 +1244,7 @@ omf_mdcrec_mpconfig_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
  *
  * Return: bytes packed.
  */
-static void
-omf_mdcrec_mpconfig_unpack_letoh(struct omf_mdcrec_data *cdr, const char *inbuf)
+static void omf_mdcrec_mpconfig_unpack_letoh(struct omf_mdcrec_data *cdr, const char *inbuf)
 {
 	struct mdcrec_data_mpconfig_omf    *cfg_omf;
 	struct mpool_config                *cfg;
@@ -1304,11 +1298,7 @@ int omf_mdcrec_isobj_le(const char *inbuf)
 /*
  * mdcrec
  */
-int
-omf_mdcrec_pack_htole(
-	struct mpool_descriptor    *mp,
-	struct omf_mdcrec_data     *cdr,
-	char                       *outbuf)
+int omf_mdcrec_pack_htole(struct mpool_descriptor *mp, struct omf_mdcrec_data *cdr, char *outbuf)
 {
 	u8 rtype = (char)cdr->omd_rtype;
 
@@ -1385,10 +1375,7 @@ bool omf_logblock_empty_le(char *lbuf)
 	return ret_val;
 }
 
-merr_t
-omf_logblock_header_pack_htole(
-	struct omf_logblock_header *lbh,
-	char                       *outbuf)
+merr_t omf_logblock_header_pack_htole(struct omf_logblock_header *lbh, char *outbuf)
 {
 	struct logblock_header_omf *lbh_omf;
 
@@ -1406,10 +1393,7 @@ omf_logblock_header_pack_htole(
 	return 0;
 }
 
-merr_t
-omf_logblock_header_unpack_letoh(
-	struct omf_logblock_header *lbh,
-	const char                 *inbuf)
+merr_t omf_logblock_header_unpack_letoh(struct omf_logblock_header *lbh, const char *inbuf)
 {
 	struct logblock_header_omf *lbh_omf;
 
@@ -1451,10 +1435,7 @@ bool logrec_type_datarec(enum logrec_type_omf rtype)
 	return rtype && rtype <= OMF_LOGREC_DATALAST;
 }
 
-merr_t
-omf_logrec_desc_pack_htole(
-	struct omf_logrec_descriptor   *lrd,
-	char                           *outbuf)
+merr_t omf_logrec_desc_pack_htole(struct omf_logrec_descriptor *lrd, char *outbuf)
 {
 	struct logrec_descriptor_omf   *lrd_omf;
 
@@ -1471,10 +1452,7 @@ omf_logrec_desc_pack_htole(
 	return merr(EINVAL);
 }
 
-void
-omf_logrec_desc_unpack_letoh(
-	struct omf_logrec_descriptor   *lrd,
-	const char                     *inbuf)
+void omf_logrec_desc_unpack_letoh(struct omf_logrec_descriptor *lrd, const char *inbuf)
 {
 	struct logrec_descriptor_omf   *lrd_omf;
 

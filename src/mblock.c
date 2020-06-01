@@ -26,8 +26,7 @@
  * layout object is an mblock object.  If the validation fails, a NULL
  * pointer is returned.
  */
-static struct pmd_layout *
-mblock2layout(struct mblock_descriptor *mbh)
+static struct pmd_layout *mblock2layout(struct mblock_descriptor *mbh)
 {
 	struct pmd_layout *layout = (void *)mbh;
 
@@ -43,10 +42,7 @@ mblock2layout(struct mblock_descriptor *mbh)
 	return mblock_objid(layout->eld_objid) ? layout : NULL;
 }
 
-u32
-mblock_stripe_size_get(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout)
+u32 mblock_stripe_size_get(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	struct mpool_dev_info  *pd;
 
@@ -61,8 +57,7 @@ mblock_stripe_size_get(
  * This function converts the internally used pmd_layout to
  * the externally used opaque mblock_descriptor.
  */
-static struct mblock_descriptor *
-layout2mblock(struct pmd_layout *layout)
+static struct mblock_descriptor *layout2mblock(struct pmd_layout *layout)
 {
 	return (struct mblock_descriptor *)layout;
 }

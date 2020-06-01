@@ -622,10 +622,7 @@ pmd_obj_realloc(
  *
  * Return: %0 if successful, merr_t otherwise
  */
-merr_t
-pmd_obj_commit(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout);
+merr_t pmd_obj_commit(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 /**
  * pmd_obj_abort() - Discard un-committed object.
@@ -637,10 +634,7 @@ pmd_obj_commit(
  *
  * Return: %0 if sucessful; merr_t otherwise
  */
-merr_t
-pmd_obj_abort(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout);
+merr_t pmd_obj_abort(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 /**
  * pmd_obj_delete() - Delete committed object.
@@ -652,10 +646,7 @@ pmd_obj_abort(
  *
  * Return: %0 if successful, merr_t otherwise
  */
-merr_t
-pmd_obj_delete(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout);
+merr_t pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 /**
  * pmd_obj_erase() -
@@ -669,11 +660,7 @@ pmd_obj_delete(
  *
  * Return: %0 if successful, merr_t otherwise
  */
-merr_t
-pmd_obj_erase(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	u64                         gen);
+merr_t pmd_obj_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, u64 gen);
 
 /**
  * pmd_obj_find_get() - Get a reference for a layout for objid.
@@ -686,8 +673,7 @@ pmd_obj_erase(
  *
  * Return: pointer to layout if successful, NULL otherwise
  */
-struct pmd_layout *
-pmd_obj_find_get(struct mpool_descriptor *mp, u64 objid, int which);
+struct pmd_layout *pmd_obj_find_get(struct mpool_descriptor *mp, u64 objid, int which);
 
 /**
  * pmd_obj_put() - Put a reference for a layout for objid.
@@ -698,10 +684,7 @@ pmd_obj_find_get(struct mpool_descriptor *mp, u64 objid, int which);
  *
  * Return: pointer to layout if successful, NULL otherwise
  */
-void
-pmd_obj_put(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout);
+void pmd_obj_put(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 /**
  * pmd_obj_rdlock() - Read-lock object layout with appropriate nesting level.
@@ -765,12 +748,7 @@ merr_t pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter);
  * Get metadata container (mdc) stats: count, aggregate capacity ex-mdc0 and
  * mdc0 cap
  */
-void
-pmd_mdc_cap(
-	struct mpool_descriptor    *mp,
-	u64                        *mdcmax,
-	u64                        *mdccap,
-	u64                        *mdc0cap);
+void pmd_mdc_cap(struct mpool_descriptor *mp, u64 *mdcmax, u64 *mdccap, u64 *mdc0cap);
 
 /**
  * pmd_prop_mcconfig() -
@@ -785,11 +763,7 @@ pmd_mdc_cap(
  *
  * Return: %0 if successful, merr_t otherwise
  */
-merr_t
-pmd_prop_mcconfig(
-	struct mpool_descriptor *mp,
-	struct mpool_dev_info   *pd,
-	bool			 compacting);
+merr_t pmd_prop_mcconfig(struct mpool_descriptor *mp, struct mpool_dev_info *pd, bool compacting);
 
 /**
  * pmd_prop_mcspare() -
@@ -818,10 +792,7 @@ pmd_prop_mcspare(
  * @compacting:
  */
 merr_t
-pmd_prop_mpconfig(
-	struct mpool_descriptor    *mp,
-	const struct mpool_config  *cfg,
-	bool                        compacting);
+pmd_prop_mpconfig(struct mpool_descriptor *mp, const struct mpool_config *cfg, bool compacting);
 
 /**
  * pmd_precompact_start() - start MDC1/255 precompaction
@@ -845,8 +816,7 @@ void pmd_precompact_stop(struct mpool_descriptor *mp);
  * @len: In bytes, how much of the active mlog is used.
  * @cap: In bytes, size of the active mlog.
  */
-void
-pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 cap);
+void pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 cap);
 
 /**
  * pmd_mpool_usage() - calculate per-dataset space usage
@@ -904,11 +874,7 @@ pmd_layout_rw(
 	int                         flags,
 	u8                          rw);
 
-merr_t
-pmd_layout_erase(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	int                         flags);
+merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, int flags);
 
 u64 pmd_layout_cap_get(struct mpool_descriptor *mp, struct pmd_layout *layout);
 

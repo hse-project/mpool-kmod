@@ -233,10 +233,7 @@ struct mpool_descriptor {
  *
  * Return: 0 if successful, merr_t (EINVAL or ENOMEM) otherwise
  */
-merr_t
-mpool_desc_unavail_add(
-	struct mpool_descriptor       *mp,
-	struct omf_devparm_descriptor *devparm);
+merr_t mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_descriptor *devparm);
 
 /**
  * mpool_desc_pdmc_add() - Add a device in its media class.

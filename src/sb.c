@@ -378,11 +378,7 @@ merr_t sb_erase(struct mpool_dev_info *pd)
 	return err;
 }
 
-static merr_t
-sb_reconcile(
-	struct omf_sb_descriptor   *sb,
-	struct mpool_dev_info      *pd,
-	bool                        force)
+static merr_t sb_reconcile(struct omf_sb_descriptor *sb, struct mpool_dev_info *pd, bool force)
 {
 	struct pd_prop                 *pd_prop = &(pd->pdi_parm.dpr_prop);
 	struct omf_devparm_descriptor  *sb_parm = &(sb->osb_parm);
@@ -523,8 +519,7 @@ exit:
 	return rval;
 }
 
-u32
-sb_zones_for_sbs(struct pd_prop *pd_prop)
+u32 sb_zones_for_sbs(struct pd_prop *pd_prop)
 {
 	u32    zonebyte;
 
@@ -565,10 +560,7 @@ void sbutil_mdc0_clear(struct omf_sb_descriptor *sb)
 /*
  * Copy mdc0 portion of srcsb to tgtsb.
  */
-void
-sbutil_mdc0_copy(
-	struct omf_sb_descriptor *tgtsb,
-	struct omf_sb_descriptor *srcsb)
+void sbutil_mdc0_copy(struct omf_sb_descriptor *tgtsb, struct omf_sb_descriptor *srcsb)
 {
 	tgtsb->osb_mdc01gen = srcsb->osb_mdc01gen;
 	mpool_uuid_copy(&tgtsb->osb_mdc01uuid, &srcsb->osb_mdc01uuid);
@@ -643,8 +635,7 @@ int sbutil_mdc0_isclear(struct omf_sb_descriptor *sb)
  * Validate mdc0 portion of sb and extract mdparm.
  * Returns: 1 if valid and mdparm set; 0 otherwise.
  */
-int
-sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb, struct mpool_mdparm *mdparm)
+int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb, struct mpool_mdparm *mdparm)
 {
 	/* Basic consistency validation; can make more extensive as needed */
 

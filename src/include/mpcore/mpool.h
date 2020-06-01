@@ -34,8 +34,7 @@ struct mpool_descriptor;
 #define PD_SECTORSZ(_pd_prop) ((_pd_prop)->pdp_sectorsz)
 
 /* Return PD sector size mask */
-#define PD_SECTORMASK(_pd_prop) \
-	((uint64_t)(1 << PD_SECTORSZ(&pd->pdi_prop)) - 1)
+#define PD_SECTORMASK(_pd_prop) ((uint64_t)(1 << PD_SECTORSZ(&pd->pdi_prop)) - 1)
 
 #define MPOOL_DRIVES_MAX       MP_MED_NUMBER
 #define MP_MED_ALL             MP_MED_NUMBER
@@ -193,8 +192,7 @@ struct mpool_config {
  * Return:
  * %0 if successful, EINVAL otherwise
  */
-merr_t
-mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen);
+merr_t mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen);
 
 /**
  * mpool_create() - Create an mpool
@@ -338,11 +336,7 @@ mpool_drive_add(
  *
  * Return: 0 if successful, merr_t otherwise...
  */
-merr_t
-mpool_drive_spares(
-	struct mpool_descriptor    *mp,
-	enum mp_media_classp        mclassp,
-	u8                          spzone);
+merr_t mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8 spzone);
 
 /**
  * mpool_mclass_get_cnt() -
@@ -363,19 +357,14 @@ void mpool_mclass_get_cnt(struct mpool_descriptor *mp, u32 *cnt);
  *
  * Return: 0 if successful, merr_t otherwise...
  */
-merr_t
-mpool_mclass_get(
-	struct mpool_descriptor    *mp,
-	u32                        *mcxc,
-	struct mpool_mclass_xprops *mcxv);
+merr_t mpool_mclass_get(struct mpool_descriptor *mp, u32 *mcxc, struct mpool_mclass_xprops *mcxv);
 
 /**
  * mpool_get_xprops() - Retrieve extended mpool properties
  * @mp:
  * @prop:
  */
-void
-mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops);
+void mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops);
 
 /**
  * mpool_get_devprops_by_name() -
@@ -389,10 +378,7 @@ mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops);
  * -ENOENT if device with specified name cannot be found
  */
 merr_t
-mpool_get_devprops_by_name(
-	struct mpool_descriptor    *mp,
-	char                       *pdname,
-	struct mp_devprops         *dprop);
+mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname, struct mp_devprops *dprop);
 
 /**
  * mpool_get_usage() -
@@ -406,25 +392,20 @@ mpool_get_devprops_by_name(
  * Return: %0 if successful; err_t otherwise...
  */
 void
-mpool_get_usage(
-	struct mpool_descriptor    *mp,
-	enum mp_media_classp        mclassp,
-	struct mp_usage            *usage);
+mpool_get_usage(struct mpool_descriptor *mp, enum mp_media_classp mclassp, struct mp_usage *usage);
 
 /**
  * mpool_config_store() - store a config record in MDC0
  * @mp:
  * @cfg:
  */
-merr_t
-mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config *cfg);
+merr_t mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config *cfg);
 
 /**
  * mpool_config_fetch() - fetch the current mpool config
  * @mp:
  * @cfg:
  */
-merr_t
-mpool_config_fetch(struct mpool_descriptor *mp, struct mpool_config *cfg);
+merr_t mpool_config_fetch(struct mpool_descriptor *mp, struct mpool_config *cfg);
 
 #endif /* MPOOL_MPOOL_H */

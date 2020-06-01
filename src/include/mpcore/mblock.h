@@ -118,8 +118,7 @@ void mblock_put(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
  * Return: %0 if successful, merr_t otherwise...
  * EBUSY if must abort
  */
-merr_t
-mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
+merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
 
 /**
  * mblock_abort() -
@@ -142,8 +141,7 @@ merr_t mblock_abort(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
  *
  * Return: %0 if successful, merr_t otherwise...
  */
-merr_t
-mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
+merr_t mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
 
 /**
  * mblock_write() -

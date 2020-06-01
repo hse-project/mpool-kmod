@@ -63,11 +63,7 @@ struct pd_dev_parm {
  *
  * Return:
  */
-merr_t
-pd_dev_open(
-	const char         *path,
-	struct pd_dev_parm *dparm,
-	struct pd_prop     *pd_prop);
+merr_t pd_dev_open(const char *path, struct pd_dev_parm *dparm, struct pd_prop *pd_prop);
 
 /**
  * pd_dev_close() -
@@ -78,18 +74,13 @@ merr_t pd_dev_close(struct pd_dev_parm *dparm);
 /**
  * pd_bio_erase() -
  * @pd:
- * @zoneaddr:
+ * @zaddr:
  * @zonecnt:
  * @flags: OR of pd_erase_flags bits
  *
  * Return:
  */
-merr_t
-pd_zone_erase(
-	struct mpool_dev_info  *pd,
-	u64                     zoneaddr,
-	u32                     zonecnt,
-	enum pd_erase_flags     flag);
+merr_t pd_zone_erase(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt, enum pd_erase_flags flag);
 
 /*
  * pd API functions - device dependent operations
@@ -100,9 +91,9 @@ pd_zone_erase(
  * @pd:
  * @iov:
  * @iovcnt:
- * @zoneaddr:
- * @boff: offset in bytes from the start of "zoneaddr".
- * @op_flags:
+ * @zaddr:
+ * @boff: offset in bytes from the start of "zaddr".
+ * @opflags:
  *
  * Return:
  */
@@ -111,17 +102,17 @@ pd_zone_pwritev(
 	struct mpool_dev_info  *pd,
 	struct iovec           *iov,
 	int                     iovcnt,
-	u64                     zoneaddr,
+	u64                     zaddr,
 	loff_t                  boff,
-	int                     op_flags);
+	int                     opflags);
 
 /**
  * pd_zone_pwritev_sync() -
  * @pd:
  * @iov:
  * @iovcnt:
- * @zoneaddr:
- * @boff: Offset in bytes from the start of zoneaddr.
+ * @zaddr:
+ * @boff: Offset in bytes from the start of zaddr.
  *
  * Return:
  */
@@ -130,7 +121,7 @@ pd_zone_pwritev_sync(
 	struct mpool_dev_info  *pd,
 	struct iovec           *iov,
 	int                     iovcnt,
-	u64                     zoneaddr,
+	u64                     zaddr,
 	loff_t                  boff);
 
 /**
@@ -138,18 +129,13 @@ pd_zone_pwritev_sync(
  * @pd:
  * @iov:
  * @iovcnt:
- * @zoneaddr: target zone for this I/O
+ * @zaddr: target zone for this I/O
  * @boff:    byte offset into the target zone
  *
  * Return:
  */
 merr_t
-pd_zone_preadv(
-	struct mpool_dev_info  *pd,
-	struct iovec           *iov,
-	int                     iovcnt,
-	u64                     zoneaddr,
-	loff_t                  boff);
+pd_zone_preadv(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, u64 zaddr, loff_t boff);
 
 /**
  * pd_dev_set_unavail() -
@@ -158,9 +144,6 @@ pd_zone_preadv(
  *
  * Return:
  */
-void
-pd_dev_set_unavail(
-	struct pd_dev_parm	      *dparm,
-	struct omf_devparm_descriptor *omf_devparm);
+void pd_dev_set_unavail(struct pd_dev_parm *dparm, struct omf_devparm_descriptor *omf_devparm);
 
 #endif /* MPOOL_PD_PRIV_H */

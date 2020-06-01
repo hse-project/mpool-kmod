@@ -19,8 +19,7 @@ static merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh);
  * smap API functions
  */
 
-static struct smap_zone *
-smap_zone_find(struct rb_root *root, u64 key)
+static struct smap_zone *smap_zone_find(struct rb_root *root, u64 key)
 {
 	struct rb_node *node = root->rb_node;
 	struct smap_zone *elem;
@@ -39,8 +38,7 @@ smap_zone_find(struct rb_root *root, u64 key)
 	return NULL;
 }
 
-static int
-smap_zone_insert(struct rb_root *root, struct smap_zone *item)
+static int smap_zone_insert(struct rb_root *root, struct smap_zone *item)
 {
 	struct rb_node **pos = &root->rb_node, *parent = NULL;
 	struct smap_zone *this;
@@ -112,8 +110,7 @@ void smap_mpool_free(struct mpool_descriptor *mp)
 /**
  * See smap.h.
  */
-void
-smap_mpool_usage(struct mpool_descriptor *mp, u8 mclass, struct mp_usage *usage)
+void smap_mpool_usage(struct mpool_descriptor *mp, u8 mclass, struct mp_usage *usage)
 {
 	if (mclass == MP_MED_ALL) {
 		u32 i;
@@ -125,11 +122,7 @@ smap_mpool_usage(struct mpool_descriptor *mp, u8 mclass, struct mp_usage *usage)
 	}
 }
 
-merr_t
-smap_drive_spares(
-	struct mpool_descriptor *mp,
-	enum mp_media_classp	 mclassp,
-	u8                       spzone)
+merr_t smap_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8 spzone)
 {
 	struct mpool_dev_info *pd = NULL;
 	struct media_class    *mc;
@@ -178,8 +171,7 @@ smap_drive_spares(
 /*
  * Compute zone stats for drive pd per comments in smap_dev_alloc.
  */
-static void
-smap_calc_znstats(struct mpool_dev_info *pd, struct smap_dev_znstats *zones)
+static void smap_calc_znstats(struct mpool_dev_info *pd, struct smap_dev_znstats *zones)
 {
 	zones->sdv_total = pd->pdi_parm.dpr_zonetot;
 	zones->sdv_avail = pd->pdi_ds.sda_zoneeff;
@@ -199,11 +191,7 @@ smap_calc_znstats(struct mpool_dev_info *pd, struct smap_dev_znstats *zones)
 /**
  * See smap.h.
  */
-merr_t
-smap_drive_usage(
-	struct mpool_descriptor *mp,
-	u16                      pdh,
-	struct mp_devprops      *dprop)
+merr_t smap_drive_usage(struct mpool_descriptor *mp, u16 pdh, struct mp_devprops *dprop)
 {
 	struct smap_dev_znstats zones;
 	struct mpool_dev_info   *pd = &mp->pds_pdv[pdh];
@@ -229,11 +217,7 @@ smap_drive_usage(
 /**
  * See smap.h.
  */
-merr_t
-smap_drive_init(
-	struct mpool_descriptor *mp,
-	struct mc_smap_parms    *mcsp,
-	u16                      pdh)
+merr_t smap_drive_init(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh)
 {
 	struct mpool_dev_info *pd __maybe_unused;
 	merr_t                 err;
@@ -305,11 +289,7 @@ void smap_drive_free(struct mpool_descriptor *mp, u16 pdh)
 	pd->pdi_ds.sda_uact = 0;
 }
 
-static bool
-smap_alloccheck(
-	struct mpool_dev_info  *pd,
-	u64                     zonecnt,
-	enum smap_space_type    sapolicy)
+static bool smap_alloccheck(struct mpool_dev_info *pd, u64 zonecnt, enum smap_space_type sapolicy)
 {
 	struct smap_dev_alloc *ds;
 
@@ -527,11 +507,7 @@ smap_alloc(
  * Init empty space map for drive pdh with a % spare zones of spzone.
  * Returns: 0 if successful, merr_t otherwise
  */
-merr_t
-smap_drive_alloc(
-	struct mpool_descriptor *mp,
-	struct mc_smap_parms    *mcsp,
-	u16                      pdh)
+merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh)
 {
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
 	u8                     rgn = 0;
@@ -639,11 +615,7 @@ static merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh)
 	return err;
 }
 
-void
-smap_mclass_usage(
-	struct mpool_descriptor    *mp,
-	u8                          mclass,
-	struct mp_usage            *usage)
+void smap_mclass_usage(struct mpool_descriptor *mp, u8 mclass, struct mp_usage *usage)
 {
 	struct media_class         *mc;
 	struct smap_dev_znstats     zones;
@@ -669,11 +641,7 @@ smap_mclass_usage(
 	usage->mpu_fusable += ((zones.sdv_fusable * zonepg) << PAGE_SHIFT);
 }
 
-static u32
-smap_addr2rgn(
-	struct mpool_descriptor  *mp,
-	struct mpool_dev_info    *pd,
-	u64                       zoneaddr)
+static u32 smap_addr2rgn(struct mpool_descriptor *mp, struct mpool_dev_info *pd, u64 zoneaddr)
 {
 	struct mc_smap_parms   mcsp;
 
@@ -691,12 +659,7 @@ smap_addr2rgn(
  *
  *   Returns: 0 if successful, merr_t otherwise
  */
-merr_t
-smap_insert_byrgn(
-	struct mpool_dev_info  *pd,
-	u32                     rgn,
-	u64                     zoneaddr,
-	u16                     zonecnt)
+merr_t smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u16 zonecnt)
 {
 	const char             *msg __maybe_unused;
 	struct smap_zone   *elem = NULL;
@@ -805,8 +768,7 @@ errout:
 /**
  * See smap.h.
  */
-merr_t
-smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonecnt)
+merr_t smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonecnt)
 {
 	merr_t                 err = 0;
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
@@ -874,8 +836,7 @@ smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonecnt)
  *
  * Return: 0 if successful, merr_t otherwise
  */
-static merr_t
-smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u32 zonecnt)
+static merr_t smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u32 zonecnt)
 {
 	const char             *msg __maybe_unused;
 	struct smap_zone   *left, *right;
@@ -999,8 +960,7 @@ unlock:
 	return err;
 }
 
-merr_t
-smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt)
+merr_t smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt)
 {
 	merr_t                 err      = 0;
 	struct mpool_dev_info *pd       = NULL;
