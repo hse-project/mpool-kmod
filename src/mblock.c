@@ -267,35 +267,6 @@ merr_t mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 }
 
 /**
- * iov_len_and_alignment()
- *
- * Calculate the total data length of an iovec list, and set a flag if there
- * are any non-page-aligned pointers (or non-page-multiple iovecs)
- */
-static u64 iov_len_and_alignment(struct iovec *iov, int iovcnt, int *alignment)
-{
-	u64    len = 0;
-	int    i = 0;
-	int    align = 0;
-
-	*alignment = 0;
-
-	for (i = 0; i < iovcnt; i++) {
-		len += iov[i].iov_len;
-
-		/* Make alignment and length problems distinguishable */
-		if (!PAGE_ALIGNED((ulong)iov[i].iov_base))
-			align |= 1;
-		if (!PAGE_ALIGNED(iov[i].iov_len))
-			align |= 2;
-	}
-
-	*alignment = align;
-
-	return len;
-}
-
-/**
  * mblock_rw_argcheck()
  *
  * @mp:      - Mpool descriptor
@@ -305,11 +276,9 @@ static u64 iov_len_and_alignment(struct iovec *iov, int iovcnt, int *alignment)
  * @boff:    - Byte offset into the layout.  Must be equal to layout->eld_mblen
  *             for write
  * @rw:      - MPOOL_OP_READ or MPOOL_OP_WRITE
- * @len:     - Output: number of bytes in iov list
+ * @len:     - number of bytes in iov list
  *
  * Validate mblock_write() and mblock_read()
- *
- * Sets *len to total data in iov
  *
  * Returns: 0 if successful, merr_t otherwise
  *
@@ -325,24 +294,14 @@ mblock_rw_argcheck(
 	int                         iovcnt,
 	loff_t                      boff,
 	int                         rw,
-	u64                        *len)
+	size_t                      len)
 {
-	u64    data_len = 0;
 	u64    stripe_bytes;
 	u32    mblock_cap;
-	int    alignment;
 	merr_t err;
 
 	mblock_cap = pmd_layout_cap_get(mp, layout);
 	stripe_bytes = mblock_stripe_size_get(mp, layout);
-
-	data_len = iov_len_and_alignment(iov, iovcnt, &alignment);
-	if (alignment) {
-		err = merr(EINVAL);
-		mp_pr_err("mpool %s, mblock %s IOV not page aligned (%d)",
-			  err, mp->pds_name, (rw == MPOOL_OP_READ) ? "read" : "write", alignment);
-		return err;
-	}
 
 	if (rw == MPOOL_OP_READ) {
 		/* boff must be a multiple of the OS page size */
@@ -366,9 +325,9 @@ mblock_rw_argcheck(
 		 * written.  Don't record an error if this appears to
 		 * be an mcache readahead request.
 		 *
-		 * TODO: Use (data_len != MCACHE_RA_PAGES_MAX)
+		 * TODO: Use (len != MCACHE_RA_PAGES_MAX)
 		 */
-		if (ev(boff + data_len > layout->eld_mblen))
+		if (ev(boff + len > layout->eld_mblen))
 			return merr(EINVAL);
 	} else {
 		/* Write boff required to match eld_mblen */
@@ -388,16 +347,13 @@ mblock_rw_argcheck(
 		}
 
 		/* Check for write past end of allocated space (!) */
-		if ((data_len + boff) > mblock_cap) {
+		if ((len + boff) > mblock_cap) {
 			err = merr(EINVAL);
 			mp_pr_err("(write): len %lu + boff %lu > mblock_cap %lu",
-				  err, (ulong)data_len, (ulong)boff, (ulong)mblock_cap);
+				  err, (ulong)len, (ulong)boff, (ulong)mblock_cap);
 			return err;
 		}
 	}
-
-	/* Set the amount of data to read/write */
-	*len = data_len;
 
 	return 0;
 }
@@ -407,12 +363,12 @@ mblock_write(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
 	struct iovec               *iov,
-	int                         iovcnt)
+	int                         iovcnt,
+	size_t                      len)
 {
 	struct pmd_layout *layout;
 
 	merr_t err;
-	u64    len = 0;
 	loff_t boff;
 	u8     state;
 
@@ -423,7 +379,7 @@ mblock_write(
 	}
 
 	err = mblock_rw_argcheck(mp, layout, iov, iovcnt, layout->eld_mblen,
-				 MPOOL_OP_WRITE, &len);
+				 MPOOL_OP_WRITE, len);
 	if (ev(err)) {
 		mp_pr_debug("mblock write argcheck failed ", err);
 		return err;
@@ -457,12 +413,12 @@ mblock_read(
 	struct mblock_descriptor   *mbh,
 	struct iovec               *iov,
 	int                         iovcnt,
-	u64                         boff)
+	loff_t                      boff,
+	size_t                      len)
 {
 	struct pmd_layout *layout;
 
 	merr_t err;
-	u64    len = 0;
 	u8     state;
 
 	assert(mp);
@@ -474,7 +430,7 @@ mblock_read(
 	}
 
 	err = mblock_rw_argcheck(mp, layout, iov, iovcnt, boff,
-				 MPOOL_OP_READ, &len);
+				 MPOOL_OP_READ, len);
 	if (ev(err)) {
 		mp_pr_debug("mblock read argcheck failed ", err);
 		return err;

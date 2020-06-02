@@ -1295,7 +1295,8 @@ static int mpc_readpage_impl(struct page *page, struct mpc_xvm *xvm)
 	iov[0].iov_base = page_address(page);
 	iov[0].iov_len = PAGE_SIZE;
 
-	err = mblock_read(xvm->xvm_mpdesc, mbinfo->mbdesc, iov, 1, offset);
+	err = mblock_read(xvm->xvm_mpdesc, mbinfo->mbdesc, iov, 1,
+			  offset, PAGE_SIZE);
 	if (ev(err)) {
 		unlock_page(page);
 		return -merr_errno(err);
@@ -1363,7 +1364,7 @@ static void mpc_readpages_cb(struct work_struct *work)
 	}
 
 	err = mblock_read(xvm->xvm_mpdesc, args->a_mbdesc,
-			  iov, pagec, args->a_mboffset);
+			  iov, pagec, args->a_mboffset, pagec << PAGE_SHIFT);
 	if (ev(err))
 		goto errout;
 
@@ -3910,10 +3911,12 @@ mpc_physio(
 	switch (objtype) {
 	case MP_OBJ_MBLOCK:
 		if (rw == WRITE) {
-			err = mblock_write(mpd, desc, iov_base, niov);
+			err = mblock_write(mpd, desc, iov_base, niov,
+					   pagesc << PAGE_SHIFT);
 			ev(err);
 		} else {
-			err = mblock_read(mpd, desc, iov_base, niov, offset);
+			err = mblock_read(mpd, desc, iov_base, niov, offset,
+					  pagesc << PAGE_SHIFT);
 			ev(err);
 		}
 		break;

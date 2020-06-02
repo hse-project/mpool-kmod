@@ -327,7 +327,7 @@ pd_bio_rw(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, loff_t off, 
 	tot_pages = 0;
 	tot_len = 0;
 	for (i = 0; i < iovcnt; i++) {
-		if (((uintptr_t)iov[i].iov_base & ~PAGE_MASK) ||
+		if (!PAGE_ALIGNED((uintptr_t)iov[i].iov_base) ||
 		    (iov[i].iov_len & sector_mask)) {
 			err = merr(ev(EINVAL));
 			mp_pr_err("bdev %s, %s off 0x%lx, misaligned iovec, base 0x%lx, len 0x%lx",

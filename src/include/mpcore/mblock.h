@@ -149,6 +149,7 @@ merr_t mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
  * @mbh:
  * @iov:
  * @iovcnt:
+ * @len:
  *
  * Write iov to mblock.  Mblocks can be written until they are committed, or
  * until they are full.  If a caller needs to issue more than one write call
@@ -162,7 +163,8 @@ mblock_write(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
 	struct iovec               *iov,
-	int                         iovcnt);
+	int                         iovcnt,
+	size_t                      len);
 
 /**
  * mblock_read() -
@@ -171,6 +173,7 @@ mblock_write(
  * @iov:
  * @iovcnt:
  * @boff:
+ * @len:
  *
  * Read data from mblock mbnum in committed mblock into iov starting at
  * byte offset boff; boff and iov buffers must be a multiple of OS page
@@ -186,7 +189,8 @@ mblock_read(
 	struct mblock_descriptor   *mbh,
 	struct iovec               *iov,
 	int                         iovcnt,
-	u64                         boff);
+	loff_t                      boff,
+	size_t                      len);
 
 /**
  * mblock_get_props() -
