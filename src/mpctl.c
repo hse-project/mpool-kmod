@@ -293,8 +293,7 @@ static void mpc_errinfo(struct mpioc_cmn *cmn, enum mpool_rc rcode, const char *
 
 	rc = copy_to_user(cmn->mc_msg, msg, len + 1);
 	if (rc)
-		mp_pr_err("copy_to_user(%s, %lu), rc %lu",
-			  merr(EFAULT), msg, len + 1, rc);
+		mp_pr_err("copy_to_user(%s, %lu), rc %lu", merr(EFAULT), msg, len + 1, rc);
 }
 
 static struct mpc_softstate *mpc_cdev2ss(struct cdev *cdev)
@@ -342,8 +341,7 @@ static void mpc_mpool_release(struct kref *refp)
 
 		err = mpool_deactivate(mpool->mp_desc);
 		if (err)
-			mp_pr_err("mpool %s deactivate failed",
-				  err, mpool->mp_name);
+			mp_pr_err("mpool %s deactivate failed", err, mpool->mp_name);
 	}
 
 	kfree(mpool->mp_dpathv);
@@ -632,9 +630,8 @@ mpc_mpool_open(
 			     &mpc_params, flags, &mpool->mp_desc, devrpt);
 	if (err) {
 		if (devrpt->mdr_off > -1)
-			mp_pr_err("Activating %s failed: dev %s, rcode %d",
-				  err, params->mp_name, dpathv[devrpt->mdr_off],
-				  devrpt->mdr_rcode);
+			mp_pr_err("Activating %s failed: dev %s, rcode %d", err,
+				  params->mp_name, dpathv[devrpt->mdr_off], devrpt->mdr_rcode);
 		else
 			mp_pr_err("Activating %s failed", err, params->mp_name);
 
@@ -1846,8 +1843,7 @@ static merr_t mpioc_mp_add(struct mpc_unit *unit, uint cmd, struct mpioc_drive *
 
 	dpathv = kmalloc(dpathvsz, GFP_KERNEL);
 	if (!dpathv) {
-		mpool_devrpt(&drv->drv_devrpt, MPOOL_RC_ERRMSG, -1,
-			     "%s: alloc dpathsz %zu failed",
+		mpool_devrpt(&drv->drv_devrpt, MPOOL_RC_ERRMSG, -1, "%s: alloc dpathsz %zu failed",
 			     __func__, dpathvsz);
 		return merr(ENOMEM);
 	}
@@ -1855,8 +1851,7 @@ static merr_t mpioc_mp_add(struct mpc_unit *unit, uint cmd, struct mpioc_drive *
 	dpaths = (char *)dpathv + drv->drv_dpathc * sizeof(*dpathv);
 	rc = copy_from_user(dpaths, drv->drv_dpaths, drv->drv_dpathssz);
 	if (rc) {
-		mpool_devrpt(&drv->drv_devrpt, MPOOL_RC_ERRMSG, -1,
-			     "%s: copyin dpaths %zu failed",
+		mpool_devrpt(&drv->drv_devrpt, MPOOL_RC_ERRMSG, -1, "%s: copyin dpaths %zu failed",
 			     __func__, drv->drv_dpathssz);
 		kfree(dpathv);
 		return merr(EFAULT);
@@ -1877,8 +1872,7 @@ static merr_t mpioc_mp_add(struct mpc_unit *unit, uint cmd, struct mpioc_drive *
 
 	pd_prop = kmalloc(pd_prop_sz, GFP_KERNEL);
 	if (!pd_prop) {
-		mpool_devrpt(&drv->drv_devrpt, MPOOL_RC_ERRMSG, -1,
-			     "%s: alloc pd prop %zu failed",
+		mpool_devrpt(&drv->drv_devrpt, MPOOL_RC_ERRMSG, -1, "%s: alloc pd prop %zu failed",
 			     __func__, pd_prop_sz);
 		kfree(dpathv);
 		return merr(ENOMEM);
@@ -1886,8 +1880,7 @@ static merr_t mpioc_mp_add(struct mpc_unit *unit, uint cmd, struct mpioc_drive *
 
 	rc = copy_from_user(pd_prop, drv->drv_pd_prop, pd_prop_sz);
 	if (rc) {
-		mpool_devrpt(&drv->drv_devrpt, MPOOL_RC_ERRMSG, -1,
-			     "%s: copyin pd prop %zu failed",
+		mpool_devrpt(&drv->drv_devrpt, MPOOL_RC_ERRMSG, -1, "%s: copyin pd prop %zu failed",
 			     __func__, pd_prop_sz);
 		kfree(pd_prop);
 		kfree(dpathv);
@@ -2199,20 +2192,17 @@ mpioc_mp_create(
 	mode &= 0777;
 
 	if (uid != mpc_current_uid() && !capable(CAP_CHOWN)) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-			     "chown permission denied");
+		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "chown permission denied");
 		return merr(EPERM);
 	}
 
 	if (gid != mpc_current_gid() && !capable(CAP_CHOWN)) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-			     "chown permission denied");
+		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "chown permission denied");
 		return merr(EPERM);
 	}
 
 	if (!capable(CAP_SYS_ADMIN)) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-			     "chmod/activate permission denied");
+		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "chmod/activate permission denied");
 		return merr(EPERM);
 	}
 
@@ -2224,8 +2214,7 @@ mpioc_mp_create(
 			   *dpathv, pd_prop, &mpc_params, MPOOL_ROOT_LOG_CAP,
 			   devrpt);
 	if (err) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-			     "%s: mpool %s, create failed",
+		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "%s: mpool %s, create failed",
 			     __func__, mp->mp_params.mp_name);
 		return err;
 	}
@@ -2267,8 +2256,7 @@ mpioc_mp_create(
 
 	err = mpool_config_store(mpool->mp_desc, &cfg);
 	if (err) {
-		mp_pr_err("%s: %s config store failed",
-			  err, __func__, mp->mp_params.mp_name);
+		mp_pr_err("%s: %s config store failed", err, __func__, mp->mp_params.mp_name);
 		goto errout;
 	}
 
@@ -2561,7 +2549,7 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 
 	if (!mp->mp_pd_prop || !mp->mp_dpaths) {
 		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-			     "mpool %s, %s: (%d drives), drives names %p or PDs properties %p not provided",
+			     "mpool %s, %s: (%d drives), drives names %p or PD props %p invalid",
 			     mp->mp_params.mp_name, action, mp->mp_dpathc,
 			     mp->mp_dpaths, mp->mp_pd_prop);
 
@@ -2584,8 +2572,7 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 	if (unit && cmd != MPIOC_MP_DESTROY) {
 		if (cmd == MPIOC_MP_ACTIVATE)
 			goto errout;
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-			     "already activated");
+		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "already activated");
 		err = merr(EEXIST);
 		goto errout;
 	}
@@ -2676,8 +2663,7 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 
 	if (ev(err))
 		mpool_devrpt(&mp->mp_devrpt, MPOOL_RC_ERRMSG, -1,
-			     "mpool %s, %s failed",
-			     mp->mp_params.mp_name, action);
+			     "mpool %s, %s failed", mp->mp_params.mp_name, action);
 
 errout:
 	mpc_unit_put(unit);
@@ -3678,8 +3664,7 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	default:
 		err = merr(ENOTTY);
 		mp_pr_rl("invalid command %x: dir=%u type=%c nr=%u size=%u",
-			 err, cmd, _IOC_DIR(cmd), _IOC_TYPE(cmd),
-			 _IOC_NR(cmd), _IOC_SIZE(cmd));
+			 err, cmd, _IOC_DIR(cmd), _IOC_TYPE(cmd), _IOC_NR(cmd), _IOC_SIZE(cmd));
 		break;
 	}
 

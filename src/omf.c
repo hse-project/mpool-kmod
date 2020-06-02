@@ -524,8 +524,7 @@ omf_pmd_layout_pack_htole(
 	int data_rec_sz;
 
 	if (rtype != OMF_MDR_OCREATE && rtype != OMF_MDR_OUPDATE) {
-		mp_pr_warn("mpool %s, wrong rec type %u packing layout",
-			   mp->pds_name, rtype);
+		mp_pr_warn("mpool %s, wrong rec type %u packing layout", mp->pds_name, rtype);
 		return -EINVAL;
 	}
 
@@ -576,8 +575,7 @@ static merr_t omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf)
 	if (cdr->omd_rtype != OMF_MDR_OCREATE &&
 		cdr->omd_rtype == OMF_MDR_OUPDATE) {
 		err = merr(EINVAL);
-		mp_pr_err("Unpacking layout failed, wrong record type %d",
-			  err, cdr->omd_rtype);
+		mp_pr_err("Unpacking layout failed, wrong record type %d", err, cdr->omd_rtype);
 		return err;
 	}
 
@@ -890,8 +888,7 @@ omf_sb_unpack_letoh(
 	*omf_ver = omf_psb_vers(sb_omf);
 
 	if (*omf_ver > OMF_SB_DESC_VER_LAST) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-			     "superblock version %d not supported",
+		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "superblock version %d not supported",
 			     *omf_ver);
 		return merr(EPROTONOSUPPORT);
 	}
@@ -900,8 +897,7 @@ omf_sb_unpack_letoh(
 		sb_descriptor_table, ARRAY_SIZE(sb_descriptor_table),
 		*omf_ver, NULL);
 	if (ev(err))
-		mp_pr_err("Unpacking superblock failed for version %u",
-			  err, *omf_ver);
+		mp_pr_err("Unpacking superblock failed for version %u", err, *omf_ver);
 
 	return err;
 }
@@ -1313,8 +1309,7 @@ int omf_mdcrec_pack_htole(struct mpool_descriptor *mp, struct omf_mdcrec_data *c
 	else if (rtype == OMF_MDR_MPCONFIG)
 		return omf_mdcrec_mpconfig_pack_htole(cdr, outbuf);
 
-	mp_pr_warn("mpool %s, invalid record type %u in mdc log",
-		   mp->pds_name, rtype);
+	mp_pr_warn("mpool %s, invalid record type %u in mdc log", mp->pds_name, rtype);
 
 	return ev(-EINVAL);
 }
@@ -1342,8 +1337,7 @@ omf_mdcrec_unpack_letoh(
 	else if (rtype == OMF_MDR_MPCONFIG)
 		omf_mdcrec_mpconfig_unpack_letoh(cdr, inbuf);
 	else {
-		mp_pr_warn("mpool %s, unknown record type %u in mdc log",
-			   mp->pds_name, rtype);
+		mp_pr_warn("mpool %s, unknown record type %u in mdc log", mp->pds_name, rtype);
 		return merr(EINVAL);
 	}
 

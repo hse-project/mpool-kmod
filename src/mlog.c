@@ -188,8 +188,7 @@ mlog_alloc_cmn(
 		err = pmd_obj_alloc(mp, OMF_OBJ_MLOG, &ocap, mclassp, &layout);
 		if (ev(err) || !layout) {
 			if (merr_errno(err) != ENOENT)
-				mp_pr_err("mpool %s, allocating mlog failed",
-					  err, mp->pds_name);
+				mp_pr_err("mpool %s, allocating mlog failed", err, mp->pds_name);
 		}
 	} else {
 		err = pmd_obj_realloc(mp, objid, &ocap, mclassp, &layout);
@@ -579,9 +578,8 @@ mlog_logrecs_validate(
 				 * first log block; logging err
 				 */
 				err = merr(ENODATA);
-				mp_pr_err("no compaction or not first rec in first log block %u %ld %u %u %lu",
-					  err, lstat->lst_csem,
-					  lstat->lst_rsoff,
+				mp_pr_err("no compact marker nor first rec %u %ld %u %u %lu",
+					  err, lstat->lst_csem, lstat->lst_rsoff,
 					  rbidx, lbidx, (ulong)recnum);
 				return err;
 			}
@@ -596,9 +594,8 @@ mlog_logrecs_validate(
 				 * logging errors
 				 */
 				err = merr(ENODATA);
-				mp_pr_err("inconsistent compaction recs %u %u %u %d",
-					  err, lstat->lst_csem,
-					  lstat->lst_cstart, lstat->lst_cend,
+				mp_pr_err("inconsistent compaction recs %u %u %u %d", err,
+					  lstat->lst_csem, lstat->lst_cstart, lstat->lst_cend,
 					  *midrec);
 				return err;
 			}
@@ -668,8 +665,7 @@ mlog_logrecs_validate(
 		} else {
 			/* unknown rtype; logging error */
 			err = merr(ENODATA);
-			mp_pr_err("unknown record type %d %lu",
-				  err, lrd.olr_rtype, (ulong)recnum);
+			mp_pr_err("unknown record type %d %lu", err, lrd.olr_rtype, (ulong)recnum);
 			return err;
 		}
 
@@ -1128,8 +1124,7 @@ mlog_populate_abuf(
 			MPOOL_OP_READ, skip_ser);
 	if (err) {
 		mp_pr_err("mpool %s, mlog 0x%lx, read IO failed, iovcnt: %u, off: 0x%lx",
-			  err, mp->pds_name, (ulong)layout->eld_objid,
-			  iovcnt, off);
+			  err, mp->pds_name, (ulong)layout->eld_objid, iovcnt, off);
 
 		return err;
 	}
@@ -1194,8 +1189,7 @@ mlog_populate_rbuf(
 	err = mlog_setup_buf(lstat, &iov, iovcnt, l_iolen, MPOOL_OP_READ);
 	if (err) {
 		mp_pr_err("mpool %s, mlog 0x%lx setup failed, iovcnt: %u, last iolen: %u",
-			  err, mp->pds_name, (ulong)layout->eld_objid,
-			  iovcnt, l_iolen);
+			  err, mp->pds_name, (ulong)layout->eld_objid, iovcnt, l_iolen);
 
 		return err;
 	}
@@ -1206,9 +1200,8 @@ mlog_populate_rbuf(
 	err = mlog_rw(mp, layout2mlog(layout), iov, iovcnt, off,
 			MPOOL_OP_READ, skip_ser);
 	if (err) {
-		mp_pr_err("mpool %s, mlog 0x%lx populate read buffer, read IO failed iovcnt: %u, off: 0x%lx",
-			  err, mp->pds_name, (ulong)layout->eld_objid,
-			  iovcnt, off);
+		mp_pr_err("mpool %s, mlog 0x%lx populate rbuf, IO failed iovcnt: %u, off: 0x%lx",
+			  err, mp->pds_name, (ulong)layout->eld_objid, iovcnt, off);
 
 		mlog_free_rbuf(lstat, 0, MLOG_NLPGMB(lstat) - 1);
 		kfree(iov);
@@ -1282,9 +1275,8 @@ mlog_read_and_validate(struct mpool_descriptor *mp, struct pmd_layout *layout, b
 
 		err = mlog_populate_rbuf(mp, layout, &nsecs, &rsoff, skip_ser);
 		if (err) {
-			mp_pr_err("mpool %s, mlog 0x%lx rbuf validation, read failed, nsecs: %u, rsoff: 0x%lx",
-				  err, mp->pds_name, (ulong)layout->eld_objid,
-				  nsecs, rsoff);
+			mp_pr_err("mpool %s, mlog 0x%lx validate failed, nsecs: %u, rsoff: 0x%lx",
+				  err, mp->pds_name, (ulong)layout->eld_objid, nsecs, rsoff);
 
 			goto exit;
 		}
@@ -1308,8 +1300,7 @@ mlog_read_and_validate(struct mpool_descriptor *mp, struct pmd_layout *layout, b
 					&leol_found, &fsetidmax, &pfsetid);
 			if (err) {
 				mp_pr_err("mpool %s, mlog 0x%lx rbuf validate failed, leol: %d, fsetidmax: %u, pfsetid: %u",
-					  err, mp->pds_name,
-					  (ulong)layout->eld_objid, leol_found,
+					  err, mp->pds_name, (ulong)layout->eld_objid, leol_found,
 					  fsetidmax, pfsetid);
 
 				mlog_free_rbuf(lstat, rbidx, nlpgs - 1);
@@ -1408,7 +1399,7 @@ merr_t mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 fl
 
 			/* re-open has inconsistent csem flag */
 			err = merr(EINVAL);
-			mp_pr_err("mpool %s, re-opening of mlog 0x%lx, inconsistent compaction setting %u %u",
+			mp_pr_err("mpool %s, re-opening of mlog 0x%lx, inconsistent csem %u %u",
 				  err, mp->pds_name, (ulong)layout->eld_objid,
 				  csem, lstat->lst_csem);
 		} else if (skip_ser &&
@@ -1417,9 +1408,8 @@ merr_t mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 fl
 
 			/* re-open has inconsistent seralization flag */
 			err = merr(EINVAL);
-			mp_pr_err("mpool %s, re-opening of mlog 0x%lx, inconsistent serialization setting %u %u",
-				  err, mp->pds_name, (ulong)layout->eld_objid,
-				  skip_ser,
+			mp_pr_err("mpool %s, re-opening of mlog 0x%lx, inconsistent ser %u %u",
+				  err, mp->pds_name, (ulong)layout->eld_objid, skip_ser,
 				  layout->eld_flags & MLOG_OF_SKIP_SER);
 		} else {
 			*gen = layout->eld_gen;
@@ -1553,8 +1543,7 @@ mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *layout, u16 ab
 		if (err) {
 			mlog_free_abuf(lstat, abidx, abidx);
 			mp_pr_err("mpool %s, mlog 0x%lx, making write offset %ld 4K-aligned failed",
-				  err, mp->pds_name,
-				  (ulong)layout->eld_objid, wsoff);
+				  err, mp->pds_name, (ulong)layout->eld_objid, wsoff);
 
 			return err;
 		}
@@ -1619,7 +1608,7 @@ static merr_t mlog_logblocks_hdrpack(struct pmd_layout *layout)
 			err = omf_logblock_header_pack_htole(&lbh,
 						&lstat->lst_abuf[idx][lpgoff]);
 			if (err) {
-				mp_pr_err("mlog packing log block header at log pg idx %u, vers %u failed",
+				mp_pr_err("mlog packing lbh failed, log pg idx %u, vers %u failed",
 					  err, idx, lbh.olh_vers);
 
 				return err;
@@ -1673,9 +1662,8 @@ static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
 
 	err = mlog_setup_buf(lstat, &iov, abidx + 1, l_iolen, MPOOL_OP_WRITE);
 	if (err) {
-		mp_pr_err("mpool %s, mlog 0x%lx flush, buffer setup failed, iovcnt: %u, last iolen: %u",
-			  err, mp->pds_name,
-			  (ulong)layout->eld_objid, abidx + 1, l_iolen);
+		mp_pr_err("mpool %s, mlog 0x%lx flush, buf setup failed, iovcnt: %u, iolen: %u",
+			  err, mp->pds_name, (ulong)layout->eld_objid, abidx + 1, l_iolen);
 
 		return err;
 	}
@@ -1688,9 +1676,8 @@ static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
 	err = mlog_rw(mp, layout2mlog(layout), iov, abidx + 1, off,
 			MPOOL_OP_WRITE, skip_ser);
 	if (ev(err)) {
-		mp_pr_err("mpool %s, mlog 0x%lx flush append buffer, IO failed iovcnt %u, off 0x%lx",
-			  err, mp->pds_name,
-			  (ulong)layout->eld_objid, abidx + 1, off);
+		mp_pr_err("mpool %s, mlog 0x%lx flush append buf, IO failed iovcnt %u, off 0x%lx",
+			  err, mp->pds_name, (ulong)layout->eld_objid, abidx + 1, off);
 		kfree(iov);
 
 		return err;
@@ -2054,7 +2041,7 @@ merr_t mlog_empty(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool
 	pmd_obj_rdunlock(layout);
 
 	if (err)
-		mp_pr_err("mpool %s, determining if mlog 0x%lx is empty, inconsistency: no mlog status",
+		mp_pr_err("mpool %s, mlog 0x%lx empty: no mlog status",
 			  err, mp->pds_name, (ulong)layout->eld_objid);
 
 	return err;
@@ -2088,7 +2075,7 @@ merr_t mlog_len(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *l
 	pmd_obj_rdunlock(layout);
 
 	if (err)
-		mp_pr_err("mpool %s, determining mlog 0x%lx bytes consumed, inconsistency: no mlog status",
+		mp_pr_err("mpool %s, mlog 0x%lx bytes consumed: no mlog status",
 			  err, mp->pds_name, (ulong)layout->eld_objid);
 
 	return err;
@@ -2358,9 +2345,8 @@ merr_t mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *m
 		pmd_obj_wrunlock(layout);
 
 		err = merr(EINVAL);
-		mp_pr_err("mpool %s, in mlog 0x%lx, inconsistent state %u %u",
-			  err, mp->pds_name, (ulong)layout->eld_objid,
-			  lstat->lst_csem, lstat->lst_cstart);
+		mp_pr_err("mpool %s, in mlog 0x%lx, inconsistent state %u %u", err, mp->pds_name,
+			  (ulong)layout->eld_objid, lstat->lst_csem, lstat->lst_cstart);
 		return err;
 	}
 
@@ -2414,9 +2400,8 @@ merr_t mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh
 
 		err = merr(EINVAL);
 		mp_pr_err("mpool %s, mlog 0x%lx, inconsistent state %u %u %u",
-			  err, mp->pds_name, (ulong)layout->eld_objid,
-			  lstat->lst_csem, lstat->lst_cstart,
-			  lstat->lst_cend);
+			  err, mp->pds_name, (ulong)layout->eld_objid, lstat->lst_csem,
+			  lstat->lst_cstart, lstat->lst_cend);
 		return err;
 	}
 
@@ -2533,7 +2518,7 @@ mlog_append_data_internal(
 			/* mlog is full and there's more to write;
 			 * mlog_append_dmax() should prevent this, but it lied.
 			 */
-			mp_pr_warn("mpool %s, mlog 0x%lx append, mlog free space was incorrectly reported",
+			mp_pr_warn("mpool %s, mlog 0x%lx append, mlog free space incorrect",
 				   mp->pds_name, (ulong)layout->eld_objid);
 
 			return merr(ev(EFBIG));
@@ -2603,8 +2588,7 @@ mlog_append_data_internal(
 			lstat->lst_abdirty = false;
 			if (err) {
 				mp_pr_err("mpool %s, mlog 0x%lx, log block flush failed",
-					  err, mp->pds_name,
-					  (ulong)layout->eld_objid);
+					  err, mp->pds_name, (ulong)layout->eld_objid);
 				break;
 			}
 		}
@@ -2651,16 +2635,14 @@ mlog_append_datav(
 			  err, mp->pds_name, (ulong)layout->eld_objid);
 	} else if (lstat->lst_csem && !lstat->lst_cstart) {
 		err = merr(EINVAL);
-		mp_pr_err("mpool %s, mlog 0x%lx, inconsistent state %u %u",
-			  err, mp->pds_name, (ulong)layout->eld_objid,
-			  lstat->lst_csem, lstat->lst_cstart);
+		mp_pr_err("mpool %s, mlog 0x%lx, inconsistent state %u %u", err, mp->pds_name,
+			  (ulong)layout->eld_objid, lstat->lst_csem, lstat->lst_cstart);
 	} else {
 		dmax = mlog_append_dmax(mp, layout);
 		if (dmax < 0 || buflen > dmax) {
 			err = merr(EFBIG);
 			mp_pr_debug("mpool %s, mlog 0x%lx mlog full %ld",
-				    err, mp->pds_name,
-				    (ulong)layout->eld_objid, (long)dmax);
+				    err, mp->pds_name, (ulong)layout->eld_objid, (long)dmax);
 
 			/* Flush whatever we can. */
 			if (lstat->lst_abdirty) {
@@ -2800,8 +2782,7 @@ mlog_logblocks_load_media(struct mpool_descriptor *mp, struct mlog_read_iter *lr
 	err = mlog_populate_rbuf(mp, lri->lri_layout, &nsecs, &rsoff, skip_ser);
 	if (err) {
 		mp_pr_err("mpool %s, objid 0x%lx, mlog read failed, nsecs: %u, rsoff: 0x%lx",
-			  err, mp->pds_name,
-			  (ulong)lri->lri_layout->eld_objid, nsecs, rsoff);
+			  err, mp->pds_name, (ulong)lri->lri_layout->eld_objid, nsecs, rsoff);
 
 		lstat->lst_rsoff = lstat->lst_rseoff = -1;
 
@@ -2945,8 +2926,7 @@ mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char
 		/* lri is invalid; prior checks should prevent this */
 		err = merr(EINVAL);
 		mp_pr_err("mpool %s, invalid offset %u %ld %ld",
-			  err, mp->pds_name,
-			  lri->lri_valid, lri->lri_soff, lstat->lst_wsoff);
+			  err, mp->pds_name, lri->lri_valid, lri->lri_soff, lstat->lst_wsoff);
 	} else if ((lri->lri_soff == lstat->lst_wsoff) ||
 			(lstat->lst_asoff > -1 &&
 			lri->lri_soff >= lstat->lst_asoff &&
@@ -2973,8 +2953,7 @@ mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char
 			/* lri is invalid; prior checks should prevent this */
 			err = merr(EINVAL);
 			mp_pr_err("mpool %s, invalid next offset %u %u",
-				  err, mp->pds_name,
-				  lri->lri_roff, lstat->lst_aoff);
+				  err, mp->pds_name, lri->lri_roff, lstat->lst_aoff);
 			goto out;
 		} else if (lri->lri_soff == lstat->lst_wsoff &&
 				lri->lri_roff == lstat->lst_aoff) {
@@ -3109,10 +3088,9 @@ mlog_read_data_next_impl(
 		    lstat->lst_aoff) || lri->lri_roff > sectsz) {
 
 		err = merr(EINVAL);
-		mp_pr_err("mpool %s, mlog 0x%lx, invalid arguments gen %lu %lu offsets %ld %ld %u %u %u",
-			  err, mp->pds_name, (ulong)layout->eld_objid,
-			  (ulong)lri->lri_gen, (ulong)layout->eld_gen,
-			  lri->lri_soff, lstat->lst_wsoff, lri->lri_roff,
+		mp_pr_err("mpool %s, mlog 0x%lx, invalid args gen %lu %lu offsets %ld %ld %u %u %u",
+			  err, mp->pds_name, (ulong)layout->eld_objid, (ulong)lri->lri_gen,
+			  (ulong)layout->eld_gen, lri->lri_soff, lstat->lst_wsoff, lri->lri_roff,
 			  lstat->lst_aoff, sectsz);
 	} else if (lri->lri_soff == lstat->lst_wsoff &&
 		   lri->lri_roff == lstat->lst_aoff) {
@@ -3196,9 +3174,8 @@ mlog_read_data_next_impl(
 					 * block which is a valid failure
 					 * mode; otherwise is a logging error
 					 */
-					mp_pr_err("mpool %s, mlog 0x%lx, inconsistent 1 data record",
-						  err, mp->pds_name,
-						  (ulong)layout->eld_objid);
+					mp_pr_err("mpool %s, mlog 0x%lx, inconsistent 1 data rec",
+						  err, mp->pds_name, (ulong)layout->eld_objid);
 					break;
 				}
 				/*
@@ -3216,9 +3193,8 @@ mlog_read_data_next_impl(
 					 * must occur mid data record;
 					 * logging error
 					 */
-					mp_pr_err("mpool %s, mlog 0x%lx, inconsistent 2 data record",
-						  err, mp->pds_name,
-						  (ulong)layout->eld_objid);
+					mp_pr_err("mpool %s, mlog 0x%lx, inconsistent 2 data rec",
+						  err, mp->pds_name, (ulong)layout->eld_objid);
 					break;
 				}
 			}
@@ -3260,8 +3236,7 @@ mlog_read_data_next_impl(
 			if (midrec) {
 				err = merr(ENODATA);
 				mp_pr_err("mpool %s, mlog 0x%lx, inconsistent non-data record",
-					  err, mp->pds_name,
-					  (ulong)layout->eld_objid);
+					  err, mp->pds_name, (ulong)layout->eld_objid);
 				break;
 			}
 			if (lrd.olr_rtype == OMF_LOGREC_EOLB)

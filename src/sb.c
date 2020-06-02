@@ -41,8 +41,7 @@ static bool sb_prop_valid(struct mpool_dev_info *pd)
 
 		/* guarantee that the SB area is large enough to hold an SB */
 		mp_pr_err("sb(%s): structure too big %lu %lu",
-			  err, pd->pdi_name, (ulong)SB_AREA_SZ,
-			  OMF_SB_DESC_PACKLEN);
+			  err, pd->pdi_name, (ulong)SB_AREA_SZ, OMF_SB_DESC_PACKLEN);
 		return false;
 	}
 
@@ -158,8 +157,7 @@ static merr_t sb_read_sbx(struct mpool_dev_info *pd, char *inbuf, u32 idx)
 	if (err >= 0)
 		err = 0;
 	else
-		mp_pr_err("sb(%s, %d): read failed, woff %lu",
-			  err, pd->pdi_name, idx, (ulong)woff);
+		mp_pr_err("sb(%s, %d): read failed, woff %lu", err, pd->pdi_name, idx, (ulong)woff);
 
 	return err;
 }
@@ -186,8 +184,7 @@ int sb_magic_check(struct mpool_dev_info *pd)
 	if (!sb_prop_valid(pd)) {
 		err = merr(EINVAL);
 		mp_pr_err("sb(%s): invalid param, zonepg %u zonetot %u",
-			  err, pd->pdi_name,
-			  pd->pdi_parm.dpr_zonepg, pd->pdi_parm.dpr_zonetot);
+			  err, pd->pdi_name, pd->pdi_parm.dpr_zonepg, pd->pdi_parm.dpr_zonetot);
 		return -merr_errno(err);
 	}
 
@@ -196,8 +193,7 @@ int sb_magic_check(struct mpool_dev_info *pd)
 	inbuf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!inbuf) {
 		err = merr(ENOMEM);
-		mp_pr_err("sb(%s) magic check: buffer alloc failed",
-			  err, pd->pdi_name);
+		mp_pr_err("sb(%s) magic check: buffer alloc failed", err, pd->pdi_name);
 		return -merr_errno(err);
 	}
 
@@ -241,8 +237,7 @@ merr_t sb_write_new(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 	if (!sb_parm_valid(pd)) {
 		err = merr(EINVAL);
 		mp_pr_err("sb(%s) invalid param, zonepg %u zonetot %u",
-			  err, pd->pdi_name, pd->pdi_parm.dpr_zonepg,
-			  pd->pdi_parm.dpr_zonetot);
+			  err, pd->pdi_name, pd->pdi_parm.dpr_zonepg, pd->pdi_parm.dpr_zonetot);
 		return err;
 	}
 
@@ -266,8 +261,7 @@ merr_t sb_write_new(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 	for (i = 0; i < SB_SB_COUNT; i++) {
 		err = sb_write_sbx(pd, outbuf, i);
 		if (err) {
-			mp_pr_err("sb(%s, %d): write sbx failed",
-				  err, pd->pdi_name, i);
+			mp_pr_err("sb(%s, %d): write sbx failed", err, pd->pdi_name, i);
 			break;
 		}
 	}
@@ -295,9 +289,7 @@ merr_t sb_write_update(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 	if (!sb_parm_valid(pd)) {
 		err = merr(EINVAL);
 		mp_pr_err("sb(%s) invalid param, zonepg %u zonetot %u partlen %lu",
-			  err, pd->pdi_name,
-			  pd->pdi_parm.dpr_zonepg,
-			  pd->pdi_parm.dpr_zonetot,
+			  err, pd->pdi_name, pd->pdi_parm.dpr_zonepg, pd->pdi_parm.dpr_zonetot,
 			  (ulong)PD_LEN(&pd->pdi_prop));
 		return err;
 	}
@@ -319,8 +311,7 @@ merr_t sb_write_update(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 	for (i = 0; i < SB_SB_COUNT; i++) {
 		err = sb_write_sbx(pd, outbuf, i);
 		if (ev(err)) {
-			mp_pr_err("sb(%s, %d) sbx write failed",
-				  err, pd->pdi_name, i);
+			mp_pr_err("sb(%s, %d) sbx write failed", err, pd->pdi_name, i);
 			if (i == 0)
 				break;
 			err = 0;
@@ -348,9 +339,8 @@ merr_t sb_erase(struct mpool_dev_info *pd)
 
 	if (!sb_prop_valid(pd)) {
 		err = merr(EINVAL);
-		mp_pr_err("sb(%s) invalid param, zonepg %u zonetot %u",
-			  err, pd->pdi_name, pd->pdi_parm.dpr_zonepg,
-			  pd->pdi_parm.dpr_zonetot);
+		mp_pr_err("sb(%s) invalid param, zonepg %u zonetot %u", err, pd->pdi_name,
+			  pd->pdi_parm.dpr_zonepg, pd->pdi_parm.dpr_zonetot);
 		return err;
 	}
 
@@ -368,8 +358,7 @@ merr_t sb_erase(struct mpool_dev_info *pd)
 
 		err = pd_zone_pwritev_sync(pd, &iov, 1, 0, woff);
 		if (err) {
-			mp_pr_err("sb(%s, %d): erase failed",
-				  err, pd->pdi_name, i);
+			mp_pr_err("sb(%s, %d): erase failed", err, pd->pdi_name, i);
 		}
 	}
 
@@ -396,8 +385,7 @@ static merr_t sb_reconcile(struct omf_sb_descriptor *sb, struct mpool_dev_info *
 		err = merr(EINVAL);
 
 		mp_pr_err("sb(%s): devsz(%lu) > discovered (%lu)",
-			  err, pd->pdi_name, (ulong)sb_parm->odp_devsz,
-			  (ulong)pd_prop->pdp_devsz);
+			  err, pd->pdi_name, (ulong)sb_parm->odp_devsz, (ulong)pd_prop->pdp_devsz);
 		return err;
 	}
 
@@ -405,8 +393,7 @@ static merr_t sb_reconcile(struct omf_sb_descriptor *sb, struct mpool_dev_info *
 		err = merr(EINVAL);
 
 		mp_pr_err("sb(%s) sector size(%u) mismatches discovered(%u)",
-			  err, pd->pdi_name, sb_parm->odp_sectorsz,
-			  PD_SECTORSZ(pd_prop));
+			  err, pd->pdi_name, sb_parm->odp_sectorsz, PD_SECTORSZ(pd_prop));
 		return err;
 	}
 
@@ -414,8 +401,7 @@ static merr_t sb_reconcile(struct omf_sb_descriptor *sb, struct mpool_dev_info *
 		err = merr(EINVAL);
 
 		mp_pr_err("sb(%s), pd type(%u) mismatches discovered(%u)",
-			  err, pd->pdi_name, sb_parm->odp_devtype,
-			  pd_prop->pdp_devtype);
+			  err, pd->pdi_name, sb_parm->odp_devtype, pd_prop->pdp_devtype);
 		return err;
 	}
 
@@ -457,8 +443,7 @@ sb_read(
 	if (!sb_prop_valid(pd)) {
 		err = merr(EINVAL);
 		mp_pr_err("sb(%s) invalid parameter, zonepg %u zonetot %u",
-			  err, pd->pdi_name, pd->pdi_parm.dpr_zonepg,
-			  pd->pdi_parm.dpr_zonetot);
+			  err, pd->pdi_name, pd->pdi_parm.dpr_zonepg, pd->pdi_parm.dpr_zonetot);
 		return err;
 	}
 
@@ -484,8 +469,7 @@ sb_read(
 
 		err = sb_read_sbx(pd, buf, i);
 		if (err)
-			mp_pr_err("sb(%s, %d) read sbx failed",
-				  err, pd->pdi_name, i);
+			mp_pr_err("sb(%s, %d) read sbx failed", err, pd->pdi_name, i);
 		else {
 			err = omf_sb_unpack_letoh(sbtmp, buf, omf_ver, devrpt);
 			if (err)

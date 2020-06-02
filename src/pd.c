@@ -90,16 +90,14 @@ static merr_t pd_bio_discard(struct mpool_dev_info  *pd, u64 off, size_t len)
 	if (off & PD_SECTORMASK(&pd->pdi_prop)) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s, offset 0x%lx not multiple of sec size %u",
-			  err, pd->pdi_name, (ulong)off,
-			  (1 << PD_SECTORSZ(&pd->pdi_prop)));
+			  err, pd->pdi_name, (ulong)off, (1 << PD_SECTORSZ(&pd->pdi_prop)));
 		return err;
 	}
 
 	if (off > PD_LEN(&(pd->pdi_prop))) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s, offset 0x%lx past end 0x%lx",
-			  err, pd->pdi_name,
-			  (ulong)off, (ulong)PD_LEN(&pd->pdi_prop));
+			  err, pd->pdi_name, (ulong)off, (ulong)PD_LEN(&pd->pdi_prop));
 		return err;
 	}
 
@@ -108,8 +106,7 @@ static merr_t pd_bio_discard(struct mpool_dev_info  *pd, u64 off, size_t len)
 	if (rc) {
 		err = merr(rc);
 		mp_pr_err("bdev %s, offset 0x%lx len 0x%lx, discard faiure",
-			  err, pd->pdi_name,
-			  (ulong)off, (ulong)len);
+			  err, pd->pdi_name, (ulong)off, (ulong)len);
 	}
 
 	return err;
@@ -314,8 +311,7 @@ pd_bio_rw(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, loff_t off, 
 	if (ev(off & sector_mask)) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s, %s offset 0x%lx not multiple of sector size %u",
-			  err, pd->pdi_name,
-			  (rw == REQ_OP_READ) ? "read" : "write",
+			  err, pd->pdi_name, (rw == REQ_OP_READ) ? "read" : "write",
 			  (ulong)off, (1 << PD_SECTORSZ(&pd->pdi_prop)));
 		return err;
 	}
@@ -323,8 +319,7 @@ pd_bio_rw(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, loff_t off, 
 	if (ev(off > PD_LEN(&(pd->pdi_prop)))) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s, %s offset 0x%lx past device end 0x%lx",
-			  err, pd->pdi_name,
-			  (rw == REQ_OP_READ) ? "read" : "write",
+			  err, pd->pdi_name, (rw == REQ_OP_READ) ? "read" : "write",
 			  (ulong)off, (ulong)PD_LEN(&pd->pdi_prop));
 		return err;
 	}
@@ -335,12 +330,9 @@ pd_bio_rw(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, loff_t off, 
 		if (((uintptr_t)iov[i].iov_base & ~PAGE_MASK) ||
 		    (iov[i].iov_len & sector_mask)) {
 			err = merr(ev(EINVAL));
-			mp_pr_err("bdev %s, %s offset 0x%lx, misaligned iovec, iovec base 0x%lx, iovec len 0x%lx",
-				  err, pd->pdi_name,
-				  (rw == REQ_OP_READ) ? "read" : "write",
-				  (ulong)off,
-				  (ulong)iov[i].iov_base,
-				  (ulong)iov[i].iov_len);
+			mp_pr_err("bdev %s, %s off 0x%lx, misaligned iovec, base 0x%lx, len 0x%lx",
+				  err, pd->pdi_name, (rw == REQ_OP_READ) ? "read" : "write",
+				  (ulong)off, (ulong)iov[i].iov_base, (ulong)iov[i].iov_len);
 			return err;
 		}
 
@@ -356,10 +348,8 @@ pd_bio_rw(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, loff_t off, 
 	if (off + tot_len > PD_LEN(&(pd->pdi_prop))) {
 		err = merr(ev(EINVAL));
 		mp_pr_err("bdev %s, %s I/O end past device end 0x%lx, 0x%lx:0x%x",
-			  err, pd->pdi_name,
-			  (rw == REQ_OP_READ) ? "read" : "write",
-			  (ulong)PD_LEN(&(pd->pdi_prop)),
-			  (ulong)off, tot_len);
+			  err, pd->pdi_name, (rw == REQ_OP_READ) ? "read" : "write",
+			  (ulong)PD_LEN(&(pd->pdi_prop)), (ulong)off, tot_len);
 		return err;
 	}
 

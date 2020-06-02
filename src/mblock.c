@@ -340,9 +340,7 @@ mblock_rw_argcheck(
 	if (alignment) {
 		err = merr(EINVAL);
 		mp_pr_err("mpool %s, mblock %s IOV not page aligned (%d)",
-			  err, mp->pds_name,
-			  (rw == MPOOL_OP_READ) ? "read" : "write",
-			  alignment);
+			  err, mp->pds_name, (rw == MPOOL_OP_READ) ? "read" : "write", alignment);
 		return err;
 	}
 
@@ -377,8 +375,7 @@ mblock_rw_argcheck(
 		if (boff != layout->eld_mblen) {
 			err = merr(EINVAL);
 			mp_pr_err("mpool %s write boff (%ld) != eld_mblen (%d)",
-				  err, mp->pds_name, (ulong)boff,
-				  layout->eld_mblen);
+				  err, mp->pds_name, (ulong)boff, layout->eld_mblen);
 			return err;
 		}
 
@@ -394,8 +391,7 @@ mblock_rw_argcheck(
 		if ((data_len + boff) > mblock_cap) {
 			err = merr(EINVAL);
 			mp_pr_err("(write): len %lu + boff %lu > mblock_cap %lu",
-				  err, (ulong)data_len, (ulong)boff,
-				  (ulong)mblock_cap);
+				  err, (ulong)data_len, (ulong)boff, (ulong)mblock_cap);
 			return err;
 		}
 	}

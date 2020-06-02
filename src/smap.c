@@ -226,9 +226,8 @@ merr_t smap_drive_init(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, 
 
 	if ((mcsp->mcsp_spzone > 100) || !(mcsp->mcsp_rgnc > 0)) {
 		err = merr(EINVAL);
-		mp_pr_err("smap(%s, %s): drive init failed, spzone %u rcnt %lu",
-			  err, mp->pds_name, pd->pdi_name, mcsp->mcsp_spzone,
-			  (ulong)mcsp->mcsp_rgnc);
+		mp_pr_err("smap(%s, %s): drive init failed, spzone %u rcnt %lu", err, mp->pds_name,
+			  pd->pdi_name, mcsp->mcsp_spzone, (ulong)mcsp->mcsp_rgnc);
 		return merr(EINVAL);
 	}
 
@@ -236,11 +235,9 @@ merr_t smap_drive_init(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, 
 	if (!err) {
 		err = smap_drive_sballoc(mp, pdh);
 		if (err)
-			mp_pr_err("smap(%s, %s): sb alloc failed",
-				  err, mp->pds_name, pd->pdi_name);
+			mp_pr_err("smap(%s, %s): sb alloc failed", err, mp->pds_name, pd->pdi_name);
 	} else {
-		mp_pr_err("smap(%s, %s): drive alloc failed",
-			  err, mp->pds_name, pd->pdi_name);
+		mp_pr_err("smap(%s, %s): drive alloc failed", err, mp->pds_name, pd->pdi_name);
 	}
 
 	if (err)
@@ -531,8 +528,7 @@ merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp,
 	pd->pdi_rmbktv = kcalloc(rgnc, sizeof(*pd->pdi_rmbktv), GFP_KERNEL);
 	if (!pd->pdi_rmbktv) {
 		err = merr(ENOMEM);
-		mp_pr_err("smap(%s, %s): rmbktv alloc failed",
-			  err, mp->pds_name, pd->pdi_name);
+		mp_pr_err("smap(%s, %s): rmbktv alloc failed", err, mp->pds_name, pd->pdi_name);
 		return err;
 	}
 
@@ -600,8 +596,7 @@ static merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh)
 	cnt = sb_zones_for_sbs(&(pd->pdi_prop));
 	if (cnt < 1) {
 		err = merr(ESPIPE);
-		mp_pr_err("smap(%s, %s): identifying sb failed",
-			  err, mp->pds_name, pd->pdi_name);
+		mp_pr_err("smap(%s, %s): identifying sb failed", err, mp->pds_name, pd->pdi_name);
 		return err;
 	}
 
@@ -812,8 +807,7 @@ merr_t smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonec
 		err = smap_insert_byrgn(pd, rgn, raddr, rcnt);
 		if (err) {
 			mp_pr_err("smap(%s, %s): insert byrgn failed, rgn %d raddr %lu rcnt %lu",
-				  err, mp->pds_name, pd->pdi_name, rgn,
-				  (ulong)raddr, (ulong)rcnt);
+				  err, mp->pds_name, pd->pdi_name, rgn, (ulong)raddr, (ulong)rcnt);
 			break;
 		}
 		zoneadded = zoneadded + rcnt;
@@ -1011,8 +1005,7 @@ merr_t smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt
 		err = smap_free_byrgn(pd, rgn, raddr, rcnt);
 		if (err) {
 			mp_pr_err("smap(%s, %s): free byrgn failed, rgn %d raddr %lu, rcnt %lu",
-				  err, mp->pds_name, pd->pdi_name, rgn,
-				  (ulong)raddr, (ulong)rcnt);
+				  err, mp->pds_name, pd->pdi_name, rgn, (ulong)raddr, (ulong)rcnt);
 			break;
 		}
 		zonefreed = zonefreed + rcnt;
@@ -1047,8 +1040,7 @@ void smap_log_mpool_usage(struct work_struct *ws)
 	if (usage.mpu_usable == 0) {
 		merr_t err = merr(EINVAL);
 
-		mp_pr_err("smap mpool %s: zero usable space",
-			  err, mp->pds_name);
+		mp_pr_err("smap mpool %s: zero usable space", err, mp->pds_name);
 		return;
 	}
 	/*
@@ -1072,8 +1064,7 @@ void smap_log_mpool_usage(struct work_struct *ws)
 
 		else
 			mp_pr_info("smap mpool %s, free space %s from %d%% to %d%%",
-				   mp->pds_name,
-				   (delta > 0) ? "increases" : "decreases",
+				   mp->pds_name, (delta > 0) ? "increases" : "decreases",
 				   last, smapu->smapu_freepct);
 	}
 

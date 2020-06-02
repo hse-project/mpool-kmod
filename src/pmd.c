@@ -99,8 +99,7 @@ void pmd_layout_release(struct kref *refp)
 	layout = container_of(refp, typeof(*layout), eld_ref);
 
 	WARN_ONCE(layout->eld_objid == 0 ||
-		  kref_read(&layout->eld_ref),
-		  "%s: %px, objid %lx, state %x, refcnt %ld",
+		  kref_read(&layout->eld_ref), "%s: %px, objid %lx, state %x, refcnt %ld",
 		  __func__, layout, (ulong)layout->eld_objid,
 		  layout->eld_state, (long)kref_read(&layout->eld_ref));
 
@@ -412,24 +411,18 @@ pmd_cmp_drv_mdc0(
 
 	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
 		mp_pr_warn("mpool %s, UNAVAIL mdc0 drive parms don't match those in drive list record for %s, mclassp %d %d zonepg %u %u sectorsz %u %u devtype %u %u features %lu %lu",
-			   mp->pds_name, pd->pdi_name,
-			   mcp_pd.mcp_classp, mcp_mdc0list.mcp_classp,
-			   mcp_pd.mcp_zonepg, mcp_mdc0list.mcp_zonepg,
-			   mcp_pd.mcp_sectorsz, mcp_mdc0list.mcp_sectorsz,
-			   mcp_pd.mcp_devtype, mcp_mdc0list.mcp_devtype,
-			   (ulong)mcp_pd.mcp_features,
-			   (ulong)mcp_mdc0list.mcp_features);
+			   mp->pds_name, pd->pdi_name, mcp_pd.mcp_classp, mcp_mdc0list.mcp_classp,
+			   mcp_pd.mcp_zonepg, mcp_mdc0list.mcp_zonepg, mcp_pd.mcp_sectorsz,
+			   mcp_mdc0list.mcp_sectorsz, mcp_pd.mcp_devtype, mcp_mdc0list.mcp_devtype,
+			   (ulong)mcp_pd.mcp_features, (ulong)mcp_mdc0list.mcp_features);
 	else {
 		mpool_devrpt(devrpt, MPOOL_RC_PARM, pdh, NULL);
 
 		mp_pr_warn("mpool %s, mismatch between MDC0 drive list record and drive parms for %s, mclassp %d %d zonepg %u %u sectorsz %u %u devtype %u %u features %lu %lu",
-			   mp->pds_name, pd->pdi_name,
-			   mcp_pd.mcp_classp, mcp_mdc0list.mcp_classp,
-			   mcp_pd.mcp_zonepg, mcp_mdc0list.mcp_zonepg,
-			   mcp_pd.mcp_sectorsz, mcp_mdc0list.mcp_sectorsz,
-			   mcp_pd.mcp_devtype, mcp_mdc0list.mcp_devtype,
-			   (ulong)mcp_pd.mcp_features,
-			   (ulong)mcp_mdc0list.mcp_features);
+			   mp->pds_name, pd->pdi_name, mcp_pd.mcp_classp, mcp_mdc0list.mcp_classp,
+			   mcp_pd.mcp_zonepg, mcp_mdc0list.mcp_zonepg, mcp_pd.mcp_sectorsz,
+			   mcp_mdc0list.mcp_sectorsz, mcp_pd.mcp_devtype, mcp_mdc0list.mcp_devtype,
+			   (ulong)mcp_pd.mcp_features, (ulong)mcp_mdc0list.mcp_features);
 	}
 
 	return merr(EINVAL);
@@ -473,8 +466,7 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 	 */
 	err = mp_mdc_rewind(cinfo->mmi_mdc);
 	if (err) {
-		mp_pr_err("mpool %s, MDC0 init for read properties failed",
-			  err, mp->pds_name);
+		mp_pr_err("mpool %s, MDC0 init for read properties failed", err, mp->pds_name);
 		return err;
 	}
 
@@ -500,8 +492,7 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 		err = omf_mdcrec_unpack_letoh(&(cinfo->mmi_mdcver), mp, &cdr,
 			cinfo->mmi_recbuf);
 		if (err) {
-			mp_pr_err("mpool %s, MDC0 property unpack failed",
-				  err, mp->pds_name);
+			mp_pr_err("mpool %s, MDC0 property unpack failed", err, mp->pds_name);
 			break;
 		}
 
@@ -513,8 +504,7 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 
 			memcpy(&netdev[src->odp_mclassp], src, sizeof(*src));
 		} else if (cdr.omd_rtype == OMF_MDR_MCSPARE) {
-			mp_pr_debug("Found spare record for mclassp %u",
-				    0, cdr.u.mcs.omd_mclassp);
+			mp_pr_debug("Found spare record for mclassp %u", 0, cdr.u.mcs.omd_mclassp);
 			mclassp = cdr.u.mcs.omd_mclassp;
 			if (mclass_isvalid(mclassp)) {
 				spzone[mclassp] = cdr.u.mcs.omd_spzone;
@@ -522,7 +512,7 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 				err = merr(EINVAL);
 
 				/* Should never happen */
-				mp_pr_err("mpool %s, MDC0 getting property media class spare record, invalid mclassp %u",
+				mp_pr_err("mpool %s, MDC0 mclass spare record, invalid mclassp %u",
 					  err, mp->pds_name, mclassp);
 				break;
 			}
@@ -539,13 +529,11 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 						   buf2, sizeof(buf2));
 
 				mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-					     "binary too old for metadata %s",
-					     buf1);
+					     "binary too old for metadata %s", buf1);
 
 				err = merr(EOPNOTSUPP);
-				mp_pr_err("mpool %s, MDC0 content version is %s while binary understands up to %s",
-					  err, mp->pds_name,
-					  buf1, buf2);
+				mp_pr_err("mpool %s, MDC0 version %s, binary version %s",
+					  err, mp->pds_name, buf1, buf2);
 				break;
 			}
 
@@ -609,15 +597,12 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 				err = merr(ENXIO);
 
 				if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
-					mp_pr_err("mpool %s, drive %s %s %s",
-						  err, mp->pds_name, uuid_str,
-						  pd->pdi_name, msg_unavail1);
+					mp_pr_err("mpool %s, drive %s %s %s", err, mp->pds_name,
+						   uuid_str, pd->pdi_name, msg_unavail1);
 				else {
-					mpool_devrpt(devrpt, MPOOL_RC_ZOMBIE,
-						     pdh, NULL);
-					mp_pr_err("mpool %s, drive %s %s %s",
-						  err, mp->pds_name, uuid_str,
-						  pd->pdi_name, msg_unavail2);
+					mpool_devrpt(devrpt, MPOOL_RC_ZOMBIE, pdh, NULL);
+					mp_pr_err("mpool %s, drive %s %s %s", err, mp->pds_name,
+						  uuid_str, pd->pdi_name, msg_unavail2);
 				}
 				break;
 			} else if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL) {
@@ -659,7 +644,7 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 			}
 		}
 		if (err)
-			mp_pr_err("mpool %s, can't set percent spare %u because the class %u has no PD",
+			mp_pr_err("mpool %s, can't set spare %u because the class %u has no PD",
 				  err, mp->pds_name, spzone[mclassp], mclassp);
 	}
 
@@ -678,8 +663,7 @@ static merr_t pmd_smap_insert(struct mpool_descriptor *mp, struct pmd_layout *la
 	if (err) {
 		/* insert should never fail */
 		mp_pr_err("mpool %s, allocating drive %s space for layout failed, objid 0x%lx",
-			  err, mp->pds_name, mp->pds_pdv[pdh].pdi_name,
-			  (ulong)layout->eld_objid);
+			  err, mp->pds_name, mp->pds_pdv[pdh].pdi_name, (ulong)layout->eld_objid);
 	}
 
 	return err;
@@ -740,7 +724,7 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 		    objid_type(layout->eld_objid) != OMF_OBJ_MLOG ||
 		    objid_slot(layout->eld_objid)) {
 			err = merr(EINVAL);
-			mp_pr_err("mpool %s, MDC0 number of MDCs %lu %u or obj type inconsistent, objid 0x%lx",
+			mp_pr_err("mpool %s, MDC0 number of MDCs %lu %u or bad otype, objid 0x%lx",
 				  err, mp->pds_name, (ulong)mdcn,
 				  lcnt[mdcn], (ulong)layout->eld_objid);
 			break;
@@ -802,10 +786,8 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 			err1 = pmd_obj_delete(mp, layout);
 			if (err1)
 				mp_pr_err("mpool %s, MDC0 %d, can't delete mlog %lu %lu %u %u",
-					  err1, mp->pds_name,
-					  activation, (ulong)logid1,
-					  (ulong)mdcmax, lcnt[mdcmax],
-					  slotvcnt);
+					  err1, mp->pds_name, activation, (ulong)logid1,
+					  (ulong)mdcmax, lcnt[mdcmax], slotvcnt);
 		}
 
 		layout = pmd_obj_find_get(mp, logid2, 1);
@@ -813,10 +795,8 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 			err2 = pmd_obj_delete(mp, layout);
 			if (err2)
 				mp_pr_err("mpool %s, MDC0 %d, can't delete mlog %lu %lu %u %u",
-					  err2, mp->pds_name,
-					  activation, (ulong)logid2,
-					  (ulong)mdcmax, lcnt[mdcmax],
-					  slotvcnt);
+					  err2, mp->pds_name, activation, (ulong)logid2,
+					  (ulong)mdcmax, lcnt[mdcmax], slotvcnt);
 		}
 
 		if (activation) {
@@ -826,9 +806,8 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 			 */
 			cinfo->mmi_luniq = mdcmax - 1;
 			mp->pds_mda.mdi_slotvcnt = mdcmax;
-			mp_pr_warn("mpool %s, MDC0 activation, mdc alloc recovery: uniq %llu slotvcnt %d",
-				   mp->pds_name,
-				   (unsigned long long)cinfo->mmi_luniq,
+			mp_pr_warn("mpool %s, MDC0 alloc recovery: uniq %llu slotvcnt %d",
+				   mp->pds_name, (unsigned long long)cinfo->mmi_luniq,
 				   mp->pds_mda.mdi_slotvcnt);
 		} else {
 			/* mdc alloc cannot tolerate clean-up failures */
@@ -838,13 +817,10 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 				err = err2;
 
 			if (err)
-				mp_pr_err("mpool %s, MDC0 alloc recovery, clean-up failure %lu %u %u",
-					  err, mp->pds_name,
-					  (ulong)mdcmax, lcnt[mdcmax],
-					  slotvcnt);
+				mp_pr_err("mpool %s, MDC0 alloc recovery, cleanup failed %lu %u %u",
+					  err, mp->pds_name, (ulong)mdcmax, lcnt[mdcmax], slotvcnt);
 			else
-				mp_pr_warn("mpool %s, MDC0 alloc recovery",
-					   mp->pds_name);
+				mp_pr_warn("mpool %s, MDC0 alloc recovery", mp->pds_name);
 
 		}
 	}
@@ -1010,13 +986,11 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot, struct mpool_
 						   buf2, sizeof(buf2));
 
 				mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-					     "binary too old for metadata %s",
-					     buf1);
+					     "binary too old for metadata %s", buf1);
 
 				err = merr(EOPNOTSUPP);
-				mp_pr_err("mpool %s, MDC%u content version is %s while binary understands up to %s",
-					  err, mp->pds_name, cslot,
-					  buf1, buf2);
+				mp_pr_err("mpool %s, MDC%u version %s, binary version %s",
+					  err, mp->pds_name, cslot, buf1, buf2);
 				break;
 			}
 			continue;
@@ -1219,10 +1193,8 @@ errout:
 		snprintf(msgbuf, sizeof(msgbuf), msg, argv[0], argv[1]);
 
 		mp_pr_err("mpool %s, %s: cslot %u, ckpt %lx, %lx/%lu",
-			  err, mp->pds_name, msgbuf,
-			  cslot, (ulong)cinfo->mmi_lckpt,
-			  (ulong)cdr.u.obj.omd_objid,
-			  (ulong)cdr.u.obj.omd_gen);
+			  err, mp->pds_name, msgbuf, cslot, (ulong)cinfo->mmi_lckpt,
+			  (ulong)cdr.u.obj.omd_objid, (ulong)cdr.u.obj.omd_gen);
 	}
 
 	return err;
@@ -1376,9 +1348,7 @@ pmd_mpool_activate(
 {
 	merr_t  err;
 
-	mp_pr_debug("mdc01: %lu mdc02: %lu",
-		    0, (ulong)mdc01->eld_objid,
-		    (ulong)mdc02->eld_objid);
+	mp_pr_debug("mdc01: %lu mdc02: %lu", 0, (ulong)mdc01->eld_objid, (ulong)mdc02->eld_objid);
 
 	/* activation is intense; serialize it when have multiple mpools */
 	mutex_lock(&pmd_s_lock);
@@ -1421,8 +1391,7 @@ pmd_mpool_activate(
 	/* load user object layouts from all other mdc */
 	err = pmd_objs_load_parallel(mp, devrpt);
 	if (ev(err)) {
-		mp_pr_err("mpool %s, failed to load user MDCs",
-			  err, mp->pds_name);
+		mp_pr_err("mpool %s, failed to load user MDCs", err, mp->pds_name);
 		goto exit;
 	}
 
@@ -1434,7 +1403,7 @@ pmd_mpool_activate(
 	if (!create) {
 		err = pmd_write_meta_to_latest_version(mp, true, devrpt);
 		if (ev(err)) {
-			mp_pr_err("mpool %s, failed to compact MDCs (because of metadata conversion)",
+			mp_pr_err("mpool %s, failed to compact MDCs (metadata conversion)",
 				  err, mp->pds_name);
 			goto exit;
 		}
@@ -1472,8 +1441,7 @@ merr_t pmd_mdc_append(struct mpool_descriptor *mp, u8 cslot, struct omf_mdcrec_d
 
 	plen = omf_mdcrec_pack_htole(mp, cdr, cinfo->mmi_recbuf);
 	if (plen < 0) {
-		mp_pr_warn("mpool %s, MDC%u append failed",
-			   mp->pds_name, cslot);
+		mp_pr_warn("mpool %s, MDC%u append failed", mp->pds_name, cslot);
 		return plen;
 	}
 
@@ -1511,9 +1479,8 @@ pmd_log_all_mdc_cobjs(struct mpool_descriptor *mp, u8 cslot, u32 *compacted, u32
 			cdr.u.obj.omd_layout = layout;
 			err = pmd_mdc_append(mp, cslot, &cdr, 0);
 			if (err) {
-				mp_pr_err("mpool %s, MDC%u log committed object failed, objid 0x%lx",
-					  err, mp->pds_name, cslot,
-					  (ulong)layout->eld_objid);
+				mp_pr_err("mpool %s, MDC%u log committed obj failed, objid 0x%lx",
+					  err, mp->pds_name, cslot, (ulong)layout->eld_objid);
 				break;
 			}
 
@@ -1661,10 +1628,8 @@ static merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 
 		mp_pr_debug("mpool %s, MDC%u start: mlog1 gen %lu mlog2 gen %lu",
 			    err, mp->pds_name, cslot,
-			    (ulong)((struct pmd_layout *)
-				    cinfo->mmi_mdc->mdc_logh1)->eld_gen,
-			    (ulong)((struct pmd_layout *)
-				    cinfo->mmi_mdc->mdc_logh2)->eld_gen);
+			    (ulong)((struct pmd_layout *)cinfo->mmi_mdc->mdc_logh1)->eld_gen,
+			    (ulong)((struct pmd_layout *)cinfo->mmi_mdc->mdc_logh2)->eld_gen);
 
 		err = mp_mdc_cstart(cinfo->mmi_mdc);
 		if (ev(err))
@@ -1708,18 +1673,15 @@ static merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 			}
 
 			mp_pr_debug("mpool %s, MDC%u end: mlog1 gen %lu mlog2 gen %lu",
-				    err, mp->pds_name, cslot,
-				    (ulong)((struct pmd_layout *)
-					    cinfo->mmi_mdc->mdc_logh1)->eld_gen,
-				    (ulong)((struct pmd_layout *)
-					    cinfo->mmi_mdc->mdc_logh2)->eld_gen);
+				  err, mp->pds_name, cslot,
+				  (ulong)((struct pmd_layout *)cinfo->mmi_mdc->mdc_logh1)->eld_gen,
+				  (ulong)((struct pmd_layout *)cinfo->mmi_mdc->mdc_logh2)->eld_gen);
 			break;
 		}
 	}
 
 	if (err)
-		mp_pr_crit("mpool %s, MDC%u compaction failed",
-			   err, mp->pds_name, cslot);
+		mp_pr_crit("mpool %s, MDC%u compaction failed", err, mp->pds_name, cslot);
 
 	return err;
 }
@@ -1737,10 +1699,8 @@ static merr_t pmd_mdc_addrec(struct mpool_descriptor *mp, u8 cslot, struct omf_m
 	}
 
 	if (err)
-		mp_pr_rl("mpool %s, MDC%u append failed%s",
-			 err, mp->pds_name, cslot,
-			 (merr_errno(err) == EFBIG) ?
-			 " post compaction" : "");
+		mp_pr_rl("mpool %s, MDC%u append failed%s", err, mp->pds_name, cslot,
+			 (merr_errno(err) == EFBIG) ? " post compaction" : "");
 
 	return err;
 }
@@ -2055,7 +2015,7 @@ merr_t pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout)
 
 	if (!found) {
 		mp_pr_rl("mpool %s, objid 0x%lx, pmd_log_del failed",
-			  err, mp->pds_name, (ulong)objid);
+			 err, mp->pds_name, (ulong)objid);
 		return err;
 	}
 
@@ -2131,8 +2091,7 @@ static merr_t pmd_mdc0_meta_update(struct mpool_descriptor *mp, struct pmd_layou
 
 	err = 0;
 	mp_pr_debug("MDC0 compaction gen1 %lu gen2 %lu",
-		    err, (ulong)sb->osb_mdc01gen,
-		    (ulong)sb->osb_mdc02gen);
+		    err, (ulong)sb->osb_mdc01gen, (ulong)sb->osb_mdc02gen);
 
 	/*
 	 * sb_write_update() succeeds if at least SB0 is written. It is
@@ -2159,8 +2118,7 @@ merr_t pmd_obj_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, u64
 	     (layout->eld_state & PMD_LYT_REMOVED) ||
 	     (gen <= layout->eld_gen)) {
 		mp_pr_warn("mpool %s, object erase failed to start, objid 0x%lx state 0x%x gen %lu",
-			   mp->pds_name,
-			  (ulong)objid, layout->eld_state, (ulong)gen);
+			   mp->pds_name, (ulong)objid, layout->eld_state, (ulong)gen);
 
 		return merr(EINVAL);
 	}
@@ -2251,8 +2209,7 @@ merr_t pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter)
 	if (err) {
 		mutex_unlock(&pmd_s_lock);
 
-		mp_pr_err("mpool %s, allocating an MDC, inconsistent MDC0",
-			  err, mp->pds_name);
+		mp_pr_err("mpool %s, allocating an MDC, inconsistent MDC0", err, mp->pds_name);
 		return err;
 	}
 
@@ -2283,8 +2240,7 @@ merr_t pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter)
 		mutex_unlock(&pmd_s_lock);
 
 		mp_pr_warn("mpool %s, MDC%lu pack/unpack buf alloc failed %lu",
-			   mp->pds_name, (ulong)mdcslot,
-			   (ulong)OMF_MDCREC_PACKLEN_MAX);
+			   mp->pds_name, (ulong)mdcslot, (ulong)OMF_MDCREC_PACKLEN_MAX);
 		return merr(ENOMEM);
 	}
 	cinew->mmi_credit.ci_slot = mdcslot;
@@ -2440,17 +2396,14 @@ exit:
 	mutex_unlock(&pmd_s_lock);
 
 	mp_pr_debug("new mdc logid1 %llu logid2 %llu",
-		    0, (unsigned long long)logid1,
-		    (unsigned long long)logid2);
+		    0, (unsigned long long)logid1, (unsigned long long)logid2);
 
 	if (err) {
-		mp_pr_err("mpool %s, MDC%lu: %s",
-			  err, mp->pds_name, (ulong)mdcslot, msg);
+		mp_pr_err("mpool %s, MDC%lu: %s", err, mp->pds_name, (ulong)mdcslot, msg);
 
 	} else {
-		mp_pr_debug("mpool %s, delta slotvcnt from %u to %llu",
-			    0, mp->pds_name, mp->pds_mda.mdi_slotvcnt,
-			    (unsigned long long)mdcslot + 1);
+		mp_pr_debug("mpool %s, delta slotvcnt from %u to %llu", 0, mp->pds_name,
+			    mp->pds_mda.mdi_slotvcnt, (unsigned long long)mdcslot + 1);
 
 	}
 	return err;
@@ -2596,8 +2549,7 @@ static void pmd_layout_unprovision(struct mpool_descriptor *mp, struct pmd_layou
 	if (err) {
 		/* smap_free() should never fail */
 		mp_pr_err("releasing %s drive %s space for layout failed, objid 0x%lx",
-			  err, mp->pds_name, mp->pds_pdv[pdh].pdi_name,
-			  (ulong)layout->eld_objid);
+			  err, mp->pds_name, mp->pds_pdv[pdh].pdi_name, (ulong)layout->eld_objid);
 	}
 
 	/* Drop birth reference...
@@ -2866,9 +2818,8 @@ static merr_t pmd_realloc_idvalidate(struct mpool_descriptor *mp, u64 objid)
 	spin_unlock(&mp->pds_mda.mdi_slotvlock);
 
 	if (err) {
-		mp_pr_err("mpool %s, can't re-allocate an object, slot number %u is too big %u 0x%lx",
-			  err, mp->pds_name,
-			  cslot, mp->pds_mda.mdi_slotvcnt, (ulong)objid);
+		mp_pr_err("mpool %s, realloc failed, slot number %u is too big %u 0x%lx",
+			  err, mp->pds_name, cslot, mp->pds_mda.mdi_slotvcnt, (ulong)objid);
 	} else {
 		cinfo = &mp->pds_mda.mdi_slotv[cslot];
 		pmd_mdc_lock(&cinfo->mmi_uqlock, cslot);
@@ -2877,7 +2828,7 @@ static merr_t pmd_realloc_idvalidate(struct mpool_descriptor *mp, u64 objid)
 		pmd_mdc_unlock(&cinfo->mmi_uqlock);
 
 		if (err) {
-			mp_pr_err("mpool %s, can't re-allocate an object, its unique id %lu is too big %lu 0x%lx",
+			mp_pr_err("mpool %s, realloc failed, unique id %lu too big %lu 0x%lx",
 				  err, mp->pds_name, (ulong)uniq,
 				  (ulong)cinfo->mmi_luniq, (ulong)objid);
 		}
@@ -3044,7 +2995,7 @@ retry:
 	pmd_uc_unlock(cinfo);
 
 	if (err) {
-		mp_pr_err("mpool %s, %sallocated object 0x%lx should not be in the %scommitted tree",
+		mp_pr_err("mpool %s, %sallocated obj 0x%lx should not be in the %scommitted tree",
 			  err, mp->pds_name, realloc ? "re-" : "",
 			  (ulong)objid, realloc ? "" : "un");
 
@@ -3146,9 +3097,8 @@ static bool pmd_mdc_needed(struct mpool_descriptor *mp)
 	    pctg < mp->pds_params.mp_crtmdcpctgrbg) {
 		merr_t err = 0;
 
-		mp_pr_debug("NEED MDCn %u Total cap %u used %u, REC %u grbg %u, PCT used %u grbg %u, Thres %u-%u",
-			    err, mdccnt, (u32)cap, (u32)used,
-			    (u32)record, (u32)garbage, pct, pctg,
+		mp_pr_debug("MDCn %u cap %u used %u rec %u grbg %u pct used %u grbg %u Thres %u-%u",
+			    err, mdccnt, (u32)cap, (u32)used, (u32)record, (u32)garbage, pct, pctg,
 			    (u32)mp->pds_params.mp_crtmdcpctfull,
 			    (u32)mp->pds_params.mp_crtmdcpctgrbg);
 		return true;
@@ -3334,8 +3284,7 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 		num_mdc = mp->pds_mda.mdi_slotvcnt - 1;
 		cslot  = 1;
 		mp_pr_debug("MDCn cnt %u, cannot skip %u num_mdc %u",
-			    err, mp->pds_mda.mdi_slotvcnt - 1,
-			    (u32)nmtoc, num_mdc);
+			    err, mp->pds_mda.mdi_slotvcnt - 1, (u32)nmtoc, num_mdc);
 	} else {
 		num_mdc = mp->pds_mda.mdi_slotvcnt - (nbnoalloc + 2);
 		cslot  = (nmtoc + nbnoalloc) % (mp->pds_mda.mdi_slotvcnt - 1);
@@ -3562,8 +3511,7 @@ static void pmd_precompact(struct work_struct *work)
 		pmd_mdc_unlock(&cinfo->mmi_compactlock);
 
 		if (compact)
-			mp_pr_info("mpool %s, MDC%u %s",
-				   mp->pds_name, cslot, msgbuf);
+			mp_pr_info("mpool %s, MDC%u %s", mp->pds_name, cslot, msgbuf);
 	}
 
 	/* If running low on MDC space create new MDCs */
@@ -3709,8 +3657,7 @@ pmd_write_meta_to_latest_version(
 			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 				"metadata upgrade needed from version %s (%s) to %s (%s)",
 				buf1, omfu_mdcver_comment(&cinfo->mmi_mdcver),
-				buf2,
-				omfu_mdcver_comment(omfu_mdcver_cur()));
+				buf2, omfu_mdcver_comment(omfu_mdcver_cur()));
 
 			err = merr(EPERM);
 			mp_pr_err("mpool %s, MDC%u upgrade needed from version %s to %s",
@@ -3728,19 +3675,15 @@ pmd_write_meta_to_latest_version(
 		pmd_mdc_unlock(&cinfo->mmi_compactlock);
 
 		if (ev(err)) {
-			mpool_devrpt(devrpt, MPOOL_RC_MDC_COMPACT_ACTIVATE,
-				     -1, NULL);
+			mpool_devrpt(devrpt, MPOOL_RC_MDC_COMPACT_ACTIVATE, -1, NULL);
 			return err;
 		}
 	}
 
 	if (cinfo_converted != NULL)
-		mp_pr_info("mpool %s, converted MDC from version %s to %s",
-			   mp->pds_name,
-			   omfu_mdcver_to_str(&cinfo_converted->mmi_mdcver,
-					      buf1, sizeof(buf1)),
-			   omfu_mdcver_to_str(omfu_mdcver_cur(),
-					      buf2, sizeof(buf2)));
+		mp_pr_info("mpool %s, converted MDC from version %s to %s", mp->pds_name,
+			   omfu_mdcver_to_str(&cinfo_converted->mmi_mdcver, buf1, sizeof(buf1)),
+			   omfu_mdcver_to_str(omfu_mdcver_cur(), buf2, sizeof(buf2)));
 
 	return 0;
 }

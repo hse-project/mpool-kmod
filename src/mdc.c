@@ -194,9 +194,8 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 		 */
 		mp_pr_err(
 			"mpool %s, mdc open, bad mlog handle, mlog1 %p logid1 0x%lx errno %d gen1 %lu, mlog2 %p logid2 0x%lx errno %d gen2 %lu",
-			err, mpname, mdc->mdc_logh1, (ulong)logid1,
-			merr_errno(err1), (ulong)gen1, mdc->mdc_logh2,
-			(ulong)logid2, merr_errno(err2), (ulong)gen2);
+			err, mpname, mdc->mdc_logh1, (ulong)logid1, merr_errno(err1), (ulong)gen1,
+			mdc->mdc_logh2, (ulong)logid2, merr_errno(err2), (ulong)gen2);
 	} else {
 		/* active log is valid log with smallest gen */
 		if (err1 || (!err2 && gen2 < gen1)) {
@@ -204,10 +203,8 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 			if (!err1) {
 				err = mlog_empty(mp, mdc->mdc_logh1, &empty);
 				if (err)
-					mdc_logerr(mpname,
-						   "mlog1 empty check failed",
-						   mdc->mdc_logh1, logid1,
-						   gen1, gen2, err);
+					mdc_logerr(mpname, "mlog1 empty check failed",
+						   mdc->mdc_logh1, logid1, gen1, gen2, err);
 			}
 			if (!err && (err1 || !empty)) {
 				err = mlog_erase(mp, mdc->mdc_logh1, gen2 + 1);
@@ -215,15 +212,11 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 					err = mlog_open(mp, mdc->mdc_logh1,
 						mlflags, &gen1);
 					if (err)
-						mdc_logerr(mpname,
-						"mlog1 open failed",
-						mdc->mdc_logh1,
-						logid1, gen1, gen2, err);
+						mdc_logerr(mpname, "mlog1 open failed",
+							   mdc->mdc_logh1, logid1, gen1, gen2, err);
 				} else {
-					mdc_logerr(mpname,
-						"mlog1 erase failed",
-						mdc->mdc_logh1,
-						logid1, gen1, gen2, err);
+					mdc_logerr(mpname, "mlog1 erase failed", mdc->mdc_logh1,
+						   logid1, gen1, gen2, err);
 				}
 			}
 		} else {
@@ -231,10 +224,8 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 			if (!err2) {
 				err = mlog_empty(mp, mdc->mdc_logh2, &empty);
 				if (err)
-					mdc_logerr(mpname,
-						   "mlog2 empty check failed",
-						   mdc->mdc_logh2, logid2,
-						   gen1, gen2, err);
+					mdc_logerr(mpname, "mlog2 empty check failed",
+						   mdc->mdc_logh2, logid2, gen1, gen2, err);
 			}
 			if (!err && (err2 || gen2 == gen1 || !empty)) {
 				err = mlog_erase(mp, mdc->mdc_logh2, gen1 + 1);
@@ -242,14 +233,10 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 					err = mlog_open(mp, mdc->mdc_logh2,
 							mlflags, &gen2);
 					if (err)
-						mdc_logerr(mpname,
-						"mlog2 open failed",
-						mdc->mdc_logh2,
-						logid2, gen1, gen2, err);
+						mdc_logerr(mpname, "mlog2 open failed",
+							   mdc->mdc_logh2, logid2, gen1, gen2, err);
 				} else {
-					mdc_logerr(mpname,
-						   "mlog2 erase failed",
-						   mdc->mdc_logh2,
+					mdc_logerr(mpname, "mlog2 erase failed", mdc->mdc_logh2,
 						   logid2, gen1, gen2, err);
 				}
 			}
@@ -271,24 +258,18 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 						mdc_logerr(mpname,
 							   "adding cend to active mlog failed",
 							   mdc->mdc_alogh,
-							   mdc->mdc_alogh ==
-							   mdc->mdc_logh1 ?
-							   logid1 : logid2,
-							   gen1, gen2, err);
+							   mdc->mdc_alogh == mdc->mdc_logh1 ?
+							   logid1 : logid2, gen1, gen2, err);
 				} else {
-					mdc_logerr(mpname,
-						   "adding cstart to active mlog failed",
+					mdc_logerr(mpname, "adding cstart to active mlog failed",
 						   mdc->mdc_alogh,
-						   mdc->mdc_alogh ==
-						   mdc->mdc_logh1 ? logid1 :
-						   logid2, gen1, gen2, err);
+						   mdc->mdc_alogh == mdc->mdc_logh1 ?
+						   logid1 : logid2, gen1, gen2, err);
 				}
 
 			} else if (err) {
-				mdc_logerr(mpname,
-					   "active mlog empty check failed",
-					   mdc->mdc_alogh,
-					   mdc->mdc_alogh == mdc->mdc_logh1 ?
+				mdc_logerr(mpname, "active mlog empty check failed",
+					   mdc->mdc_alogh, mdc->mdc_alogh == mdc->mdc_logh1 ?
 					   logid1 : logid2, gen1, gen2, err);
 			}
 		}
@@ -523,8 +504,7 @@ uint64_t mp_mdc_append(struct mp_mdc *mdc, void *data, ssize_t len, bool sync)
 			       data, (u64)len, sync);
 	if (err)
 		mp_pr_rl("mpool %s, mdc %p append failed, mlog %p, len %lu sync %d",
-			  err, mdc->mdc_mpname, mdc,
-			  mdc->mdc_alogh, len, sync);
+			  err, mdc->mdc_mpname, mdc, mdc->mdc_alogh, len, sync);
 
 	mdc_release(mdc, rw);
 
