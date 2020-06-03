@@ -113,54 +113,6 @@ static merr_t pd_bio_discard(struct mpool_dev_info  *pd, u64 off, size_t len)
 }
 
 /**
- * pd_bio_wrt_zero() - write zeros to a zone-aligned region
- * @pd:
- * @zaddr:
- * @zonecnt:
- * @afp:
- */
-static merr_t pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt)
-{
-	struct block_device    *bdev;
-
-	size_t  zonelen;
-	size_t  sector;
-	size_t  nr_sects;
-	merr_t  err;
-	int     rc;
-
-	bdev = pd->pdi_parm.dpr_dev_private;
-	if (!bdev) {
-		err = merr(EINVAL);
-		mp_pr_err("bdev %s not registered", err, pd->pdi_name);
-		return err;
-	}
-
-	zonelen = (u64)pd->pdi_parm.dpr_zonepg << PAGE_SHIFT;
-	sector = (zaddr * zonelen) >> SECTOR_SHIFT;
-	nr_sects = (zonecnt * zonelen) >> SECTOR_SHIFT;
-
-	/*
-	 * Zero filling LBA range either using write-same if device supports,
-	 * or writing zeros as a fallback
-	 */
-#if HAVE_BLKDEV_ISSUE_ZEROOUT_FLAGS
-	rc = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO, 0);
-#elif HAVE_BLKDEV_ISSUE_ZEROOUT_DISCARD
-	rc = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO, true);
-#else
-	rc = blkdev_issue_zeroout(bdev, sector, nr_sects, GFP_NOIO);
-#endif
-
-	return rc ? merr(rc) : 0;
-}
-
-#define CAN_BE_DISCARDED(a, b) \
-	!(((a) & PD_CMD_DIF_ENABLED) && \
-	  ((a) & PD_CMD_SED_ENABLED) && \
-	  ((b) & PD_ERASE_READS_ERASED))
-
-/**
  * pd_zone_erase() - issue write-zeros or discard commands to erase PD
  * @pd
  * @zaddr:
@@ -168,10 +120,10 @@ static merr_t pd_bio_wrt_zero(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt)
  * @flag:
  * @afp:
  */
-merr_t pd_zone_erase(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt, enum pd_erase_flags flags)
+merr_t pd_zone_erase(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt, bool reads_erased)
 {
-	merr_t          err = 0;
-	u64             cmdopt;
+	merr_t err = 0;
+	u64    cmdopt;
 
 	/* validate args against zone param */
 	if (zaddr >= pd->pdi_parm.dpr_zonetot)
@@ -187,17 +139,14 @@ merr_t pd_zone_erase(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt, enum pd_
 		return 0;
 
 	/*
-	 * Will decide if we need to write zeros or issue discard commands
-	 * to the drive. If  PD_ERASE_FZERO flag is set, write zeros.
-	 * when both DIF and SED are enabled, read from a discared block
+	 * When both DIF and SED are enabled, read from a discared block
 	 * would fail, so we can't discard blocks if both DIF and SED are
 	 * enabled AND we need to read blocks after erase.
 	 */
 	cmdopt = pd->pdi_cmdopt;
-	if (flags & PD_ERASE_FZERO) {
-		err = pd_bio_wrt_zero(pd, zaddr, zonecnt);
-	} else if ((cmdopt & PD_CMD_DISCARD) &&
-		   CAN_BE_DISCARDED(cmdopt, flags)) {
+	if ((cmdopt & PD_CMD_DISCARD) &&
+	    !(reads_erased && (cmdopt & PD_CMD_DIF_ENABLED) &&
+	      (cmdopt & PD_CMD_SED_ENABLED))) {
 		size_t zlen;
 
 		zlen = pd->pdi_parm.dpr_zonepg << PAGE_SHIFT;

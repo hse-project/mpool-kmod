@@ -206,19 +206,11 @@ mpool_mdc0_alloc(
 	u64                     zcnt = 0;
 	u64                     pdh = 0;
 	u64                     zonelen = 0;
-	u64                     fzero_flag;
 	struct mpool_dev_info  *pd = NULL;
 	struct media_class     *mc;
 	bool                    alloc = false;
 
 	sbutil_mdc0_clear(sb);
-
-	/*
-	 * PD_ERASE_FZERO: fill zeros
-	 * PD_ERASE_READS_ERASED: need to read from the erased block after
-	 *                        erase is finished
-	 */
-	fzero_flag = PD_ERASE_READS_ERASED;
 
 	for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
 		struct mpool_uuid    uuid;
@@ -259,7 +251,7 @@ mpool_mdc0_alloc(
 		/*
 		 * mdc0 log1/2 alloced on first 2 * zcnt zone's
 		 */
-		err = pd_zone_erase(pd, cnt, zcnt * 2, fzero_flag);
+		err = pd_zone_erase(pd, cnt, zcnt * 2, true);
 		if (err) {
 			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "erase MDC0 failed on %s %u %lu",
 				     pd->pdi_name, cnt, (ulong)zcnt);

@@ -1877,17 +1877,12 @@ static void pmd_obj_erase_cb(struct work_struct *work)
 	struct pmd_obj_erase_work  *oef;
 	struct mpool_descriptor    *mp;
 	struct pmd_layout          *layout;
-	enum obj_type_omf           otype;
 
 	oef = container_of(work, struct pmd_obj_erase_work, oef_wqstruct);
 	mp = oef->oef_mp;
 	layout = oef->oef_layout;
 
-	otype = pmd_objid_type(layout->eld_objid);
-	if (otype == OMF_OBJ_MLOG)
-		pmd_layout_erase(mp, layout, PD_ERASE_READS_ERASED);
-	else if (otype == OMF_OBJ_MBLOCK)
-		pmd_layout_erase(mp, layout, 0);
+	pmd_layout_erase(mp, layout);
 
 	if (oef->oef_cache)
 		kmem_cache_free(oef->oef_cache, oef);
@@ -2299,14 +2294,14 @@ merr_t pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter)
 	 * not needed to make atomic.
 	 */
 	pmd_obj_wrlock(layout1);
-	err = pmd_layout_erase(mp, layout1, PD_ERASE_READS_ERASED);
+	err = pmd_layout_erase(mp, layout1);
 	pmd_obj_wrunlock(layout1);
 
 	if (err) {
 		msg = "erase of first mlog failed";
 	} else {
 		pmd_obj_wrlock(layout2);
-		err = pmd_layout_erase(mp, layout2, PD_ERASE_READS_ERASED);
+		err = pmd_layout_erase(mp, layout2);
 		pmd_obj_wrunlock(layout2);
 
 		if (err)
@@ -2674,7 +2669,7 @@ pmd_layout_rw(
 	return err;
 }
 
-merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, int flags)
+merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	struct mpool_dev_info  *pd;
 	merr_t                  err;
@@ -2687,7 +2682,8 @@ merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, 
 		return merr(EIO);
 
 	err = pd_zone_erase(pd, layout->eld_ld.ol_zaddr,
-			    layout->eld_ld.ol_zcnt, flags);
+			    layout->eld_ld.ol_zcnt,
+			    pmd_objid_type(layout->eld_objid) == OMF_OBJ_MLOG);
 	if (ev(err))
 		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
 

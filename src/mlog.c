@@ -207,7 +207,7 @@ mlog_alloc_cmn(
 	 * not needed to make atomic
 	 */
 	pmd_obj_wrlock(layout);
-	err = pmd_layout_erase(mp, layout, PD_ERASE_READS_ERASED);
+	err = pmd_layout_erase(mp, layout);
 	if (!ev(err))
 		mlog_getprops_cmn(mp, layout, prop);
 	pmd_obj_wrunlock(layout);
@@ -2124,7 +2124,7 @@ merr_t mlog_erase(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 
 		return err;
 	}
 
-	err = pmd_layout_erase(mp, layout, PD_ERASE_READS_ERASED);
+	err = pmd_layout_erase(mp, layout);
 	if (err) {
 		/*
 		 * Log the failure as a debugging message, but ignore the

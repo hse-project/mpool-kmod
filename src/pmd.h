@@ -874,7 +874,7 @@ pmd_layout_rw(
 	int                         flags,
 	u8                          rw);
 
-merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, int flags);
+merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 u64 pmd_layout_cap_get(struct mpool_descriptor *mp, struct pmd_layout *layout);
 

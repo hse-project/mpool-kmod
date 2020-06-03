@@ -10,16 +10,6 @@
 
 struct mpool_dev_info;
 
-/**
- * pd_erase_flags
- * PD_ERASE_FZERO:        force to write zeros to PD
- * PD_ERASE_READS_ERASED: readable after erase
- */
-enum pd_erase_flags {
-	PD_ERASE_FZERO          = 0x1,
-	PD_ERASE_READS_ERASED   = 0x2,
-};
-
 /*
  * Common defs
  */
@@ -76,11 +66,11 @@ merr_t pd_dev_close(struct pd_dev_parm *dparm);
  * @pd:
  * @zaddr:
  * @zonecnt:
- * @flags: OR of pd_erase_flags bits
+ * @reads_erased: whether the data can be read post DISCARD
  *
  * Return:
  */
-merr_t pd_zone_erase(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt, enum pd_erase_flags flag);
+merr_t pd_zone_erase(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt, bool reads_erased);
 
 /*
  * pd API functions - device dependent operations
