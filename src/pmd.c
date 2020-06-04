@@ -164,8 +164,7 @@ static struct pmd_layout* pmd_layout_insert(struct rb_root *root, struct pmd_lay
 
 static inline void pmd_co_rlock(struct pmd_mdc_info *cinfo, u8 slot)
 {
-	down_read_nested(&cinfo->mmi_co_lock,
-			 slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
+	down_read_nested(&cinfo->mmi_co_lock, slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
 }
 
 static inline void pmd_co_runlock(struct pmd_mdc_info *cinfo)
@@ -175,8 +174,7 @@ static inline void pmd_co_runlock(struct pmd_mdc_info *cinfo)
 
 static inline void pmd_co_wlock(struct pmd_mdc_info *cinfo, u8 slot)
 {
-	down_write_nested(&cinfo->mmi_co_lock,
-			  slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
+	down_write_nested(&cinfo->mmi_co_lock, slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
 }
 
 static inline void pmd_co_wunlock(struct pmd_mdc_info *cinfo)
@@ -211,8 +209,7 @@ pmd_co_remove(struct pmd_mdc_info *cinfo, struct pmd_layout *layout)
  */
 static inline void pmd_uc_lock(struct pmd_mdc_info *cinfo, u8 slot)
 {
-	mutex_lock_nested(&cinfo->mmi_uc_lock,
-			  slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
+	mutex_lock_nested(&cinfo->mmi_uc_lock, slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
 }
 
 static inline void pmd_uc_unlock(struct pmd_mdc_info *cinfo)
@@ -362,8 +359,7 @@ pmd_mdc0_init(struct mpool_descriptor *mp, struct pmd_layout *mdc01, struct pmd_
 	pmd_co_insert(cinfo, mdc01);
 	pmd_co_insert(cinfo, mdc02);
 
-	err = mp_mdc_open(mp, mdc01->eld_objid, mdc02->eld_objid,
-			  MDC_OF_SKIP_SER, &cinfo->mmi_mdc);
+	err = mp_mdc_open(mp, mdc01->eld_objid, mdc02->eld_objid, MDC_OF_SKIP_SER, &cinfo->mmi_mdc);
 	if (err) {
 		mp_pr_err("mpool %s, MDC0 open failed", err, mp->pds_name);
 
@@ -400,6 +396,7 @@ pmd_cmp_drv_mdc0(
 	struct mpool_dev_info *pd;
 	struct mc_parms        mcp_pd;
 	struct mc_parms        mcp_mdc0list;
+	const char            *msg __maybe_unused;
 
 	pd = &mp->pds_pdv[pdh];
 
@@ -410,20 +407,17 @@ pmd_cmp_drv_mdc0(
 		return 0;
 
 	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
-		mp_pr_warn("mpool %s, UNAVAIL mdc0 drive parms don't match those in drive list record for %s, mclassp %d %d zonepg %u %u sectorsz %u %u devtype %u %u features %lu %lu",
-			   mp->pds_name, pd->pdi_name, mcp_pd.mcp_classp, mcp_mdc0list.mcp_classp,
-			   mcp_pd.mcp_zonepg, mcp_mdc0list.mcp_zonepg, mcp_pd.mcp_sectorsz,
-			   mcp_mdc0list.mcp_sectorsz, mcp_pd.mcp_devtype, mcp_mdc0list.mcp_devtype,
-			   (ulong)mcp_pd.mcp_features, (ulong)mcp_mdc0list.mcp_features);
+		msg = "UNAVAIL mdc0 drive parms don't match those in drive list record";
 	else {
 		mpool_devrpt(devrpt, MPOOL_RC_PARM, pdh, NULL);
-
-		mp_pr_warn("mpool %s, mismatch between MDC0 drive list record and drive parms for %s, mclassp %d %d zonepg %u %u sectorsz %u %u devtype %u %u features %lu %lu",
-			   mp->pds_name, pd->pdi_name, mcp_pd.mcp_classp, mcp_mdc0list.mcp_classp,
-			   mcp_pd.mcp_zonepg, mcp_mdc0list.mcp_zonepg, mcp_pd.mcp_sectorsz,
-			   mcp_mdc0list.mcp_sectorsz, mcp_pd.mcp_devtype, mcp_mdc0list.mcp_devtype,
-			   (ulong)mcp_pd.mcp_features, (ulong)mcp_mdc0list.mcp_features);
+		msg = "mismatch between MDC0 drive list record and drive parms";
 	}
+
+	mp_pr_warn("mpool %s, %s for %s, mclassp %d %d zonepg %u %u sectorsz %u %u devtype %u %u features %lu %lu",
+		   mp->pds_name, msg, pd->pdi_name, mcp_pd.mcp_classp, mcp_mdc0list.mcp_classp,
+		   mcp_pd.mcp_zonepg, mcp_mdc0list.mcp_zonepg, mcp_pd.mcp_sectorsz,
+		   mcp_mdc0list.mcp_sectorsz, mcp_pd.mcp_devtype, mcp_mdc0list.mcp_devtype,
+		   (ulong)mcp_pd.mcp_features, (ulong)mcp_mdc0list.mcp_features);
 
 	return merr(EINVAL);
 }
@@ -470,8 +464,7 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 	}
 
 	while (true) {
-		err = mp_mdc_read(cinfo->mmi_mdc, cinfo->mmi_recbuf, buflen,
-				&rlen);
+		err = mp_mdc_read(cinfo->mmi_mdc, cinfo->mmi_recbuf, buflen, &rlen);
 		if (err) {
 			mp_pr_err("mpool %s, MDC0 read next failed %lu",
 				  err, mp->pds_name, (ulong)rlen);
@@ -488,22 +481,23 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 		if (omf_mdcrec_isobj_le(cinfo->mmi_recbuf))
 			continue;
 
-		err = omf_mdcrec_unpack_letoh(&(cinfo->mmi_mdcver), mp, &cdr,
-			cinfo->mmi_recbuf);
+		err = omf_mdcrec_unpack_letoh(&(cinfo->mmi_mdcver), mp, &cdr, cinfo->mmi_recbuf);
 		if (err) {
 			mp_pr_err("mpool %s, MDC0 property unpack failed", err, mp->pds_name);
 			break;
 		}
 
 		if (cdr.omd_rtype == OMF_MDR_MCCONFIG) {
-			struct omf_devparm_descriptor    *src;
+			struct omf_devparm_descriptor *src;
 
 			src = &cdr.u.dev.omd_parm;
 			assert(src->odp_mclassp < MP_MED_NUMBER);
 
 			memcpy(&netdev[src->odp_mclassp], src, sizeof(*src));
-		} else if (cdr.omd_rtype == OMF_MDR_MCSPARE) {
-			mp_pr_debug("Found spare record for mclassp %u", 0, cdr.u.mcs.omd_mclassp);
+			continue;
+		}
+
+		if (cdr.omd_rtype == OMF_MDR_MCSPARE) {
 			mclassp = cdr.u.mcs.omd_mclassp;
 			if (mclass_isvalid(mclassp)) {
 				spzone[mclassp] = cdr.u.mcs.omd_spzone;
@@ -515,17 +509,17 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 					  err, mp->pds_name, mclassp);
 				break;
 			}
-		} else if (cdr.omd_rtype == OMF_MDR_VERSION) {
+			continue;
+		}
+
+		if (cdr.omd_rtype == OMF_MDR_VERSION) {
 			cinfo->mmi_mdcver = cdr.u.omd_version;
-			if (omfu_mdcver_cmp(&cinfo->mmi_mdcver, ">",
-					    omfu_mdcver_cur())) {
+			if (omfu_mdcver_cmp(&cinfo->mmi_mdcver, ">", omfu_mdcver_cur())) {
 				char   buf1[MAX_MDCVERSTR];
 				char   buf2[MAX_MDCVERSTR];
 
-				omfu_mdcver_to_str(&cinfo->mmi_mdcver,
-						   buf1, sizeof(buf1));
-				omfu_mdcver_to_str(omfu_mdcver_cur(),
-						   buf2, sizeof(buf2));
+				omfu_mdcver_to_str(&cinfo->mmi_mdcver, buf1, sizeof(buf1));
+				omfu_mdcver_to_str(omfu_mdcver_cur(), buf2, sizeof(buf2));
 
 				mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 					     "binary too old for metadata %s", buf1);
@@ -535,10 +529,11 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 					  err, mp->pds_name, buf1, buf2);
 				break;
 			}
-
-		} else if (cdr.omd_rtype == OMF_MDR_MPCONFIG) {
-			mp->pds_cfg = cdr.u.omd_cfg;
+			continue;
 		}
+
+		if (cdr.omd_rtype == OMF_MDR_MPCONFIG)
+			mp->pds_cfg = cdr.u.omd_cfg;
 	}
 
 	if (ev(err))
@@ -559,8 +554,7 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 
 		j = mp->pds_pdvcnt;
 		while (j--) {
-			if (mpool_uuid_compare(&mp->pds_pdv[j].pdi_devid,
-					       &omd->odp_devid) == 0)
+			if (mpool_uuid_compare(&mp->pds_pdv[j].pdi_devid, &omd->odp_devid) == 0)
 				break;
 		}
 
@@ -618,8 +612,7 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 	if (!err) {
 		for (mclassp = 0; mclassp < MP_MED_NUMBER; mclassp++) {
 			if (spzone[mclassp] >= 0) {
-				err = mc_set_spzone(mp, mclassp,
-						    spzone[mclassp]);
+				err = mc_set_spzone(mp, mclassp, spzone[mclassp]);
 				/*
 				 * Should never happen, it should exist a class
 				 * with perf. level mclassp with a least 1 PD.
@@ -643,8 +636,7 @@ static merr_t pmd_smap_insert(struct mpool_descriptor *mp, struct pmd_layout *la
 
 	pdh = layout->eld_ld.ol_pdh;
 
-	err = smap_insert(mp, pdh, layout->eld_ld.ol_zaddr,
-			  layout->eld_ld.ol_zcnt);
+	err = smap_insert(mp, pdh, layout->eld_ld.ol_zaddr, layout->eld_ld.ol_zcnt);
 	if (err) {
 		/* insert should never fail */
 		mp_pr_err("mpool %s, allocating drive %s space for layout failed, objid 0x%lx",
@@ -704,8 +696,7 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 			lcnt[mdcn] = lcnt[mdcn] + 1;
 			mdcmax = max(mdcmax, mdcn);
 		}
-		if (mdcn >= MDC_SLOTS ||
-		    lcnt[mdcn] > 2 ||
+		if (mdcn >= MDC_SLOTS || lcnt[mdcn] > 2 ||
 		    objid_type(layout->eld_objid) != OMF_OBJ_MLOG ||
 		    objid_slot(layout->eld_objid)) {
 			err = merr(EINVAL);
@@ -918,8 +909,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot, struct mpool_
 			goto errout;
 		}
 
-		err = mp_mdc_open(mp, logid1, logid2, MDC_OF_SKIP_SER,
-				  &cinfo->mmi_mdc);
+		err = mp_mdc_open(mp, logid1, logid2, MDC_OF_SKIP_SER, &cinfo->mmi_mdc);
 		if (ev(err)) {
 			msg = "mdc open failed";
 			goto errout;
@@ -959,16 +949,13 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot, struct mpool_
 			omf_mdcver_unpack_letoh(&cdr, recbuf);
 			cinfo->mmi_mdcver = cdr.u.omd_version;
 
-			if (omfu_mdcver_cmp(&cinfo->mmi_mdcver, ">",
-					    omfu_mdcver_cur())) {
+			if (omfu_mdcver_cmp(&cinfo->mmi_mdcver, ">", omfu_mdcver_cur())) {
 
 				char	buf1[MAX_MDCVERSTR];
 				char	buf2[MAX_MDCVERSTR];
 
-				omfu_mdcver_to_str(&cinfo->mmi_mdcver,
-						   buf1, sizeof(buf1));
-				omfu_mdcver_to_str(omfu_mdcver_cur(),
-						   buf2, sizeof(buf2));
+				omfu_mdcver_to_str(&cinfo->mmi_mdcver, buf1, sizeof(buf1));
+				omfu_mdcver_to_str(omfu_mdcver_cur(), buf2, sizeof(buf2));
 
 				mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 					     "binary too old for metadata %s", buf1);
@@ -987,8 +974,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot, struct mpool_
 		if (!cslot && !omf_mdcrec_isobj_le(recbuf))
 			continue;
 
-		err = omf_mdcrec_unpack_letoh(&cinfo->mmi_mdcver, mp, &cdr,
-					      recbuf);
+		err = omf_mdcrec_unpack_letoh(&cinfo->mmi_mdcver, mp, &cdr, recbuf);
 		if (ev(err)) {
 			msg = "mlog record unpack failed";
 			break;
@@ -1044,8 +1030,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot, struct mpool_
 			 * mpool metadata upgrade on an empty mpool.
 			 */
 			if ((objid_uniq(objid) || objid_uniq(cinfo->mmi_lckpt))
-				&& (objid_uniq(objid) <=
-				objid_uniq(cinfo->mmi_lckpt))) {
+				&& (objid_uniq(objid) <= objid_uniq(cinfo->mmi_lckpt))) {
 				msg = "OIDCKPT cdr ckpt %lu <= cinfo ckpt %lu";
 				argv[0] = objid_uniq(objid);
 				argv[1] = objid_uniq(cinfo->mmi_lckpt);
@@ -1139,8 +1124,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot, struct mpool_
 		/* For mdc0 track last logical mdc created.
 		 */
 		if (!cslot)
-			mdcmax = max(mdcmax,
-				     (objid_uniq(layout->eld_objid) >> 1));
+			mdcmax = max(mdcmax, (objid_uniq(layout->eld_objid) >> 1));
 	}
 
 	if (ev(err))
@@ -1167,8 +1151,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot, struct mpool_
 		 * will be checkpointed; supports realloc of
 		 * uncommitted objects after a crash
 		 */
-		cinfo->mmi_luniq = objid_uniq(cinfo->mmi_lckpt) +
-			OBJID_UNIQ_DELTA - 1;
+		cinfo->mmi_luniq = objid_uniq(cinfo->mmi_lckpt) + OBJID_UNIQ_DELTA - 1;
 	}
 
 errout:
@@ -1300,8 +1283,7 @@ static merr_t pmd_objs_load_parallel(struct mpool_descriptor *mp, struct mpool_d
 		 * it's not available on older kernels.
 		 */
 		cpu = (cpu + inc) % nr_cpumask_bits;
-		cpu = cpumask_next_wrap(
-			cpu, cpu_online_mask, nr_cpumask_bits, false);
+		cpu = cpumask_next_wrap(cpu, cpu_online_mask, nr_cpumask_bits, false);
 		queue_work_on(cpu, mp->pds_workq, &olwv[i].olw_work);
 	}
 
@@ -1513,7 +1495,7 @@ static merr_t pmd_log_mdc0_cobjs(struct mpool_descriptor *mp)
 		mc = &mp->pds_mc[i];
 		if (mc->mc_pdmc >= 0) {
 			err = pmd_prop_mcspare(mp, mc->mc_parms.mcp_classp,
-				mc->mc_sparms.mcsp_spzone, true);
+					       mc->mc_sparms.mcsp_spzone, true);
 			if (ev(err))
 				return err;
 		}
@@ -1547,9 +1529,8 @@ static merr_t pmd_log_non_mdc0_cobjs(struct mpool_descriptor *mp, u8 cslot)
 	cdr.omd_rtype = OMF_MDR_OIDCKPT;
 	cdr.u.obj.omd_objid = cinfo->mmi_lckpt;
 	err = pmd_mdc_append(mp, cslot, &cdr, 0);
-	ev(err);
 
-	return err;
+	return ev(err);
 }
 
 /**
@@ -1605,8 +1586,7 @@ static merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 		u32 total = 0;
 
 		if (err) {
-			err = mp_mdc_open(mp, logid1, logid2,
-					MDC_OF_SKIP_SER, &cinfo->mmi_mdc);
+			err = mp_mdc_open(mp, logid1, logid2, MDC_OF_SKIP_SER, &cinfo->mmi_mdc);
 			if (ev(err))
 				continue;
 		}
@@ -1774,8 +1754,7 @@ pmd_obj_realloc(
 		return merr(EINVAL);
 	}
 
-	return pmd_obj_alloc_cmn(mp, objid, objid_type(objid),
-				 ocap, mclassp, 1, true, layoutp);
+	return pmd_obj_alloc_cmn(mp, objid, objid_type(objid), ocap, mclassp, 1, true, layoutp);
 }
 
 merr_t pmd_obj_commit(struct mpool_descriptor *mp, struct pmd_layout *layout)
@@ -2095,8 +2074,7 @@ merr_t pmd_obj_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, u64
 
 	if ((pmd_objid_type(objid) != OMF_OBJ_MLOG) ||
 	     (!(layout->eld_state & PMD_LYT_COMMITTED)) ||
-	     (layout->eld_state & PMD_LYT_REMOVED) ||
-	     (gen <= layout->eld_gen)) {
+	     (layout->eld_state & PMD_LYT_REMOVED) || (gen <= layout->eld_gen)) {
 		mp_pr_warn("mpool %s, object erase failed to start, objid 0x%lx state 0x%x gen %lu",
 			   mp->pds_name, (ulong)objid, layout->eld_state, (ulong)gen);
 
@@ -2666,8 +2644,7 @@ merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout)
 	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
 		return merr(EIO);
 
-	err = pd_zone_erase(pd, layout->eld_ld.ol_zaddr,
-			    layout->eld_ld.ol_zcnt,
+	err = pd_zone_erase(pd, layout->eld_ld.ol_zaddr, layout->eld_ld.ol_zcnt,
 			    pmd_objid_type(layout->eld_objid) == OMF_OBJ_MLOG);
 	if (ev(err))
 		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
@@ -3035,8 +3012,7 @@ static bool pmd_mdc_needed(struct mpool_descriptor *mp)
 		cinfo = &mp->pds_mda.mdi_slotv[cslot];
 		pco_cnt = &(cinfo->mmi_pco_cnt);
 
-		tcap  = atomic64_read(&pco_cnt->pcc_cap);
-
+		tcap = atomic64_read(&pco_cnt->pcc_cap);
 		if (tcap == 0) {
 			/* MDC closed for now and will not be considered
 			 * in making a decision to create new MDC.
@@ -3049,17 +3025,15 @@ static bool pmd_mdc_needed(struct mpool_descriptor *mp)
 		mdccnt++;
 
 		used += atomic64_read(&pco_cnt->pcc_len);
-		rec  = atomic_read(&pco_cnt->pcc_cr) +
-			atomic_read(&pco_cnt->pcc_up) +
-			atomic_read(&pco_cnt->pcc_del) +
-			atomic_read(&pco_cnt->pcc_er);
+		rec = atomic_read(&pco_cnt->pcc_cr) + atomic_read(&pco_cnt->pcc_up) +
+			atomic_read(&pco_cnt->pcc_del) + atomic_read(&pco_cnt->pcc_er);
 
 		cobj = atomic_read(&pco_cnt->pcc_cobj);
 
 		if (rec > cobj)
 			garbage += (rec - cobj);
 
-		record  += rec;
+		record += rec;
 	}
 
 	if (mdccnt == 0) {
@@ -3068,14 +3042,13 @@ static bool pmd_mdc_needed(struct mpool_descriptor *mp)
 	}
 
 	/* percentage capacity used across all MDCs */
-	pct  = (used  * 100)/cap;
+	pct  = (used  * 100) / cap;
 
 	/* percentage garbage available across all MDCs */
 	if (garbage)
-		pctg = (garbage * 100)/record;
+		pctg = (garbage * 100) / record;
 
-	if (pct > mp->pds_params.mp_crtmdcpctfull &&
-	    pctg < mp->pds_params.mp_crtmdcpctgrbg) {
+	if (pct > mp->pds_params.mp_crtmdcpctfull && pctg < mp->pds_params.mp_crtmdcpctgrbg) {
 		merr_t err = 0;
 
 		mp_pr_debug("MDCn %u cap %u used %u rec %u grbg %u pct used %u grbg %u Thres %u-%u",
@@ -3178,8 +3151,7 @@ static void pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slot
 				 * the available credit and move to the next
 				 * mdc slot.
 				 */
-				cs->csm[csmidx].m_credit +=
-					cinfo->mmi_credit.ci_credit;
+				cs->csm[csmidx].m_credit += cinfo->mmi_credit.ci_credit;
 				neededcredit -= cinfo->mmi_credit.ci_credit;
 				totalcredit  += cinfo->mmi_credit.ci_credit;
 				cinfo->mmi_credit.ci_credit = 0;
@@ -3201,8 +3173,7 @@ static void pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slot
 			csmidx = cs->cs_idx;
 			if (cs->csm[csmidx].m_credit) {
 				cs->csm[csmidx].m_credit--;
-				mp->pds_mda.mdi_sel.mds_tbl[tidx] =
-							cs->csm[csmidx].m_slot;
+				mp->pds_mda.mdi_sel.mds_tbl[tidx] = cs->csm[csmidx].m_slot;
 				totalcredit--;
 
 				if (cs->csm[csmidx].m_credit == 0)
@@ -3268,7 +3239,7 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 			    err, mp->pds_mda.mdi_slotvcnt - 1, (u32)nmtoc, num_mdc);
 	} else {
 		num_mdc = mp->pds_mda.mdi_slotvcnt - (nbnoalloc + 2);
-		cslot  = (nmtoc + nbnoalloc) % (mp->pds_mda.mdi_slotvcnt - 1);
+		cslot = (nmtoc + nbnoalloc) % (mp->pds_mda.mdi_slotvcnt - 1);
 	}
 
 
@@ -3295,8 +3266,7 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 	}
 
 	/* Sort the array with decreasing order of space */
-	sort((void *)sarray, sidx,
-			 sizeof(sarray[0]), pmd_compare_free_space, NULL);
+	sort((void *)sarray, sidx, sizeof(sarray[0]), pmd_compare_free_space, NULL);
 	num_mdc = sidx;
 
 	/* Calculate total free space across the chosen MDC set */
@@ -3311,8 +3281,7 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 	 */
 	for (sidx = 0, credit = 0; sidx < num_mdc; sidx++) {
 		cinfo = &mp->pds_mda.mdi_slotv[slotnum[sidx]];
-		cinfo->mmi_credit.ci_credit = (MDC_TBL_SZ *
-					cinfo->mmi_credit.ci_free) / free;
+		cinfo->mmi_credit.ci_credit = (MDC_TBL_SZ * cinfo->mmi_credit.ci_free) / free;
 		credit += cinfo->mmi_credit.ci_credit;
 	}
 	assert(credit <= MDC_TBL_SZ);
@@ -3357,11 +3326,9 @@ static void pmd_mdc_alloc_set(struct mpool_descriptor *mp)
 	 * even multiple of MDCs in that case create any remaining
 	 * MDCs to get an even multiple.
 	 */
-	mdc_cnt =  MPOOL_MDC_SET_SZ -
-			((mp->pds_mda.mdi_slotvcnt - 1) % MPOOL_MDC_SET_SZ);
+	mdc_cnt =  MPOOL_MDC_SET_SZ - ((mp->pds_mda.mdi_slotvcnt - 1) % MPOOL_MDC_SET_SZ);
 
-	mdc_cnt = min(mdc_cnt,
-			(u8)(MDC_SLOTS - (mp->pds_mda.mdi_slotvcnt)));
+	mdc_cnt = min(mdc_cnt, (u8)(MDC_SLOTS - (mp->pds_mda.mdi_slotvcnt)));
 
 	for (sidx = 1; sidx <= mdc_cnt; sidx++) {
 		err = pmd_mdc_alloc(mp, mp->pds_params.mp_mdcncap, 0);
@@ -3438,8 +3405,7 @@ static bool pmd_need_compact(struct mpool_descriptor *mp, u8 cslot, char *msgbuf
 	if (msgbuf)
 		snprintf(msgbuf, msgsz,
 			 "bytes used %lu, total %lu, pct %u, records %lu, objects %lu, garbage %u",
-			 (ulong)len, (ulong)cap, pct, (ulong)rec,
-			 (ulong)cobj, garbage);
+			 (ulong)len, (ulong)cap, pct, (ulong)rec, (ulong)cobj, garbage);
 
 	return true;
 }
@@ -3503,8 +3469,7 @@ static void pmd_precompact(struct work_struct *work)
 
 	delay = clamp_t(uint, mp->pds_params.mp_pcoperiod, 1, 3600);
 
-	queue_delayed_work(mp->pds_workq, &pco->pco_dwork,
-			   msecs_to_jiffies(delay * 1000));
+	queue_delayed_work(mp->pds_workq, &pco->pco_dwork, msecs_to_jiffies(delay * 1000));
 }
 
 void pmd_precompact_start(struct mpool_descriptor *mp)
