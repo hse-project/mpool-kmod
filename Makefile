@@ -32,19 +32,23 @@ Configuration Variables:
     KDIR         -- Location of pre-built Linux kernel source tree
 
   Defaults (not all are customizable):
-    BUILD_DIR     ${BUILD_DIR}
-    BUILD_PKG     ${BUILD_PKG}
-    BUILD_NUMBER  ${BUILD_NUMBER}
-    BUILD_TYPE    ${BUILD_TYPE}
-    KCFLAGS       ${KCFLAGS}
-    KDIR          ${KDIR}
-    KREL          ${KREL}
-    KARCH         ${KARCH}
-    MPOOL_TAG     ${MPOOL_TAG}
-
-    MPOOL_VERSION_MAJOR  ${MPOOL_VERSION_MAJOR}
-    MPOOL_VERSION_MINOR  ${MPOOL_VERSION_MINOR}
-    MPOOL_VERSION_PATCH  ${MPOOL_VERSION_PATCH}
+    BUILD_DIR          $(BUILD_DIR)
+    BUILD_NODE         $(BUILD_NODE)
+    BUILD_NUMBER       $(BUILD_NUMBER)
+    BUILD_TYPE         $(BUILD_TYPE)
+    BUILD_STYPE        $(BUILD_STYPE)
+    BUILD_PKG_ARCH     ${BUILD_PKG_ARCH}
+    BUILD_PKG_DIR      ${BUILD_PKG_DIR}
+    BUILD_PKG_DIST     ${BUILD_PKG_DIST}
+    BUILD_PKG_REL      ${BUILD_PKG_REL}
+    BUILD_PKG_TAG      ${BUILD_PKG_TAG}
+    BUILD_PKG_TYPE     ${BUILD_PKG_TYPE}
+    BUILD_PKG_VERSION  ${BUILD_PKG_VERSION}
+    BUILD_PKG_VQUAL    ${BUILD_PKG_VQUAL}
+    KCFLAGS            ${KCFLAGS}
+    KDIR               ${KDIR}
+    KREL               ${KREL}
+    KARCH              ${KARCH}
 
 Examples:
 
@@ -79,16 +83,37 @@ endef
 .DELETE_ON_ERROR:
 .NOTPARALLEL:
 
-# Edit these lines when we cut a release branch.
-MPOOL_VERSION_MAJOR := 1
-MPOOL_VERSION_MINOR := 8
-MPOOL_VERSION_PATCH := 0
-MPOOL_VERSION := ${MPOOL_VERSION_MAJOR}.${MPOOL_VERSION_MINOR}.${MPOOL_VERSION_PATCH}
+# Edit the package VERSION and QUALifier when we cut a release branch or tag:
+BUILD_PKG_VERSION := 1.8.0
+BUILD_PKG_VQUAL := '~dev'
 
-MPOOL_TAG := $(shell test -d ".git" && git describe --dirty --always --tags)
-ifeq (${MPOOL_TAG},)
-MPOOL_TAG := ${MPOOL_VERSION}
+BUILD_PKG_TAG := $(shell test -d ".git" && \
+	git describe --always --long --tags --dirty --abbrev=10)
+
+ifeq (${BUILD_PKG_TAG},)
+BUILD_PKG_TAG := ${BUILD_PKG_VERSION}
+BUILD_PKG_REL := 0
+else
+BUILD_PKG_REL := $(shell echo ${BUILD_PKG_TAG} | \
+	sed -En 's/.*-([0-9]+)-[a-z0-9]{7,}(-dirty){0,1}$$/\1/p')
+BUILD_PKG_VQUAL := $(shell echo ${BUILD_PKG_TAG} | \
+	sed -En 's/.*-([^-]+)-[0-9]+-[a-z0-9]{7,}(-dirty){0,1}$$/~\1/p')
 endif
+
+ifneq ($(shell egrep -i 'id=(ubuntu|debian)' /etc/os-release),)
+BUILD_PKG_TYPE ?= deb
+BUILD_PKG_ARCH ?= $(shell dpkg-architecture -q DEB_HOST_ARCH)
+BUILD_PKG_DIST :=
+else
+BUILD_PKG_TYPE ?= rpm
+BUILD_PKG_ARCH ?= $(shell uname -m)
+BUILD_PKG_DIST := $(shell rpm --eval '%{?dist}')
+endif
+
+ifeq ($(wildcard scripts/${BUILD_PKG_TYPE}/CMakeLists.txt),)
+$(error "Unable to create a ${BUILD_PKG_TYPE} package, try rpm or deb")
+endif
+
 
 # Find the top-level directory of the mpool kmod source tree
 MPOOL_TOP_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
@@ -121,9 +146,6 @@ else
 	KCFLAGS += -O2 -DNDEBUG
 endif
 
-KCFLAGS += -DMPOOL_VERSION='\"${MPOOL_TAG}-${BUILD_STYPE}${BUILD_NUMBER}\"'
-
-
 KDIR  ?= /lib/modules/$(shell uname -r)/build
 KREL  ?= $(patsubst /lib/modules/%/build,%,${KDIR})
 
@@ -135,24 +157,12 @@ ifeq (${KREL},${KDIR})
 $(error "Unable to determine kernel release from KDIR.  Try setting it via the KREL= variable")
 endif
 
-DESTDIR ?= /
+DESTDIR       ?= /
+BUILD_DIR     ?= ${MPOOL_TOP_DIR}/builds
+BUILD_NODE    ?= $(shell uname -n)
+BUILD_PKG_DIR ?= ${BUILD_DIR}/${BUILD_NODE}/${KREL}/${BUILD_PKG_TYPE}/${BUILD_TYPE}
+BUILD_NUMBER  ?= 0
 
-# Compare mpool_config.h to CONFIG_H.  If they differ, mark
-# mpool_config.h as a phony target so that it will be rebuilt.
-#
-CONFIG_H := config/config.h-${KREL}
-ifneq ($(wildcard ${CONFIG_H}),)
-RC := $(shell (cmp -s src/mpool_config.h ${CONFIG_H} || echo force))
-ifeq (${RC},force)
-.PHONY: src/mpool_config.h
-endif
-endif
-
-
-# Set up for cmake configuration...
-#
-BUILD_DIR    ?= $(MPOOL_TOP_DIR)/builds
-BUILD_NUMBER ?= 0
 
 ifneq ($(shell egrep -i 'id=(ubuntu|debian)' /etc/os-release),)
 BUILD_PKG ?= deb
@@ -166,25 +176,39 @@ ifeq ($(wildcard scripts/${BUILD_PKG}/CMakeLists.txt),)
 $(error "Unable to create a ${BUILD_PKG} package, try rpm or deb")
 endif
 
-BUILD_PKG_DIR := $(BUILD_DIR)/${KREL}/${BUILD_PKG}/$(BUILD_TYPE)
-CONFIG_PKG = $(BUILD_PKG_DIR)/config.cmake
+KCFLAGS += -DMPOOL_VERSION='\"${BUILD_PKG_TAG}-${BUILD_STYPE}${BUILD_NUMBER}\"'
+
+
+# Compare mpool_config.h to CONFIG_H.  If they differ, mark
+# mpool_config.h as a phony target so that it will be rebuilt.
+#
+CONFIG_H := config/config.h-${KREL}
+ifneq ($(wildcard ${CONFIG_H}),)
+RC := $(shell (cmp -s src/mpool_config.h ${CONFIG_H} || echo force))
+ifeq (${RC},force)
+.PHONY: src/mpool_config.h
+endif
+endif
+
 
 define config-cmake =
 	(echo '# Note: When a variable is set multiple times in this file,' ;\
 	echo '#       it is the *first* setting that sticks!' ;\
 	echo ;\
-	echo 'Set( KDIR "$(KDIR)" CACHE STRING "" )' ;\
-	echo 'Set( KREL "$(KREL)" CACHE STRING "" )' ;\
-	echo 'Set( KARCH "$(KARCH)" CACHE STRING "" )' ;\
-	echo 'Set( DESTDIR "$(DESTDIR)" CACHE STRING "" )' ;\
-	echo 'Set( BUILD_PKG "$(BUILD_PKG)" CACHE STRING "" )' ;\
-	echo 'Set( BUILD_TYPE "$(BUILD_TYPE)" CACHE STRING "" )' ;\
-	echo 'Set( BUILD_STYPE "$(BUILD_STYPE)" CACHE STRING "" )' ;\
-	echo 'Set( BUILD_NUMBER "$(BUILD_NUMBER)" CACHE STRING "" )' ;\
-	echo 'Set( MPOOL_TAG "$(MPOOL_TAG)" CACHE STRING "" )' ;\
-	echo 'Set( MPOOL_VERSION_MAJOR "$(MPOOL_VERSION_MAJOR)" CACHE STRING "" )' ;\
-	echo 'Set( MPOOL_VERSION_MINOR "$(MPOOL_VERSION_MINOR)" CACHE STRING "" )' ;\
-	echo 'Set( MPOOL_VERSION_PATCH "$(MPOOL_VERSION_PATCH)" CACHE STRING "" )' ;\
+	echo 'Set( KDIR                "$(KDIR)" CACHE STRING "" )' ;\
+	echo 'Set( KREL                "$(KREL)" CACHE STRING "" )' ;\
+	echo 'Set( KARCH               "$(KARCH)" CACHE STRING "" )' ;\
+	echo 'Set( DESTDIR             "$(DESTDIR)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_NUMBER        "$(BUILD_NUMBER)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_TYPE          "$(BUILD_TYPE)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_STYPE         "$(BUILD_STYPE)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_PKG_ARCH      "$(BUILD_PKG_ARCH)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_PKG_DIST      "$(BUILD_PKG_DIST)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_PKG_REL       "$(BUILD_PKG_REL)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_PKG_TAG       "$(BUILD_PKG_TAG)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_PKG_TYPE      "$(BUILD_PKG_TYPE)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_PKG_VERSION   "$(BUILD_PKG_VERSION)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_PKG_VQUAL     "$(BUILD_PKG_VQUAL)" CACHE STRING "" )' ;\
 	)
 endef
 
@@ -209,6 +233,15 @@ endif
 
 ${BTYPES}: ${BTYPESDEP}
 	@true
+endif
+
+
+# Delete the cmake config file if it has changed.
+#
+CONFIG_PKG = $(BUILD_PKG_DIR)/config.cmake
+
+ifeq ($(filter config-preview help print-% printq-% smoke load unload,$(MAKECMDGOALS)),)
+$(shell $(config-gen) | cmp -s - ${CONFIG_PKG} || rm -f ${CONFIG_PKG})
 endif
 
 
@@ -238,6 +271,12 @@ src/mpool_config.h: ${CONFIG_H}
 
 config: ${CONFIG_H} ${CONFIG_PKG}
 
+config-preview:
+ifneq ($(wildcard ${CONFIG_PKG}),)
+	@sed -En 's/^[^#]*\((.*)CACHE.*/\1/p' ${CONFIG_PKG}
+endif
+	@true
+
 distclean scrub: MAKEFLAGS += --no-print-directory
 distclean scrub: clean
 	${MAKE} -C config distclean
@@ -257,7 +296,7 @@ load:
 maintainer-clean: distclean
 	@true
 
-${CONFIG_PKG}: scripts/${BUILD_PKG}/CMakeLists.txt Makefile
+${CONFIG_PKG}: CMakeLists.txt Makefile scripts/${BUILD_PKG_TYPE}/CMakeLists.txt
 	mkdir -p $(@D)
 	rm -rf $(@D)/*
 	@$(config-cmake) > $@.tmp
@@ -266,7 +305,7 @@ ${CONFIG_PKG}: scripts/${BUILD_PKG}/CMakeLists.txt Makefile
 
 package ${BUILD_PKG}: all ${CONFIG_PKG}
 	$(MAKE) -C $(BUILD_PKG_DIR) package
-	cp ${BUILD_PKG_DIR}/*.${BUILD_PKG} .
+	cp ${BUILD_PKG_DIR}/*.${BUILD_PKG_TYPE} .
 
 rebuild: distclean all
 
