@@ -25,7 +25,7 @@
 static const fmode_t    pd_bio_fmode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
 static char            *pd_bio_holder = "mpool";
 
-extern int mpc_chunker_size;
+extern uint mpc_chunker_size;
 
 merr_t
 pd_dev_open(
@@ -306,7 +306,7 @@ pd_bio_rw(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, loff_t off, 
 		return 0;
 
 	/* IO size for each bio is determined by the chunker size. */
-	iolimit = mpc_chunker_size >> PAGE_SHIFT;
+	iolimit = (mpc_chunker_size << 10) >> PAGE_SHIFT;
 	iolimit = clamp_t(u32, iolimit, 32, BIO_MAX_PAGES);
 
 	/*

@@ -270,13 +270,9 @@ MODULE_PARM_DESC(mpc_rwconc_max, " max mblock/mlog large r/w concurrency");
 module_param(mpc_rsvd_bios_max, uint, 0444);
 MODULE_PARM_DESC(mpc_rsvd_bios_max, "max reserved bios in mpool bioset");
 
-/* mpc_chunker_size is the number of pages that fit in a one-page iovec list
- * (PAGE_SIZE / sizeof(struct iovec)) * PAGE_SIZE, because each iovec maps
- * one page
- */
-int mpc_chunker_size __read_mostly = PAGE_SIZE * 32;
-module_param(mpc_chunker_size, int, 0644);
-MODULE_PARM_DESC(mpc_chunker_size, "Chunking size (in bytes) for device I/O");
+unsigned int mpc_chunker_size __read_mostly = 128;
+module_param(mpc_chunker_size, uint, 0644);
+MODULE_PARM_DESC(mpc_chunker_size, "Chunking size (in KiB) for device I/O");
 
 
 static void mpc_errinfo(struct mpioc_cmn *cmn, enum mpool_rc rcode, const char *msg)
@@ -4090,6 +4086,8 @@ static __init int mpc_init(void)
 
 	mpc_rwsz_max = clamp_t(ulong, mpc_rwsz_max, 1, 128);
 	mpc_rwconc_max = clamp_t(ulong, mpc_rwconc_max, 1, 32);
+
+	mpc_chunker_size = clamp_t(uint, mpc_chunker_size, 128, 1024);
 
 	/* Must be same as mpc_physio() pagesvsz calculation.
 	 */
