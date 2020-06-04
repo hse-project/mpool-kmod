@@ -622,7 +622,7 @@ mpc_mpool_open(
 
 	mpool_to_mpcore_params(params, &mpc_params);
 
-	err = mpool_activate(dpathc, dpathv, pd_prop, false, MPOOL_ROOT_LOG_CAP,
+	err = mpool_activate(dpathc, dpathv, pd_prop, MPOOL_ROOT_LOG_CAP,
 			     &mpc_params, flags, &mpool->mp_desc, devrpt);
 	if (err) {
 		if (devrpt->mdr_off > -1)

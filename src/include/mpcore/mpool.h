@@ -228,7 +228,6 @@ mpool_create(
  * @dcnt:
  * @dpaths:
  * @pd_prop: properties of the PDs. dcnt elements.
- * @force:
  * @mlog_cap:
  * @params:   mpcore parameters
  * @flags:
@@ -249,7 +248,6 @@ mpool_activate(
 	u64                          dcnt,
 	char                       **dpaths,
 	struct pd_prop              *pd_prop,
-	bool                         force,
 	u64                          mlog_cap,
 	struct mpcore_params        *params,
 	u32                          flags,

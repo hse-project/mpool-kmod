@@ -1123,7 +1123,6 @@ mpool_activate(
 	u64                         dcnt,
 	char                      **dpaths,
 	struct pd_prop		   *pd_prop,
-	bool                        force,
 	u64                         mlog_cap,
 	struct mpcore_params       *params,
 	u32                         flags,
@@ -1142,6 +1141,7 @@ mpool_activate(
 	int     dup, doff, cnt, i;
 	u8      pdh;
 	bool    mc_resize[MP_MED_NUMBER] = { };
+	bool    force = ((flags & (1 << MP_FLAGS_FORCE)) != 0);
 
 	mpool_devrpt_init(devrpt);
 	active = false;

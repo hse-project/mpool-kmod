@@ -446,7 +446,6 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 	u64                             pdh, buflen;
 	int                             spzone[MP_MED_NUMBER], i;
 	bool                            zombie[MPOOL_DRIVES_MAX];
-	u8                              ftmax;
 
 	cinfo = &mp->pds_mda.mdi_slotv[0];
 	buflen = OMF_MDCREC_PACKLEN_MAX;
@@ -574,7 +573,7 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 			err = mpool_desc_unavail_add(mp, omd);
 			if (ev(err))
 				break;
-			zombie[mp->pds_pdvcnt] = false;
+			zombie[mp->pds_pdvcnt - 1] = false;
 		}
 	}
 
@@ -607,20 +606,6 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 				break;
 			} else if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL) {
 				mc->mc_uacnt += 1;
-			}
-		}
-
-		if (!err) {
-			ftmax = 0;
-			for (i = 0; i < MP_MED_NUMBER; i++) {
-				mc = &mp->pds_mc[i];
-				ftmax = max(ftmax, mc->mc_uacnt);
-			}
-			if (ftmax >= MP_MED_NUMBER) {
-				err = merr(EINVAL);
-				mpool_devrpt(devrpt, MPOOL_RC_MDC, 0, NULL);
-				mp_pr_err("mpool %s, not enough good drives %d",
-					  err, mp->pds_name, ftmax);
 			}
 		}
 	}
