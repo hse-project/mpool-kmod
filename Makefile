@@ -256,7 +256,7 @@ endif
 CONFIG_PKG = $(BUILD_PKG_DIR)/config.cmake
 
 ifeq ($(filter config-preview help print-% printq-% smoke load unload,$(MAKECMDGOALS)),)
-$(shell $(config-gen) | cmp -s - ${CONFIG_PKG} || rm -f ${CONFIG_PKG})
+$(shell $(config-cmake) | cmp -s - ${CONFIG_PKG} || rm -f ${CONFIG_PKG})
 endif
 
 
