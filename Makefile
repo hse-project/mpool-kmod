@@ -14,14 +14,25 @@ mpool kmod Makefile Help
 -------------------
 
 Primary Targets:
-    all       -- Build mpool module
-    clean     -- Delete most build outputs
-    distclean -- Delete all build outputs
-    install   -- Install mpool kmod locally
-    package   -- Build "all" and generate RPMs
-    help      -- Print this message.
+
+  all       -- Build mpool module
+  clean     -- Delete most build outputs
+  distclean -- Delete all build outputs
+  install   -- Install mpool kmod locally
+  package   -- Build "all" and generate RPMs
+  help      -- Print this message.
+
+Target Modiiers:
+
+  asan      -- Enable address sanity checking
+  debug     -- Create a debug build
+  optdebug  -- Create a debug build with -Og
+  release   -- Create a release build
+  relassert -- Create a release build with assert enabled
+  ubsan     -- Enable undefined behavior checking
 
 Configuration Variables:
+
   The following configuration variables can be set on the command line
   to customize the build.
 
@@ -44,6 +55,7 @@ Configuration Variables:
     BUILD_PKG_TAG      ${BUILD_PKG_TAG}
     BUILD_PKG_TYPE     ${BUILD_PKG_TYPE}
     BUILD_PKG_VERSION  ${BUILD_PKG_VERSION}
+    BUILD_PKG_VENDOR   ${BUILD_PKG_VENDOR}
     BUILD_PKG_VQUAL    ${BUILD_PKG_VQUAL}
     KCFLAGS            ${KCFLAGS}
     KDIR               ${KDIR}
@@ -86,6 +98,8 @@ endef
 # Edit the package VERSION and QUALifier when we cut a release branch or tag:
 BUILD_PKG_VERSION := 1.8.0
 BUILD_PKG_VQUAL := '~dev'
+
+BUILD_PKG_VENDOR ?= "Micron Technology, Inc."
 
 BUILD_PKG_TAG := $(shell test -d ".git" && \
 	git describe --always --long --tags --dirty --abbrev=10)
@@ -208,6 +222,7 @@ define config-cmake =
 	echo 'Set( BUILD_PKG_TAG       "$(BUILD_PKG_TAG)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_PKG_TYPE      "$(BUILD_PKG_TYPE)" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_PKG_VERSION   "$(BUILD_PKG_VERSION)" CACHE STRING "" )' ;\
+	echo 'Set( BUILD_PKG_VENDOR    "'$(BUILD_PKG_VENDOR)'" CACHE STRING "" )' ;\
 	echo 'Set( BUILD_PKG_VQUAL     "$(BUILD_PKG_VQUAL)" CACHE STRING "" )' ;\
 	)
 endef

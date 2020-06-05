@@ -6,7 +6,10 @@
 
 cmake_minimum_required( VERSION 3.6 )
 
-project( kmod-mpool VERSION ${BUILD_PKG_VERSION} LANGUAGES NONE )
+project( kmod-mpool
+    VERSION       ${BUILD_PKG_VERSION}
+    HOMEPAGE_URL  "https://github.com/hse-project/mpool-kmod"
+    LANGUAGES     NONE )
 
 message( STATUS "Configuring ${PROJECT_NAME}-${KREL} common ..." )
 
@@ -20,11 +23,11 @@ INSTALL(
     COMPONENT runtime
     )
 
-# Package options
+# Common package options
 #
 set( CPACK_PACKAGE_NAME           "${PROJECT_NAME}-${KREL}" )
 set( CPACK_PACKAGE_LICENSE        "GPLv2 and MIT" )
-set( CPACK_PACKAGE_HOMEPAGE_URL   "https://github.com/hse-project/mpool-kmod" )
+set( CPACK_PACKAGE_VENDOR         "${BUILD_PKG_VENDOR}" )
 
 set( CPACK_PACKAGE_DESCRIPTION_SUMMARY
     "Object Storage Media Pool (mpool) ${BUILD_TYPE} kernel module" )
