@@ -50,19 +50,15 @@ static ssize_t mpool_debug_emit(char *evstr, ssize_t len)
 	if (!evc)
 		return scnprintf(pos, len, "%s", "No Events\n");
 
-	cc = scnprintf(pos, len, "%14s %6s %12s  %s\n",
-		      "FILE", "LINE", "ODOMETER", "FUNC");
+	cc = scnprintf(pos, len, "%14s %6s %12s  %s\n", "FILE", "LINE", "ODOMETER", "FUNC");
 
 	for (pos += cc, len -= cc; evc && len > 1;
 	     evc = evc->evc_next, pos += cc, len -= cc) {
 		file = strrchr(evc->evc_file, '/');
 		file = file ? file + 1 : evc->evc_file;
 
-		cc = scnprintf(pos, len,
-			      "%14s %6d %12lu  %s\n",
-			      file, evc->evc_line,
-			      (ulong)atomic64_read(&evc->evc_odometer),
-			      evc->evc_func);
+		cc = scnprintf(pos, len, "%14s %6d %12lu  %s\n", file, evc->evc_line,
+			      (ulong)atomic64_read(&evc->evc_odometer), evc->evc_func);
 		if (cc == len - 1)
 			pos[cc++] = '\n';
 	}
@@ -147,17 +143,14 @@ void evc_fini(void)
 	if (!evc)
 		return;
 
-	printk("\n%s: %14s %6s %12s  %s\n",
-	       modname, "FILE", "LINE", "ODOMETER", "FUNC");
+	printk("\n%s: %14s %6s %12s  %s\n", modname, "FILE", "LINE", "ODOMETER", "FUNC");
 
 	while (evc) {
 		file = strrchr(evc->evc_file, '/');
 		file = file ? file + 1 : evc->evc_file;
 
-		printk("%s: %14s %6d %12lu  %s\n",
-		       modname, file, evc->evc_line,
-		       (ulong)atomic64_read(&evc->evc_odometer),
-		       evc->evc_func);
+		printk("%s: %14s %6d %12lu  %s\n", modname, file, evc->evc_line,
+		       (ulong)atomic64_read(&evc->evc_odometer), evc->evc_func);
 
 		evc = evc->evc_next;
 	}

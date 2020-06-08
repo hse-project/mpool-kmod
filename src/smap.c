@@ -145,21 +145,12 @@ merr_t smap_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclas
 		pd = &mp->pds_pdv[mc->mc_pdmc];
 
 		spin_lock(&pd->pdi_ds.sda_dalock);
-		/*
-		 * adjust utgt but not uact; possible for uact > utgt
-		 * due to spzone change
-		 */
-		pd->pdi_ds.sda_utgt =
-			(pd->pdi_ds.sda_zoneeff * (100 - spzone)) / 100;
-		/*
-		 * adjust stgt and sact maintaining invariant that
-		 * sact <= stgt
-		 */
-		pd->pdi_ds.sda_stgt =
-			pd->pdi_ds.sda_zoneeff - pd->pdi_ds.sda_utgt;
+		/* Adjust utgt but not uact; possible for uact > utgt due to spzone change. */
+		pd->pdi_ds.sda_utgt = (pd->pdi_ds.sda_zoneeff * (100 - spzone)) / 100;
+		/* Adjust stgt and sact maintaining invariant that sact <= stgt */
+		pd->pdi_ds.sda_stgt = pd->pdi_ds.sda_zoneeff - pd->pdi_ds.sda_utgt;
 		if (pd->pdi_ds.sda_sact > pd->pdi_ds.sda_stgt) {
-			pd->pdi_ds.sda_uact +=
-				(pd->pdi_ds.sda_sact - pd->pdi_ds.sda_stgt);
+			pd->pdi_ds.sda_uact += (pd->pdi_ds.sda_sact - pd->pdi_ds.sda_stgt);
 			pd->pdi_ds.sda_sact = pd->pdi_ds.sda_stgt;
 		}
 		spin_unlock(&pd->pdi_ds.sda_dalock);
@@ -178,8 +169,7 @@ static void smap_calc_znstats(struct mpool_dev_info *pd, struct smap_dev_znstats
 	zones->sdv_usable = pd->pdi_ds.sda_utgt;
 
 	if (pd->pdi_ds.sda_utgt > pd->pdi_ds.sda_uact)
-		zones->sdv_fusable = pd->pdi_ds.sda_utgt -
-				    pd->pdi_ds.sda_uact;
+		zones->sdv_fusable = pd->pdi_ds.sda_utgt - pd->pdi_ds.sda_uact;
 	else
 		zones->sdv_fusable = 0;
 
@@ -267,9 +257,7 @@ void smap_drive_free(struct mpool_descriptor *mp, u16 pdh)
 
 			root = &pd->pdi_rmbktv[rgn].pdi_rmroot;
 
-			rbtree_postorder_for_each_entry_safe(
-				zone, tmp, root, smz_node) {
-
+			rbtree_postorder_for_each_entry_safe(zone, tmp, root, smz_node) {
 				kmem_cache_free(smap_zone_cache, zone);
 			}
 		}
@@ -398,8 +386,7 @@ smap_alloc(
 	/*
 	 * We do not update the last rgn alloced beyond this point as it
 	 * would incur search penalty if all the regions except one are highly
-	 * fragmented, i.e., the last alloc rgn would never change in
-	 * this case.
+	 * fragmented, i.e., the last alloc rgn would never change in this case.
 	 */
 	spin_lock(&ds->sda_dalock);
 	ds->sda_rgnalloc = (ds->sda_rgnalloc + 1) % rgnc;
@@ -471,8 +458,7 @@ smap_alloc(
 
 	if (ualen) {
 		if (!elem) {
-			elem = kmem_cache_alloc(smap_zone_cache,
-						GFP_ATOMIC);
+			elem = kmem_cache_alloc(smap_zone_cache, GFP_ATOMIC);
 			if (ev(!elem)) {
 				mutex_unlock(rmlock);
 				return merr(ENOMEM);
@@ -546,8 +532,7 @@ merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp,
 				found_ue = smap_zone_find(rmroot, 0);
 				if (found_ue) {
 					rb_erase(&found_ue->smz_node, rmroot);
-					kmem_cache_free(smap_zone_cache,
-							found_ue);
+					kmem_cache_free(smap_zone_cache, found_ue);
 				}
 			}
 
@@ -564,8 +549,7 @@ merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp,
 		if (rgn < rgnc - 1)
 			urb_elem->smz_value = rgnsz;
 		else
-			urb_elem->smz_value = pd->pdi_parm.dpr_zonetot -
-					      (rgn * rgnsz);
+			urb_elem->smz_value = pd->pdi_parm.dpr_zonetot - (rgn * rgnsz);
 		smap_zone_insert(&pd->pdi_rmbktv[rgn].pdi_rmroot, urb_elem);
 	}
 
@@ -574,8 +558,7 @@ merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp,
 	pd->pdi_ds.sda_rgnsz = rgnsz;
 	pd->pdi_ds.sda_rgnladdr = (rgnc - 1) * rgnsz;
 	pd->pdi_ds.sda_zoneeff = pd->pdi_parm.dpr_zonetot;
-	pd->pdi_ds.sda_utgt = (pd->pdi_ds.sda_zoneeff *
-			       (100 - mcsp->mcsp_spzone)) / 100;
+	pd->pdi_ds.sda_utgt = (pd->pdi_ds.sda_zoneeff * (100 - mcsp->mcsp_spzone)) / 100;
 	pd->pdi_ds.sda_uact = 0;
 	pd->pdi_ds.sda_stgt = pd->pdi_ds.sda_zoneeff - pd->pdi_ds.sda_utgt;
 	pd->pdi_ds.sda_sact = 0;
@@ -723,8 +706,7 @@ merr_t smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u16 z
 	}
 	if (zoneaddr + zonecnt < fsoff + fslen) {
 		if (!elem)
-			elem = kmem_cache_alloc(
-				smap_zone_cache, GFP_KERNEL);
+			elem = kmem_cache_alloc(smap_zone_cache, GFP_KERNEL);
 		if (!elem) {
 			msg = "chunk alloc failed";
 			err = merr(ENOMEM);
@@ -737,8 +719,7 @@ merr_t smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u16 z
 		elem = NULL;
 	}
 
-	/* Insert consumes usable only; possible for uact > utgt.
-	 */
+	/* Insert consumes usable only; possible for uact > utgt.*/
 	spin_lock(&pd->pdi_ds.sda_dalock);
 	pd->pdi_ds.sda_uact = pd->pdi_ds.sda_uact + zonecnt;
 	spin_unlock(&pd->pdi_ds.sda_dalock);
@@ -769,7 +750,7 @@ merr_t smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonec
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
 	u32                    rstart = 0;
 	u32                    rend = 0;
-	u64                    zoneadded = 0; /* can this be u32 */
+	u64                    zoneadded = 0;
 	int                    rgn = 0;
 	u64                    raddr = 0;
 	u64                    rcnt = 0;
@@ -967,8 +948,7 @@ merr_t smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt
 
 	pd = &mp->pds_pdv[pdh];
 
-	if (zoneaddr >= pd->pdi_parm.dpr_zonetot ||
-	    zoneaddr + zonecnt > pd->pdi_parm.dpr_zonetot) {
+	if (zoneaddr >= pd->pdi_parm.dpr_zonetot || zoneaddr + zonecnt > pd->pdi_parm.dpr_zonetot) {
 		err = merr(EINVAL);
 		mp_pr_err("smap(%s, %s): free failed, zoneaddr %lu zonecnt %u zonetot: %u",
 			  err, mp->pds_name, pd->pdi_name, (ulong)zoneaddr,
@@ -997,8 +977,7 @@ merr_t smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt
 			raddr = rgn * pd->pdi_ds.sda_rgnsz;
 
 		if (rgn < rend)
-			rcnt = ((u64)(rgn + 1) * pd->pdi_ds.sda_rgnsz) -
-			       raddr;
+			rcnt = ((u64)(rgn + 1) * pd->pdi_ds.sda_rgnsz) - raddr;
 		else
 			rcnt = zonecnt - zonefreed;
 
@@ -1054,8 +1033,7 @@ void smap_log_mpool_usage(struct work_struct *ws)
 	/*
 	 * Log a message if delta >= 5% && free usable space % < 50%
 	 */
-	if ((abs(delta) >= SMAP_FREEPCT_DELTA) &&
-			(cur < SMAP_FREEPCT_LOG_THLD)) {
+	if ((abs(delta) >= SMAP_FREEPCT_DELTA) && (cur < SMAP_FREEPCT_LOG_THLD)) {
 
 		smapu->smapu_freepct = cur;
 		if (last == 0)
@@ -1070,5 +1048,5 @@ void smap_log_mpool_usage(struct work_struct *ws)
 
 	/* Schedule the next run of smap_log_mpool_usage() */
 	queue_delayed_work(mp->pds_workq, &smapu->smapu_wstruct,
-		   msecs_to_jiffies(mp->pds_params.mp_mpusageperiod));
+			   msecs_to_jiffies(mp->pds_params.mp_mpusageperiod));
 }

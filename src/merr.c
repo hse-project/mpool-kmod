@@ -26,8 +26,7 @@ merr_t merr_to_user(merr_t err, char __user *ubuf)
 		return (err & ~MERR_FILE_MASK);
 
 	if (!IS_ALIGNED((ulong)ubuf, MERR_ALIGN)) {
-		WARN_ONCE(1, "ubuf misaligned: err %lx, ubuf %px",
-			  (ulong)err, ubuf);
+		WARN_ONCE(1, "ubuf misaligned: err %lx, ubuf %px", (ulong)err, ubuf);
 		return (err & ~MERR_FILE_MASK);
 	}
 
@@ -125,8 +124,7 @@ char *merr_strinfo(merr_t err, char *buf, size_t bufsz)
 	}
 
 	if (merr_file(err))
-		n = snprintf(buf, bufsz, "%s:%d: ",
-			     merr_file(err), merr_lineno(err));
+		n = snprintf(buf, bufsz, "%s:%d: ", merr_file(err), merr_lineno(err));
 
 	if (n >= 0 && n < bufsz)
 		merr_strerror(err, buf + n, bufsz - n);

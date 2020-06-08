@@ -633,8 +633,7 @@ void mpc_reap_xvm_evict(struct mpc_xvm *xvm)
 	/* Evict in chunks to improve mmap_sem interleaving...
 	 */
 	for (; start < end; start += bktsz)
-		invalidate_inode_pages2_range(
-			xvm->xvm_mapping, start, start + bktsz);
+		invalidate_inode_pages2_range(xvm->xvm_mapping, start, start + bktsz);
 
 	atomic_cmpxchg(&xvm->xvm_evicting, 1, 0);
 }
