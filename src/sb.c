@@ -357,9 +357,8 @@ merr_t sb_erase(struct mpool_dev_info *pd)
 		u64 woff = sb_idx2woff(pd, i);
 
 		err = pd_zone_pwritev_sync(pd, &iov, 1, 0, woff);
-		if (err) {
+		if (err)
 			mp_pr_err("sb(%s, %d): erase failed", err, pd->pdi_name, i);
-		}
 	}
 
 	kfree(buf);

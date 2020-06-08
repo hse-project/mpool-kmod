@@ -34,7 +34,7 @@ static struct pmd_layout *mblock2layout(struct mblock_descriptor *mbh)
 		return NULL;
 
 	WARN_ONCE(layout->eld_objid == 0 || kref_read(&layout->eld_ref) < 2,
-		  "%s: %px, objid %lx, state %x, refcnt %ld\n",
+		  "%s: %p, objid %lx, state %x, refcnt %ld\n",
 		  __func__, layout, (ulong)layout->eld_objid,
 		  layout->eld_state, (long)kref_read(&layout->eld_ref));
 
@@ -201,7 +201,7 @@ do {									\
 	uint dly = msecs_to_jiffies(1000);				\
 									\
 	if (printk_timed_ratelimit(&state, dly)) {			\
-		mp_pr_warn("mpool %s, layout not found: mbh %px",	\
+		mp_pr_warn("mpool %s, layout not found: mbh %p",	\
 			   (_mp)->pds_name, (_mbh));			\
 		dump_stack();						\
 	}								\

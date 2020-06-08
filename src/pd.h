@@ -10,9 +10,7 @@
 
 struct mpool_dev_info;
 
-/*
- * Common defs
- */
+extern uint mpc_chunker_size;
 
 /**
  * struct pd_dev_parm -

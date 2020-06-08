@@ -28,7 +28,8 @@ struct mpool_mdparm;
 
 /*
  * Size in byte of an area located just after the superblock areas.
- * Not used in 1.0. Later can be used for MDC0 metadata and/or voting sets.      */
+ * Not used in 1.0. Later can be used for MDC0 metadata and/or voting sets.
+ */
 #define MDC0MD_AREA_SZ    (4096ULL)
 
 /*

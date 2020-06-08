@@ -66,21 +66,6 @@
 		memcpy(p, s->member, len < plen ? len : plen);		\
 	}
 
-#define OMF_GET_VER(type, member, bits, ver)                            \
-	static __always_inline u##bits omf_##member##_##ver(const type *s)    \
-	{                                                               \
-		BUILD_BUG_ON(sizeof(((type *)0)->member)*8 != (bits));	\
-		return le##bits##_to_cpu(s->member);			\
-	}
-
-#define OMF_GET_CHBUF_VER(type, member, ver)                                   \
-	static inline void omf_##member##_##ver(const type *s,                 \
-						void *p, size_t plen)          \
-	{							               \
-		size_t len = sizeof(((type *)0)->member);                      \
-		memcpy(p, s->member, len < plen ? len : plen);                 \
-	}
-
 
 /* MPOOL_NAME_LEN_MAX should match OMF_MPOOL_NAME_LEN */
 #define OMF_MPOOL_NAME_LEN 32

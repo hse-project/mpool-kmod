@@ -17,14 +17,14 @@
 
 #define MPC_ATTR_RO(_dattr, _name)                 \
 	do {                                       \
-		__typeof (_dattr) da = (_dattr);   \
+		__typeof(_dattr) da = (_dattr);    \
 		MPC_ATTR(da, _name, 0444);         \
 		da->store = NULL;                  \
 	} while (0)
 
 #define MPC_ATTR_RW(_dattr, _name)                 \
 	do {                                       \
-		__typeof (_dattr) da = (_dattr);   \
+		__typeof(_dattr) da = (_dattr);    \
 		MPC_ATTR(da, _name, 0644);         \
 		da->store = mpc_##_name##_store;   \
 	} while (0)

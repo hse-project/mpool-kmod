@@ -120,7 +120,7 @@ void evc_init(void)
 		return;
 	evc_root.debug_root = d;
 
-	d = debugfs_create_file("events", S_IRUGO, d, NULL, &mpool_debug_fops);
+	d = debugfs_create_file("events", 0444, d, NULL, &mpool_debug_fops);
 	if (IS_ERR_OR_NULL(d)) {
 		debugfs_remove(evc_root.debug_root);
 		evc_root.debug_root = NULL;
@@ -143,14 +143,14 @@ void evc_fini(void)
 	if (!evc)
 		return;
 
-	printk("\n%s: %14s %6s %12s  %s\n", modname, "FILE", "LINE", "ODOMETER", "FUNC");
+	pr_info("\n%s: %14s %6s %12s  %s\n", modname, "FILE", "LINE", "ODOMETER", "FUNC");
 
 	while (evc) {
 		file = strrchr(evc->evc_file, '/');
 		file = file ? file + 1 : evc->evc_file;
 
-		printk("%s: %14s %6d %12lu  %s\n", modname, file, evc->evc_line,
-		       (ulong)atomic64_read(&evc->evc_odometer), evc->evc_func);
+		pr_info("%s: %14s %6d %12lu  %s\n", modname, file, evc->evc_line,
+			(ulong)atomic64_read(&evc->evc_odometer), evc->evc_func);
 
 		evc = evc->evc_next;
 	}

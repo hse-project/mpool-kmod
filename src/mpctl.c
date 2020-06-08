@@ -223,7 +223,7 @@ static struct backing_dev_info mpc_bdi = {
 
 /* Module params...
  */
-static unsigned int mpc_ctl_uid __read_mostly = 0;
+static unsigned int mpc_ctl_uid __read_mostly;
 module_param(mpc_ctl_uid, uint, 0444);
 MODULE_PARM_DESC(mpc_ctl_uid, " control device uid");
 
@@ -235,7 +235,7 @@ static unsigned int mpc_ctl_mode __read_mostly = 0664;
 module_param(mpc_ctl_mode, uint, 0444);
 MODULE_PARM_DESC(mpc_ctl_mode, " control device mode");
 
-static unsigned int mpc_default_uid __read_mostly = 0;
+static unsigned int mpc_default_uid __read_mostly;
 module_param(mpc_default_uid, uint, 0644);
 MODULE_PARM_DESC(mpc_default_uid, " default mpool device uid");
 
@@ -3664,7 +3664,8 @@ static void *mpc_vcache_alloc(struct vcache *vc, size_t sz)
 		return NULL;
 
 	spin_lock(&vc->vc_lock);
-	if ((p = vc->vc_head))
+	p = vc->vc_head;
+	if (p)
 		vc->vc_head = *(void **)p;
 	spin_unlock(&vc->vc_lock);
 
@@ -3702,7 +3703,7 @@ static void mpc_vcache_fini(struct vcache *vc)
 	void *p;
 
 	while ((p = mpc_vcache_alloc(vc, PAGE_SIZE)))
-	       vfree(p);
+		vfree(p);
 }
 
 /**

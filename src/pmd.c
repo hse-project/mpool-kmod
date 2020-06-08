@@ -99,7 +99,7 @@ void pmd_layout_release(struct kref *refp)
 	layout = container_of(refp, typeof(*layout), eld_ref);
 
 	WARN_ONCE(layout->eld_objid == 0 ||
-		  kref_read(&layout->eld_ref), "%s: %px, objid %lx, state %x, refcnt %ld",
+		  kref_read(&layout->eld_ref), "%s: %p, objid %lx, state %x, refcnt %ld",
 		  __func__, layout, (ulong)layout->eld_objid,
 		  layout->eld_state, (long)kref_read(&layout->eld_ref));
 
@@ -130,7 +130,7 @@ static struct pmd_layout *pmd_layout_find(struct rb_root *root, u64 key)
 	return NULL;
 }
 
-static struct pmd_layout* pmd_layout_insert(struct rb_root *root, struct pmd_layout *item)
+static struct pmd_layout *pmd_layout_insert(struct rb_root *root, struct pmd_layout *item)
 {
 	struct rb_node **pos = &root->rb_node, *parent = NULL;
 	struct pmd_layout *this;
@@ -393,10 +393,10 @@ pmd_cmp_drv_mdc0(
 	struct omf_devparm_descriptor  *omd,
 	struct mpool_devrpt	       *devrpt)
 {
+	const char            *msg __maybe_unused;
 	struct mpool_dev_info *pd;
 	struct mc_parms        mcp_pd;
 	struct mc_parms        mcp_mdc0list;
-	const char            *msg __maybe_unused;
 
 	pd = &mp->pds_pdv[pdh];
 
@@ -1224,14 +1224,14 @@ static void pmd_objs_load_worker(struct work_struct *ws)
 
 	olw = container_of(ws, struct pmd_obj_load_work, olw_work);
 
-	while (!*olw->olw_err) {
+	while (atomic64_read(olw->olw_err) == 0) {
 		sidx = atomic_fetch_add(1, olw->olw_progress);
 		if (sidx >= olw->olw_mp->pds_mda.mdi_slotvcnt)
 			break; /* No more MDCs to load */
 
 		err = pmd_objs_load(olw->olw_mp, sidx, &olw->olw_devrpt);
 		if (ev(err))
-			*olw->olw_err = err;
+			atomic64_set(olw->olw_err, err);
 	}
 }
 
@@ -1248,8 +1248,8 @@ static void pmd_objs_load_worker(struct work_struct *ws)
 static merr_t pmd_objs_load_parallel(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
 {
 	struct pmd_obj_load_work   *olwv;
-	volatile merr_t             err = 0;
 
+	atomic64_t  err = ATOMIC64_INIT(0);
 	atomic_t    progress = ATOMIC_INIT(1);
 	uint        njobs, inc, cpu, i;
 
@@ -1290,7 +1290,7 @@ static merr_t pmd_objs_load_parallel(struct mpool_descriptor *mp, struct mpool_d
 	/* Wait for all worker threads to complete */
 	flush_workqueue(mp->pds_workq);
 
-	if (ev(err)) {
+	if (ev(atomic64_read(&err) != 0)) {
 		/* Update devrpt passed in. */
 		for (i = 0; i < njobs; i++)
 			if (olwv[i].olw_devrpt.mdr_rcode) {
@@ -1301,7 +1301,7 @@ static merr_t pmd_objs_load_parallel(struct mpool_descriptor *mp, struct mpool_d
 
 	kfree(olwv);
 
-	return err;
+	return atomic64_read(&err);
 }
 
 merr_t
@@ -3146,20 +3146,20 @@ static void pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slot
 				if (cinfo->mmi_credit.ci_credit == 0)
 					i++;
 				break;
-			} else {
-				/* Available credit is < needed, assign all
-				 * the available credit and move to the next
-				 * mdc slot.
-				 */
-				cs->csm[csmidx].m_credit += cinfo->mmi_credit.ci_credit;
-				neededcredit -= cinfo->mmi_credit.ci_credit;
-				totalcredit  += cinfo->mmi_credit.ci_credit;
-				cinfo->mmi_credit.ci_credit = 0;
-
-				/* move to the next mdcslot and set member */
-				i++;
-				csmidx++;
 			}
+
+			/* Available credit is < needed, assign all
+			 * the available credit and move to the next
+			 * mdc slot.
+			 */
+			cs->csm[csmidx].m_credit += cinfo->mmi_credit.ci_credit;
+			neededcredit -= cinfo->mmi_credit.ci_credit;
+			totalcredit  += cinfo->mmi_credit.ci_credit;
+			cinfo->mmi_credit.ci_credit = 0;
+
+			/* move to the next mdcslot and set member */
+			i++;
+			csmidx++;
 		}
 	}
 	assert(totalcredit == MDC_TBL_SZ);

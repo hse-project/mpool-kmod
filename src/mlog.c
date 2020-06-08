@@ -679,7 +679,7 @@ mlog_read_iter_init(struct pmd_layout *layout, struct mlog_stat *lstat, struct m
  * @layout:
  * @lstat: mlog_stat
  */
-static void mlog_stat_init_common( struct pmd_layout *layout, struct mlog_stat *lstat)
+static void mlog_stat_init_common(struct pmd_layout *layout, struct mlog_stat *lstat)
 {
 	struct mlog_read_iter  *lri;
 

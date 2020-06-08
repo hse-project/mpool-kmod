@@ -447,7 +447,7 @@ struct pmd_obj_load_work {
 	struct work_struct          olw_work;
 	struct mpool_descriptor    *olw_mp;
 	atomic_t                   *olw_progress; /* relaxed is correct */
-	volatile merr_t            *olw_err;
+	atomic64_t                 *olw_err;
 	struct mpool_devrpt         olw_devrpt;
 };
 

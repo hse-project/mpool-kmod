@@ -26,7 +26,7 @@ merr_t merr_to_user(merr_t err, char __user *ubuf)
 		return (err & ~MERR_FILE_MASK);
 
 	if (!IS_ALIGNED((ulong)ubuf, MERR_ALIGN)) {
-		WARN_ONCE(1, "ubuf misaligned: err %lx, ubuf %px", (ulong)err, ubuf);
+		WARN_ONCE(1, "ubuf misaligned: err %lx, ubuf %p", (ulong)err, ubuf);
 		return (err & ~MERR_FILE_MASK);
 	}
 
@@ -38,14 +38,14 @@ merr_t merr_to_user(merr_t err, char __user *ubuf)
 	off *= MERR_ALIGN;
 
 	if (off < -len || off > len) {
-		WARN_ONCE(1, "%s: ubuf bounds: err %lx, ubuf %px, off %ld len %ld, file %s",
+		WARN_ONCE(1, "%s: ubuf bounds: err %lx, ubuf %p, off %ld len %ld, file %s",
 			  __func__, (ulong)err, ubuf, (long)off, (long)len, file);
 		return (err & ~MERR_FILE_MASK);
 	}
 
 	rc = copy_to_user(ubuf + off + len, file, strlen(file) + 1);
 	if (rc) {
-		WARN_ONCE(1, "%s: ubuf copyout: err %lx, ubuf %px, off %ld, len %ld, file %s",
+		WARN_ONCE(1, "%s: ubuf copyout: err %lx, ubuf %p, off %ld, len %ld, file %s",
 			  __func__, (ulong)err, ubuf, (long)off, (long)len, file);
 		return (err & ~MERR_FILE_MASK);
 	}
