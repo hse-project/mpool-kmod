@@ -3592,8 +3592,7 @@ pmd_write_meta_to_latest_version(
 		 * equal to the latest version supported by this binary.
 		 * If it is not the case, the activate fails earlier.
 		 */
-		if (omfu_mdcver_cmp(&cinfo->mmi_mdcver, "==",
-				    omfu_mdcver_cur()))
+		if (omfu_mdcver_cmp(&cinfo->mmi_mdcver, "==", omfu_mdcver_cur()))
 			continue;
 
 		omfu_mdcver_to_str(&cinfo->mmi_mdcver, buf1, sizeof(buf1));
