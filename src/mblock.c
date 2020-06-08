@@ -33,8 +33,7 @@ static struct pmd_layout *mblock2layout(struct mblock_descriptor *mbh)
 	if (ev(!layout))
 		return NULL;
 
-	WARN_ONCE(layout->eld_objid == 0 ||
-		  kref_read(&layout->eld_ref) < 2,
+	WARN_ONCE(layout->eld_objid == 0 || kref_read(&layout->eld_ref) < 2,
 		  "%s: %px, objid %lx, state %x, refcnt %ld\n",
 		  __func__, layout, (ulong)layout->eld_objid,
 		  layout->eld_state, (long)kref_read(&layout->eld_ref));
@@ -101,8 +100,7 @@ mblock_alloc_cmn(
 	ocap.moc_spare  = spare;
 
 	if (!objid) {
-		err = pmd_obj_alloc(mp, OMF_OBJ_MBLOCK, &ocap,
-				    mclassp, &layout);
+		err = pmd_obj_alloc(mp, OMF_OBJ_MBLOCK, &ocap, mclassp, &layout);
 		if (err)
 			return err;
 	} else {
@@ -220,8 +218,7 @@ merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 		return merr(EINVAL);
 	}
 
-	/* Commit will fail with EBUSY if aborting flag set.
-	 */
+	/* Commit will fail with EBUSY if aborting flag set. */
 	err = pmd_obj_commit(mp, layout);
 	if (ev(err)) {
 		mp_pr_rl("mpool %s, committing mblock 0x%lx failed",
@@ -378,8 +375,7 @@ mblock_write(
 		return merr(EINVAL);
 	}
 
-	err = mblock_rw_argcheck(mp, layout, iov, iovcnt, layout->eld_mblen,
-				 MPOOL_OP_WRITE, len);
+	err = mblock_rw_argcheck(mp, layout, iov, iovcnt, layout->eld_mblen, MPOOL_OP_WRITE, len);
 	if (ev(err)) {
 		mp_pr_debug("mblock write argcheck failed ", err);
 		return err;
@@ -397,8 +393,7 @@ mblock_write(
 	pmd_obj_wrlock(layout);
 	state = layout->eld_state;
 	if (!(state & PMD_LYT_COMMITTED)) {
-		err = pmd_layout_rw(mp, layout, iov, iovcnt, boff,
-				    REQ_FUA, MPOOL_OP_WRITE);
+		err = pmd_layout_rw(mp, layout, iov, iovcnt, boff, REQ_FUA, MPOOL_OP_WRITE);
 		if (!err)
 			layout->eld_mblen += len;
 	}
@@ -429,8 +424,7 @@ mblock_read(
 		return merr(EINVAL);
 	}
 
-	err = mblock_rw_argcheck(mp, layout, iov, iovcnt, boff,
-				 MPOOL_OP_READ, len);
+	err = mblock_rw_argcheck(mp, layout, iov, iovcnt, boff, MPOOL_OP_READ, len);
 	if (ev(err)) {
 		mp_pr_debug("mblock read argcheck failed ", err);
 		return err;
@@ -444,16 +438,13 @@ mblock_read(
 	assert(iovcnt == (len >> PAGE_SHIFT));
 
 	/*
-	 * read lock the mblock layout; mblock reads can proceed
-	 * concurrently; Taking the layout rw lock in read protects
-	 * against a rebuild.
-	 * mblock writes are serialized but concurrent with reads
+	 * Read lock the mblock layout; mblock reads can proceed concurrently;
+	 * Mblock writes are serialized but concurrent with reads
 	 */
 	pmd_obj_rdlock(layout);
 	state = layout->eld_state;
 	if (state & PMD_LYT_COMMITTED)
-		err = pmd_layout_rw(mp, layout, iov, iovcnt, boff, 0,
-				    MPOOL_OP_READ);
+		err = pmd_layout_rw(mp, layout, iov, iovcnt, boff, 0, MPOOL_OP_READ);
 	pmd_obj_rdunlock(layout);
 
 	return (state & PMD_LYT_COMMITTED) ? err : merr(EAGAIN);

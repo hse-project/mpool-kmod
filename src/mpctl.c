@@ -395,8 +395,7 @@ static void mpool_params_merge_defaults(struct mpool_params *params)
 
 	if (params->mp_ra_pages_max == U32_MAX)
 		params->mp_ra_pages_max = MPOOL_RA_PAGES_MAX;
-	params->mp_ra_pages_max = clamp_t(u32, params->mp_ra_pages_max,
-					  0, MPOOL_RA_PAGES_MAX);
+	params->mp_ra_pages_max = clamp_t(u32, params->mp_ra_pages_max, 0, MPOOL_RA_PAGES_MAX);
 
 	if (params->mp_mode != -1)
 		params->mp_mode &= 0777;
@@ -435,16 +434,13 @@ static bool mpool_params_merge_config(struct mpool_params *params, struct mpool_
 	}
 
 	if (memcmp(&uuidnull, &params->mp_utype, sizeof(uuidnull)) &&
-	    memcmp(&params->mp_utype, &cfg->mc_utype,
-		   sizeof(params->mp_utype))) {
-		memcpy(&cfg->mc_utype, &params->mp_utype,
-		       sizeof(cfg->mc_utype));
+	    memcmp(&params->mp_utype, &cfg->mc_utype, sizeof(params->mp_utype))) {
+		memcpy(&cfg->mc_utype, &params->mp_utype, sizeof(cfg->mc_utype));
 		changed = true;
 	}
 
 	if (strcmp(params->mp_label, MPOOL_LABEL_DEFAULT) &&
-	    strncmp(params->mp_label, cfg->mc_label,
-		    sizeof(params->mp_label))) {
+	    strncmp(params->mp_label, cfg->mc_label, sizeof(params->mp_label))) {
 		strlcpy(cfg->mc_label, params->mp_label, sizeof(cfg->mc_label));
 		changed = true;
 	}
@@ -498,8 +494,7 @@ static ssize_t mpc_mode_show(struct device *dev, struct device_attribute *da, ch
 
 static ssize_t mpc_ra_show(struct device *dev, struct device_attribute *da, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%u\n",
-			 dev_to_unit(dev)->un_ra_pages_max);
+	return scnprintf(buf, PAGE_SIZE, "%u\n", dev_to_unit(dev)->un_ra_pages_max);
 }
 
 static ssize_t mpc_label_show(struct device *dev, struct device_attribute *da, char *buf)
@@ -910,8 +905,7 @@ mpc_unit_setup(
 	unit->un_ds_oidv[1] = cfg->mc_oid2;
 	unit->un_ra_pages_max = cfg->mc_ra_pages_max;
 
-	device = device_create(ss->ss_class, NULL, unit->un_devno, unit,
-			       uinfo->ui_subdirfmt, name);
+	device = device_create(ss->ss_class, NULL, unit->un_devno, unit, uinfo->ui_subdirfmt, name);
 	if (ev(IS_ERR(device))) {
 		err = merr(PTR_ERR(device));
 		mp_pr_err("device_create %s failed", err, name);
@@ -922,10 +916,8 @@ mpc_unit_setup(
 	unit->un_device = device;
 	unit->un_uinfo = uinfo;
 
-	dev_info(unit->un_device,
-		 "minor %u, uid %u, gid %u, mode 0%02o",
-		 MINOR(unit->un_devno),
-		 cfg->mc_uid, cfg->mc_gid, cfg->mc_mode);
+	dev_info(unit->un_device, "minor %u, uid %u, gid %u, mode 0%02o",
+		 MINOR(unit->un_devno), cfg->mc_uid, cfg->mc_gid, cfg->mc_mode);
 
 	*unitp = unit;
 
@@ -956,8 +948,7 @@ static int mpc_rgnmap_isorphan(int rgn, void *item, void *data)
 	struct mpc_xvm *xvm = item;
 	void          **headp = data;
 
-	if (xvm && kref_read(&xvm->xvm_ref) == 1 &&
-	    !atomic_read(&xvm->xvm_opened)) {
+	if (xvm && kref_read(&xvm->xvm_ref) == 1 && !atomic_read(&xvm->xvm_opened)) {
 		idr_replace(&xvm->xvm_rgnmap->rm_root, NULL, rgn);
 		xvm->xvm_next = *headp;
 		*headp = xvm;
@@ -1197,8 +1188,7 @@ static vm_fault_t mpc_vm_fault_impl(struct vm_area_struct *vma, struct vm_fault 
 retry_find:
 	page = find_get_page(mapping, offset);
 	if (!page) {
-		int rc = mpc_alloc_and_readpage(vma, offset,
-						mapping_gfp_mask(mapping));
+		int rc = mpc_alloc_and_readpage(vma, offset, mapping_gfp_mask(mapping));
 
 		if (ev(rc < 0))
 			return (rc == -ENOMEM) ? VM_FAULT_OOM : VM_FAULT_SIGBUS;
@@ -1291,8 +1281,7 @@ static int mpc_readpage_impl(struct page *page, struct mpc_xvm *xvm)
 	iov[0].iov_base = page_address(page);
 	iov[0].iov_len = PAGE_SIZE;
 
-	err = mblock_read(xvm->xvm_mpdesc, mbinfo->mbdesc, iov, 1,
-			  offset, PAGE_SIZE);
+	err = mblock_read(xvm->xvm_mpdesc, mbinfo->mbdesc, iov, 1, offset, PAGE_SIZE);
 	if (ev(err)) {
 		unlock_page(page);
 		return -merr_errno(err);
@@ -1359,8 +1348,8 @@ static void mpc_readpages_cb(struct work_struct *work)
 		iov[i].iov_len = PAGE_SIZE;
 	}
 
-	err = mblock_read(xvm->xvm_mpdesc, args->a_mbdesc,
-			  iov, pagec, args->a_mboffset, pagec << PAGE_SHIFT);
+	err = mblock_read(xvm->xvm_mpdesc, args->a_mbdesc, iov,
+			  pagec, args->a_mboffset, pagec << PAGE_SHIFT);
 	if (ev(err))
 		goto errout;
 
@@ -1885,8 +1874,7 @@ static merr_t mpioc_mp_add(struct mpc_unit *unit, uint cmd, struct mpioc_drive *
 	}
 
 	for (i = 0; i < drv->drv_dpathc; ++i) {
-		err = mpool_drive_add(desc, dpathv[i], &pd_prop[i],
-				      &drv->drv_devrpt);
+		err = mpool_drive_add(desc, dpathv[i], &pd_prop[i], &drv->drv_devrpt);
 		if (ev(err))
 			break;
 	}
@@ -1989,14 +1977,12 @@ static merr_t mpioc_params_get(struct mpc_unit *unit, uint cmd, struct mpioc_par
 	mpool_get_xprops(desc, &xprops);
 
 	for (mclass = 0; mclass < MP_MED_NUMBER; mclass++)
-		params->mp_mblocksz[mclass] =
-			xprops.ppx_params.mp_mblocksz[mclass];
+		params->mp_mblocksz[mclass] = xprops.ppx_params.mp_mblocksz[mclass];
 
 	params->mp_spare_cap = xprops.ppx_drive_spares[MP_MED_CAPACITY];
 	params->mp_spare_stg = xprops.ppx_drive_spares[MP_MED_STAGING];
 
-	memcpy(params->mp_poolid.b, xprops.ppx_params.mp_poolid.b,
-	       MPOOL_UUID_SIZE);
+	memcpy(params->mp_poolid.b, xprops.ppx_params.mp_poolid.b, MPOOL_UUID_SIZE);
 
 	mutex_unlock(&ss->ss_lock);
 
@@ -2034,8 +2020,7 @@ static merr_t mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_par
 	params->mp_vma_size_max = mpc_xvm_size_max;
 
 	mutex_lock(&ss->ss_lock);
-	if (params->mp_uid != -1 || params->mp_gid != -1 ||
-	    params->mp_mode != -1) {
+	if (params->mp_uid != -1 || params->mp_gid != -1 || params->mp_mode != -1) {
 		err = mpc_mp_chown(unit, params);
 		if (ev(err)) {
 			mutex_unlock(&ss->ss_lock);
@@ -2046,14 +2031,12 @@ static merr_t mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_par
 
 	if (params->mp_label[0]) {
 		mpc_toascii(params->mp_label, sizeof(params->mp_label));
-		strlcpy(unit->un_label, params->mp_label,
-			sizeof(unit->un_label));
+		strlcpy(unit->un_label, params->mp_label, sizeof(unit->un_label));
 		journal = true;
 	}
 
 	if (memcmp(&uuidnull, &params->mp_utype, sizeof(uuidnull))) {
-		memcpy(&unit->un_utype, &params->mp_utype,
-		       sizeof(unit->un_utype));
+		memcpy(&unit->un_utype, &params->mp_utype, sizeof(unit->un_utype));
 		journal = true;
 	}
 
@@ -2075,15 +2058,13 @@ static merr_t mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_par
 	mp = unit->un_mpool->mp_desc;
 
 	if (params->mp_spare_cap != MPOOL_SPARES_INVALID) {
-		err = mpool_drive_spares(mp, MP_MED_CAPACITY,
-					 params->mp_spare_cap);
+		err = mpool_drive_spares(mp, MP_MED_CAPACITY, params->mp_spare_cap);
 		if (ev(err && merr_errno(err) != ENOENT))
 			rerr = err;
 	}
 
 	if (params->mp_spare_stg != MPOOL_SPARES_INVALID) {
-		err = mpool_drive_spares(mp, MP_MED_STAGING,
-					 params->mp_spare_stg);
+		err = mpool_drive_spares(mp, MP_MED_STAGING, params->mp_spare_stg);
 		if (ev(err && merr_errno(err) != ENOENT))
 			rerr = err;
 	}
@@ -2207,9 +2188,8 @@ mpioc_mp_create(
 
 	mdparm.mdp_mclassp = mp->mp_params.mp_mclassp;
 
-	err = mpool_create(mp->mp_params.mp_name, mp->mp_flags, &mdparm,
-			   *dpathv, pd_prop, &mpc_params, MPOOL_ROOT_LOG_CAP,
-			   devrpt);
+	err = mpool_create(mp->mp_params.mp_name, mp->mp_flags, &mdparm, *dpathv,
+			   pd_prop, &mpc_params, MPOOL_ROOT_LOG_CAP, devrpt);
 	if (err) {
 		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "%s: mpool %s, create failed",
 			     __func__, mp->mp_params.mp_name);
@@ -2222,15 +2202,12 @@ mpioc_mp_create(
 	 */
 	mpool_params_merge_defaults(&mp->mp_params);
 
-	err = mpc_mpool_open(mp->mp_dpathc, *dpathv,
-			     &mpool, &mp->mp_devrpt, pd_prop,
+	err = mpc_mpool_open(mp->mp_dpathc, *dpathv, &mpool, &mp->mp_devrpt, pd_prop,
 			     &mp->mp_params, mp->mp_flags);
 	if (err) {
 		if (mp->mp_devrpt.mdr_off == -1)
-			mpc_errinfo(&mp->mp_cmn, MPOOL_RC_STAT,
-				    mp->mp_params.mp_name);
-		mpool_destroy(mp->mp_dpathc, *dpathv, pd_prop, mp->mp_flags,
-			      devrpt);
+			mpc_errinfo(&mp->mp_cmn, MPOOL_RC_STAT, mp->mp_params.mp_name);
+		mpool_destroy(mp->mp_dpathc, *dpathv, pd_prop, mp->mp_flags, devrpt);
 		return err;
 	}
 
@@ -2293,8 +2270,7 @@ errout:
 	if (mpool) {
 		mpool_deactivate(mpool->mp_desc);
 		mpool->mp_desc = NULL;
-		mpool_destroy(mp->mp_dpathc, mpool->mp_dpathv, pd_prop,
-			      mp->mp_flags, devrpt);
+		mpool_destroy(mp->mp_dpathc, mpool->mp_dpathv, pd_prop, mp->mp_flags, devrpt);
 	}
 
 	/* For failures after mpc_unit_setup() (i.e., mpool != NULL)
@@ -2352,13 +2328,11 @@ mpioc_mp_activate(
 	 * Create an mpc_mpool object through which we can (re)open and manage
 	 * the mpool.  If successful, mpc_mpool_open() adopts dpathv.
 	 */
-	err = mpc_mpool_open(mp->mp_dpathc, *dpathv,
-			     &mpool, &mp->mp_devrpt, pd_prop,
+	err = mpc_mpool_open(mp->mp_dpathc, *dpathv, &mpool, &mp->mp_devrpt, pd_prop,
 			     &mp->mp_params, mp->mp_flags);
 	if (err) {
 		if (mp->mp_devrpt.mdr_off == -1)
-			mpc_errinfo(&mp->mp_cmn, MPOOL_RC_STAT,
-				    mp->mp_params.mp_name);
+			mpc_errinfo(&mp->mp_cmn, MPOOL_RC_STAT, mp->mp_params.mp_name);
 		return err;
 	}
 
@@ -2394,10 +2368,8 @@ mpioc_mp_activate(
 	mp->mp_params.mp_oidv[1] = cfg.mc_oid2;
 	mp->mp_params.mp_ra_pages_max = cfg.mc_ra_pages_max;
 	mp->mp_params.mp_vma_size_max = cfg.mc_vma_size_max;
-	memcpy(&mp->mp_params.mp_utype, &cfg.mc_utype,
-	       sizeof(mp->mp_params.mp_utype));
-	strlcpy(mp->mp_params.mp_label, cfg.mc_label,
-		sizeof(mp->mp_params.mp_label));
+	memcpy(&mp->mp_params.mp_utype, &cfg.mc_utype, sizeof(mp->mp_params.mp_utype));
+	strlcpy(mp->mp_params.mp_label, cfg.mc_label, sizeof(mp->mp_params.mp_label));
 
 	err = mpc_params_register(unit, MPC_MPOOL_PARAMS_CNT);
 	if (ev(err)) {
@@ -2647,14 +2619,12 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 				break;
 			}
 		}
-		err = mpool_destroy(mp->mp_dpathc, dpathv, pd_prop,
-				    mp->mp_flags, &mp->mp_devrpt);
+		err = mpool_destroy(mp->mp_dpathc, dpathv, pd_prop, mp->mp_flags, &mp->mp_devrpt);
 		break;
 
 	case MPIOC_MP_RENAME:
-		err = mpool_rename(mp->mp_dpathc, dpathv, pd_prop,
-				   mp->mp_flags, mp->mp_params.mp_name,
-				   &mp->mp_devrpt);
+		err = mpool_rename(mp->mp_dpathc, dpathv, pd_prop, mp->mp_flags,
+				   mp->mp_params.mp_name, &mp->mp_devrpt);
 		break;
 	}
 
@@ -2729,8 +2699,7 @@ static merr_t mpioc_devprops_get(struct mpc_unit *unit, struct mpioc_devprops *d
 	if (unit->un_mpool) {
 		struct mpool_descriptor *mp = unit->un_mpool->mp_desc;
 
-		err = mpool_get_devprops_by_name(mp, devprops->dpr_pdname,
-						 &devprops->dpr_devprops);
+		err = mpool_get_devprops_by_name(mp, devprops->dpr_pdname, &devprops->dpr_devprops);
 	}
 
 	return ev(err);
@@ -2837,8 +2806,7 @@ static merr_t mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
 
 	mpool = unit->un_mpool->mp_desc;
 
-	err = mblock_alloc(mpool, mb->mb_mclassp, mb->mb_spare,
-			   &mblock, &props);
+	err = mblock_alloc(mpool, mb->mb_mclassp, mb->mb_spare, &mblock, &props);
 	if (ev(err))
 		return err;
 
@@ -3002,10 +2970,8 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 	if (copy_from_user(kiov, mbrw->mb_iov, kiovsz)) {
 		err = merr(EFAULT);
 	} else {
-		err = mpc_physio(mpool, mblock,
-				 kiov, mbrw->mb_iov_cnt, mbrw->mb_offset,
-				 MP_OBJ_MBLOCK,
-				 (cmd == MPIOC_MB_READ) ? READ : WRITE,
+		err = mpc_physio(mpool, mblock, kiov, mbrw->mb_iov_cnt, mbrw->mb_offset,
+				 MP_OBJ_MBLOCK, (cmd == MPIOC_MB_READ) ? READ : WRITE,
 				 stkbuf, stkbufsz);
 	}
 
@@ -3035,13 +3001,11 @@ merr_t mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 
 	switch (cmd) {
 	case MPIOC_MLOG_ALLOC:
-		err = mlog_alloc(mpool, &ml->ml_cap, ml->ml_mclassp,
-				 &props, &mlog);
+		err = mlog_alloc(mpool, &ml->ml_cap, ml->ml_mclassp, &props, &mlog);
 		break;
 
 	case MPIOC_MLOG_REALLOC:
-		err = mlog_realloc(mpool, ml->ml_objid, &ml->ml_cap,
-				   ml->ml_mclassp, &props, &mlog);
+		err = mlog_realloc(mpool, ml->ml_objid, &ml->ml_cap, ml->ml_mclassp, &props, &mlog);
 		break;
 
 	default:
@@ -3175,10 +3139,8 @@ merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi, void *stkb
 	if (copy_from_user(kiov, mi->mi_iov, kiovsz)) {
 		err = merr(EFAULT);
 	} else {
-		err = mpc_physio(mpool, mlog, kiov,
-				 mi->mi_iovc, mi->mi_off, MP_OBJ_MLOG,
-				 (mi->mi_op == MPOOL_OP_READ) ? READ : WRITE,
-				 stkbuf, stkbufsz);
+		err = mpc_physio(mpool, mlog, kiov, mi->mi_iovc, mi->mi_off, MP_OBJ_MLOG,
+				 (mi->mi_op == MPOOL_OP_READ) ? READ : WRITE, stkbuf, stkbufsz);
 	}
 
 	mlog_put(mpool, mlog);
@@ -3307,8 +3269,7 @@ static merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpioc_vma *ioc)
 		struct mpc_mbinfo *mbinfo = mbinfov + i;
 		struct mblock_props props;
 
-		err = mblock_find_get(mpdesc, mbidv[i], 1,
-				      &props, &mbinfo->mbdesc);
+		err = mblock_find_get(mpdesc, mbidv[i], 1, &props, &mbinfo->mbdesc);
 		if (err) {
 			mbidc = i;
 			goto errout;
@@ -3380,12 +3341,10 @@ static merr_t mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
 
 	mutex_lock(&rm->rm_lock);
 	xvm = idr_find(&rm->rm_root, rgn);
-	if (xvm && kref_read(&xvm->xvm_ref) == 1 &&
-	    !atomic_read(&xvm->xvm_opened)) {
+	if (xvm && kref_read(&xvm->xvm_ref) == 1 && !atomic_read(&xvm->xvm_opened))
 		idr_remove(&rm->rm_root, rgn);
-	} else {
+	else
 		xvm = NULL;
-	}
 	mutex_unlock(&rm->rm_lock);
 
 	if (xvm)
@@ -3832,8 +3791,7 @@ mpc_physio(
 	if (!pagesv)
 		return merr(ENOMEM);
 
-	iov_base = (struct iovec *)
-		((char *)pagesv + (sizeof(*pagesv) * pagesc));
+	iov_base = (struct iovec *)((char *)pagesv + (sizeof(*pagesv) * pagesc));
 
 #if HAVE_IOV_ITER_INIT_DIRECTION
 	iov_iter_init(&iter, rw, uiov, uioc, length);
@@ -3846,28 +3804,23 @@ mpc_physio(
 		/* Get struct page vector for the user buffers.
 		 */
 #if HAVE_IOV_ITER_GET_PAGES
-		cc = iov_iter_get_pages(&iter, &pagesv[i],
-					length - (i * PAGE_SIZE),
+		cc = iov_iter_get_pages(&iter, &pagesv[i], length - (i * PAGE_SIZE),
 					pagesc - i, &pgbase);
 #else
-		int npages = ((ulong)iter.iov->iov_len - iter.iov_offset +
-			PAGE_SIZE - 1) / PAGE_SIZE;
+		int npages = ((ulong)iter.iov->iov_len - iter.iov_offset + PAGE_SIZE - 1) /
+			PAGE_SIZE;
 
-		pgbase = ((ulong)iter.iov->iov_base + iter.iov_offset) &
-			(PAGE_SIZE - 1);
+		pgbase = ((ulong)iter.iov->iov_base + iter.iov_offset) & (PAGE_SIZE - 1);
 
 		/*
 		 * The 3rd parameter "write" should be true if this is a
 		 * write to memory (passed in first parameter).
 		 * Note that this is the inverse of the I/O direction.
 		 */
-		cc = get_user_pages_fast(
-			(ulong)iter.iov->iov_base + iter.iov_offset,
-			npages, (rw != WRITE), &pagesv[i]);
+		cc = get_user_pages_fast((ulong)iter.iov->iov_base + iter.iov_offset,
+					 npages, (rw != WRITE), &pagesv[i]);
 
-		/* This works because we require I/Os to be page-aligned &
-		 * page multiple
-		 */
+		/* This works because we require I/Os to be page-aligned & page multiple */
 		if (cc > 0)
 			cc = cc * PAGE_SIZE;
 #endif
@@ -3890,9 +3843,7 @@ mpc_physio(
 		iov_iter_advance(&iter, cc);
 	}
 
-	/* Build an array of iovecs for mpool so that it can directly
-	 * access the user data.
-	 */
+	/* Build an array of iovecs for mpool so that it can directly access the user data. */
 	for (i = 0, iov = iov_base; i < pagesc; ++i, ++iov, ++niov) {
 		iov->iov_len = PAGE_SIZE;
 		iov->iov_base = kmap(pagesv[i]);
@@ -3907,12 +3858,10 @@ mpc_physio(
 	switch (objtype) {
 	case MP_OBJ_MBLOCK:
 		if (rw == WRITE) {
-			err = mblock_write(mpd, desc, iov_base, niov,
-					   pagesc << PAGE_SHIFT);
+			err = mblock_write(mpd, desc, iov_base, niov, pagesc << PAGE_SHIFT);
 			ev(err);
 		} else {
-			err = mblock_read(mpd, desc, iov_base, niov, offset,
-					  pagesc << PAGE_SHIFT);
+			err = mblock_read(mpd, desc, iov_base, niov, offset, pagesc << PAGE_SHIFT);
 			ev(err);
 		}
 		break;
@@ -4103,9 +4052,8 @@ static __init int mpc_init(void)
 	sz = sizeof(struct mpc_mbinfo) * 8;
 	mpc_xvm_cachesz[0] = sizeof(struct mpc_xvm) + sz;
 
-	mpc_xvm_cache[0] = kmem_cache_create(
-		"mpool_xvm_0", mpc_xvm_cachesz[0], 0,
-		SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
+	mpc_xvm_cache[0] = kmem_cache_create("mpool_xvm_0", mpc_xvm_cachesz[0], 0,
+					     SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 	if (!mpc_xvm_cache[0]) {
 		errmsg = "mpc xvm cache 0 create failed";
 		err = merr(ENOMEM);
@@ -4115,9 +4063,8 @@ static __init int mpc_init(void)
 	sz = sizeof(struct mpc_mbinfo) * 32;
 	mpc_xvm_cachesz[1] = sizeof(struct mpc_xvm) + sz;
 
-	mpc_xvm_cache[1] = kmem_cache_create(
-		"mpool_xvm_1", mpc_xvm_cachesz[1], 0,
-		SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
+	mpc_xvm_cache[1] = kmem_cache_create("mpool_xvm_1", mpc_xvm_cachesz[1], 0,
+					     SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 	if (!mpc_xvm_cache[1]) {
 		errmsg = "mpc xvm cache 1 create failed";
 		err = merr(ENOMEM);
@@ -4210,8 +4157,7 @@ static __init int mpc_init(void)
 	}
 #endif
 
-	err = mpc_unit_setup(&mpc_uinfo_ctl, MPC_DEV_CTLNAME,
-			     &cfg, NULL, &ctlunit, &cmn);
+	err = mpc_unit_setup(&mpc_uinfo_ctl, MPC_DEV_CTLNAME, &cfg, NULL, &ctlunit, &cmn);
 	if (err) {
 		errmsg = "cannot create control device";
 		goto errout;

@@ -444,12 +444,10 @@ omf_dparm_unpack_letoh(
 	merr_t err;
 
 	if (unpackonly == UNPACKONLY)
-		err = omf_upgrade_unpack_only(dp, sizeof(*dp), inbuf,
-			devparm_descriptor_table,
+		err = omf_upgrade_unpack_only(dp, sizeof(*dp), inbuf, devparm_descriptor_table,
 			ARRAY_SIZE(devparm_descriptor_table), sbver, mdcver);
 	else
-		err = omf_unpack_letoh_and_convert(dp, sizeof(*dp), inbuf,
-			devparm_descriptor_table,
+		err = omf_unpack_letoh_and_convert(dp, sizeof(*dp), inbuf, devparm_descriptor_table,
 			ARRAY_SIZE(devparm_descriptor_table), sbver, mdcver);
 
 	return ev(err);
@@ -498,12 +496,10 @@ omf_layout_unpack_letoh(
 	merr_t err;
 
 	if (unpackonly == UNPACKONLY)
-		err = omf_upgrade_unpack_only(ld, sizeof(*ld), inbuf,
-			layout_descriptor_table,
+		err = omf_upgrade_unpack_only(ld, sizeof(*ld), inbuf, layout_descriptor_table,
 			ARRAY_SIZE(layout_descriptor_table), sbver, mdcver);
 	else
-		err = omf_unpack_letoh_and_convert(ld, sizeof(*ld), inbuf,
-			layout_descriptor_table,
+		err = omf_unpack_letoh_and_convert(ld, sizeof(*ld), inbuf, layout_descriptor_table,
 			ARRAY_SIZE(layout_descriptor_table), sbver, mdcver);
 
 	return ev(err);
@@ -532,15 +528,13 @@ omf_pmd_layout_pack_htole(
 
 	ocre_omf = (struct mdcrec_data_ocreate_omf *)outbuf;
 	omf_set_pdrc_rtype(ocre_omf, rtype);
-	omf_set_pdrc_mclass(ocre_omf,
-			    mp->pds_pdv[ecl->eld_ld.ol_pdh].pdi_mclass);
+	omf_set_pdrc_mclass(ocre_omf, mp->pds_pdv[ecl->eld_ld.ol_pdh].pdi_mclass);
 	omf_set_pdrc_objid(ocre_omf, ecl->eld_objid);
 	omf_set_pdrc_gen(ocre_omf, ecl->eld_gen);
 	omf_set_pdrc_mblen(ocre_omf, ecl->eld_mblen);
 
 	if (objid_type(ecl->eld_objid) == OMF_OBJ_MLOG) {
-		memcpy(ocre_omf->pdrc_uuid, ecl->eld_uuid.uuid,
-		       OMF_UUID_PACKLEN);
+		memcpy(ocre_omf->pdrc_uuid, ecl->eld_uuid.uuid, OMF_UUID_PACKLEN);
 		data_rec_sz += OMF_UUID_PACKLEN;
 	}
 
@@ -572,8 +566,7 @@ static merr_t omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf)
 	ocre_omf = (struct mdcrec_data_ocreate_omf *)inbuf;
 
 	cdr->omd_rtype = omf_pdrc_rtype(ocre_omf);
-	if (cdr->omd_rtype != OMF_MDR_OCREATE &&
-		cdr->omd_rtype == OMF_MDR_OUPDATE) {
+	if (cdr->omd_rtype != OMF_MDR_OCREATE && cdr->omd_rtype == OMF_MDR_OUPDATE) {
 		err = merr(EINVAL);
 		mp_pr_err("Unpacking layout failed, wrong record type %d", err, cdr->omd_rtype);
 		return err;
@@ -585,11 +578,9 @@ static merr_t omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf)
 	cdr->u.obj.omd_mblen = omf_pdrc_mblen(ocre_omf);
 
 	if (objid_type(cdr->u.obj.omd_objid) == OMF_OBJ_MLOG)
-		memcpy(cdr->u.obj.omd_uuid.uuid, ocre_omf->pdrc_uuid,
-		       OMF_UUID_PACKLEN);
+		memcpy(cdr->u.obj.omd_uuid.uuid, ocre_omf->pdrc_uuid, OMF_UUID_PACKLEN);
 
-	err = omf_layout_unpack_letoh(&cdr->u.obj.omd_old,
-				      (char *)&(ocre_omf->pdrc_ld),
+	err = omf_layout_unpack_letoh(&cdr->u.obj.omd_old, (char *)&(ocre_omf->pdrc_ld),
 				      OMF_SB_DESC_V1, NULL, UNPACKONLY);
 	if (ev(err))
 		return err;
@@ -629,10 +620,9 @@ omf_pmd_layout_unpack_letoh(
 	merr_t err;
 	int    i;
 
-	err = omf_unpack_letoh_and_convert(cdr, sizeof(*cdr), inbuf,
-					mdcrec_data_ocreate_table,
-					ARRAY_SIZE(mdcrec_data_ocreate_table),
-					OMF_SB_DESC_UNDEF, mdcver);
+	err = omf_unpack_letoh_and_convert(cdr, sizeof(*cdr), inbuf, mdcrec_data_ocreate_table,
+					   ARRAY_SIZE(mdcrec_data_ocreate_table),
+					   OMF_SB_DESC_UNDEF, mdcver);
 	if (ev(err)) {
 		char buf[MAX_MDCVERSTR];
 
@@ -642,10 +632,8 @@ omf_pmd_layout_unpack_letoh(
 		return err;
 	}
 
-	ecl = pmd_layout_alloc(mp, &cdr->u.obj.omd_uuid,
-			       cdr->u.obj.omd_objid, cdr->u.obj.omd_gen,
-			       cdr->u.obj.omd_mblen,
-			       cdr->u.obj.omd_old.ol_zcnt);
+	ecl = pmd_layout_alloc(mp, &cdr->u.obj.omd_uuid, cdr->u.obj.omd_objid, cdr->u.obj.omd_gen,
+			       cdr->u.obj.omd_mblen, cdr->u.obj.omd_old.ol_zcnt);
 	if (!ecl) {
 		err = merr(ENOMEM);
 		mp_pr_err("mpool %s, unpacking layout failed, could not allocate layout structure",
@@ -717,8 +705,7 @@ struct omf_mdcver *omf_sbver_to_mdcver(enum sb_descriptor_ver_omf sbver)
 {
 	struct upgrade_history *uhtab;
 
-	uhtab = omf_find_upgrade_hist(sb_descriptor_table,
-				      ARRAY_SIZE(sb_descriptor_table),
+	uhtab = omf_find_upgrade_hist(sb_descriptor_table, ARRAY_SIZE(sb_descriptor_table),
 				      sbver, NULL);
 	if (uhtab) {
 		assert(uhtab->uh_sbver == sbver);
@@ -755,34 +742,27 @@ merr_t omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf)
 
 	omf_set_psb_mdc01gen(sb_omf, sb->osb_mdc01gen);
 	omf_set_psb_mdc01uuid(sb_omf, sb->osb_mdc01uuid.uuid, MPOOL_UUID_SIZE);
-	omf_layout_pack_htole(&(sb->osb_mdc01desc),
-		(char *)&(sb_omf->psb_mdc01desc));
-	omf_set_psb_mdc01devid(sb_omf, sb->osb_mdc01devid.uuid,
-			       MPOOL_UUID_SIZE);
+	omf_layout_pack_htole(&(sb->osb_mdc01desc), (char *)&(sb_omf->psb_mdc01desc));
+	omf_set_psb_mdc01devid(sb_omf, sb->osb_mdc01devid.uuid, MPOOL_UUID_SIZE);
 
 	omf_set_psb_mdc02gen(sb_omf, sb->osb_mdc02gen);
 	omf_set_psb_mdc02uuid(sb_omf, sb->osb_mdc02uuid.uuid, MPOOL_UUID_SIZE);
-	omf_layout_pack_htole(&(sb->osb_mdc02desc),
-		(char *)&(sb_omf->psb_mdc02desc));
-	omf_set_psb_mdc02devid(sb_omf, sb->osb_mdc02devid.uuid,
-			       MPOOL_UUID_SIZE);
+	omf_layout_pack_htole(&(sb->osb_mdc02desc), (char *)&(sb_omf->psb_mdc02desc));
+	omf_set_psb_mdc02devid(sb_omf, sb->osb_mdc02devid.uuid, MPOOL_UUID_SIZE);
 
 	outbuf = (char *)&sb_omf->psb_mdc0dev;
 	omf_dparm_pack_htole(&sb->osb_mdc0dev, outbuf);
 
 	/* Add CKSUM1 */
-	err = omf_cksum_crc32c_le((char *) sb_omf,
-				offsetof(struct sb_descriptor_omf, psb_cksum1),
-				cksum);
+	err = omf_cksum_crc32c_le((char *) sb_omf, offsetof(struct sb_descriptor_omf, psb_cksum1),
+				  cksum);
 	if (err)
 		return merr(EINVAL);
 
 	omf_set_psb_cksum1(sb_omf, cksum, 4);
 
 	/* Add CKSUM2 */
-	err = omf_cksum_crc32c_le((char *) &(sb_omf->psb_parm),
-				sizeof(sb_omf->psb_parm),
-				cksum);
+	err = omf_cksum_crc32c_le((char *) &(sb_omf->psb_parm), sizeof(sb_omf->psb_parm), cksum);
 	if (err)
 		return merr(EINVAL);
 
@@ -811,8 +791,7 @@ merr_t omf_sb_unpack_letoh_v1(void *out, const char *inbuf)
 	sb = (struct omf_sb_descriptor *)out;
 
 	/* verify CKSUM2 */
-	err = omf_cksum_crc32c_le((char *) &(sb_omf->psb_parm),
-				  sizeof(sb_omf->psb_parm), cksum);
+	err = omf_cksum_crc32c_le((char *) &(sb_omf->psb_parm), sizeof(sb_omf->psb_parm), cksum);
 	omf_psb_cksum2(sb_omf, omf_cksum, 4);
 
 	if (err || memcmp(cksum, omf_cksum, 4))
@@ -832,25 +811,22 @@ merr_t omf_sb_unpack_letoh_v1(void *out, const char *inbuf)
 
 	sb->osb_gen = omf_psb_gen(sb_omf);
 	omf_dparm_unpack_letoh(&(sb->osb_parm), (char *)&(sb_omf->psb_parm),
-		OMF_SB_DESC_V1, NULL, UNPACKONLY);
+			       OMF_SB_DESC_V1, NULL, UNPACKONLY);
 
 	sb->osb_mdc01gen  = omf_psb_mdc01gen(sb_omf);
 	omf_psb_mdc01uuid(sb_omf, sb->osb_mdc01uuid.uuid, MPOOL_UUID_SIZE);
-	omf_layout_unpack_letoh(&(sb->osb_mdc01desc),
-		(char *)&(sb_omf->psb_mdc01desc), OMF_SB_DESC_V1, NULL,
-		UNPACKONLY);
+	omf_layout_unpack_letoh(&(sb->osb_mdc01desc), (char *)&(sb_omf->psb_mdc01desc),
+				OMF_SB_DESC_V1, NULL, UNPACKONLY);
 	omf_psb_mdc01devid(sb_omf, sb->osb_mdc01devid.uuid, MPOOL_UUID_SIZE);
 
 	sb->osb_mdc02gen = omf_psb_mdc02gen(sb_omf);
 	omf_psb_mdc02uuid(sb_omf, sb->osb_mdc02uuid.uuid, MPOOL_UUID_SIZE);
-	omf_layout_unpack_letoh(&(sb->osb_mdc02desc),
-		(char *)&(sb_omf->psb_mdc02desc), OMF_SB_DESC_V1, NULL,
-		UNPACKONLY);
+	omf_layout_unpack_letoh(&(sb->osb_mdc02desc), (char *)&(sb_omf->psb_mdc02desc),
+				OMF_SB_DESC_V1, NULL, UNPACKONLY);
 	omf_psb_mdc02devid(sb_omf, sb->osb_mdc02devid.uuid, MPOOL_UUID_SIZE);
 
 	inbuf = (char *)&sb_omf->psb_mdc0dev;
-	omf_dparm_unpack_letoh(&sb->osb_mdc0dev, inbuf,
-			       OMF_SB_DESC_V1, NULL, UNPACKONLY);
+	omf_dparm_unpack_letoh(&sb->osb_mdc0dev, inbuf, OMF_SB_DESC_V1, NULL, UNPACKONLY);
 
 	return 0;
 }
@@ -879,8 +855,7 @@ omf_sb_unpack_letoh(
 		return merr(EBADF);
 
 	/* verify CKSUM1 */
-	err = omf_cksum_crc32c_le(inbuf,
-		offsetof(struct sb_descriptor_omf, psb_cksum1), cksum);
+	err = omf_cksum_crc32c_le(inbuf, offsetof(struct sb_descriptor_omf, psb_cksum1), cksum);
 	omf_psb_cksum1(sb_omf, omf_cksum, 4);
 	if (err || memcmp(cksum, omf_cksum, 4))
 		return merr(EINVAL);
@@ -893,9 +868,8 @@ omf_sb_unpack_letoh(
 		return merr(EPROTONOSUPPORT);
 	}
 
-	err = omf_unpack_letoh_and_convert(sb, sizeof(*sb), inbuf,
-		sb_descriptor_table, ARRAY_SIZE(sb_descriptor_table),
-		*omf_ver, NULL);
+	err = omf_unpack_letoh_and_convert(sb, sizeof(*sb), inbuf, sb_descriptor_table,
+					   ARRAY_SIZE(sb_descriptor_table), *omf_ver, NULL);
 	if (ev(err))
 		mp_pr_err("Unpacking superblock failed for version %u", err, *omf_ver);
 
@@ -957,9 +931,7 @@ omf_mdcrec_objcmn_pack_htole(struct mpool_descriptor *mp, struct omf_mdcrec_data
 		break;
 	}
 
-	if (cdr->omd_rtype != OMF_MDR_OCREATE &&
-	    cdr->omd_rtype != OMF_MDR_OUPDATE) {
-		/* unknown rtype */
+	if (cdr->omd_rtype != OMF_MDR_OCREATE && cdr->omd_rtype != OMF_MDR_OUPDATE) {
 		mp_pr_warn("mpool %s, packing object, unknown rec type %d",
 			   mp->pds_name, cdr->omd_rtype);
 		return -EINVAL;
@@ -1029,13 +1001,11 @@ omf_mdcrec_objcmn_unpack_letoh(
 
 	case OMF_MDR_OCREATE:
 	case OMF_MDR_OUPDATE:
-		err = omf_pmd_layout_unpack_letoh(mp, mdcver, rtype,
-						  cdr, inbuf);
+		err = omf_pmd_layout_unpack_letoh(mp, mdcver, rtype, cdr, inbuf);
 		ev(err);
 		break;
 
 	default:
-		/* unknown rtype */
 		mp_pr_warn("mpool %s, invalid rtype %d", mp->pds_name, rtype);
 		return merr(EINVAL);
 	}
@@ -1063,8 +1033,7 @@ static u64 omf_mdcrec_mcconfig_pack_htole(struct omf_mdcrec_data *cdr, char *out
 
 	mc_omf = (struct mdcrec_data_mcconfig_omf *)outbuf;
 	omf_set_pdrs_rtype(mc_omf, cdr->omd_rtype);
-	omf_dparm_pack_htole(&(cdr->u.dev.omd_parm),
-		(char *)&(mc_omf->pdrs_parm));
+	omf_dparm_pack_htole(&(cdr->u.dev.omd_parm), (char *)&(mc_omf->pdrs_parm));
 
 	return sizeof(*mc_omf);
 }
@@ -1087,9 +1056,8 @@ omf_mdcrec_mcconfig_unpack_letoh(
 	mc_omf = (struct mdcrec_data_mcconfig_omf *)inbuf;
 
 	cdr->omd_rtype = omf_pdrs_rtype(mc_omf);
-	err = omf_dparm_unpack_letoh(&(cdr->u.dev.omd_parm),
-		(char *)&(mc_omf->pdrs_parm), OMF_SB_DESC_UNDEF,
-		mdcver, UNPACKCONVERT);
+	err = omf_dparm_unpack_letoh(&(cdr->u.dev.omd_parm), (char *)&(mc_omf->pdrs_parm),
+				     OMF_SB_DESC_UNDEF, mdcver, UNPACKCONVERT);
 
 	return ev(err);
 }
@@ -1186,10 +1154,8 @@ omf_mdcrec_mcspare_unpack_letoh(
 {
 	merr_t err;
 
-	err = omf_unpack_letoh_and_convert(cdr, sizeof(*cdr), inbuf,
-				mdcrec_data_mcspare_table,
-				ARRAY_SIZE(mdcrec_data_mcspare_table),
-				sbver, mdcver);
+	err = omf_unpack_letoh_and_convert(cdr, sizeof(*cdr), inbuf, mdcrec_data_mcspare_table,
+				ARRAY_SIZE(mdcrec_data_mcspare_table), sbver, mdcver);
 	return ev(err);
 }
 
@@ -1275,11 +1241,8 @@ static void omf_mdcrec_mpconfig_unpack_letoh(struct omf_mdcrec_data *cdr, const 
  */
 static bool mdcrec_type_objcmn(enum mdcrec_type_omf rtype)
 {
-	return (rtype == OMF_MDR_OCREATE ||
-		rtype == OMF_MDR_OUPDATE ||
-		rtype == OMF_MDR_ODELETE ||
-		rtype == OMF_MDR_OIDCKPT ||
-		rtype == OMF_MDR_OERASE);
+	return (rtype == OMF_MDR_OCREATE || rtype == OMF_MDR_OUPDATE || rtype == OMF_MDR_ODELETE ||
+		rtype == OMF_MDR_OIDCKPT || rtype == OMF_MDR_OERASE);
 }
 
 int omf_mdcrec_isobj_le(const char *inbuf)
@@ -1332,8 +1295,7 @@ omf_mdcrec_unpack_letoh(
 	else if (rtype == OMF_MDR_MCCONFIG)
 		omf_mdcrec_mcconfig_unpack_letoh(mdcver, cdr, inbuf);
 	else if (rtype == OMF_MDR_MCSPARE)
-		omf_mdcrec_mcspare_unpack_letoh(cdr, inbuf, OMF_SB_DESC_UNDEF,
-						mdcver);
+		omf_mdcrec_mcspare_unpack_letoh(cdr, inbuf, OMF_SB_DESC_UNDEF, mdcver);
 	else if (rtype == OMF_MDR_MPCONFIG)
 		omf_mdcrec_mpconfig_unpack_letoh(cdr, inbuf);
 	else {

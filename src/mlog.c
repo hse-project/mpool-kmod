@@ -202,9 +202,8 @@ mlog_alloc_cmn(
 		return err;
 
 	/*
-	 * mlogs rarely created and usually committed immediately so
-	 * erase in-line; mlog not committed so pmd_obj_erase()
-	 * not needed to make atomic
+	 * Mlogs rarely created and usually committed immediately so erase in-line;
+	 * mlog not committed so pmd_obj_erase() not needed to make atomic
 	 */
 	pmd_obj_wrlock(layout);
 	err = pmd_layout_erase(mp, layout);
@@ -548,10 +547,6 @@ mlog_logrecs_validate(
 	u16                     rbidx,
 	u8                      lbidx)
 {
-	/*
-	 * note: header len must be based on version since not
-	 * guaranteed latest
-	 */
 	merr_t                       err = 0;
 	u64                          recnum = 0;
 	int                          recoff;
@@ -573,10 +568,7 @@ mlog_logrecs_validate(
 
 		if (lrd.olr_rtype == OMF_LOGREC_CSTART) {
 			if (!lstat->lst_csem || lstat->lst_rsoff || recnum) {
-				/*
-				 * no compaction or not first rec in
-				 * first log block; logging err
-				 */
+				/* No compaction or not first rec in first log block */
 				err = merr(ENODATA);
 				mp_pr_err("no compact marker nor first rec %u %ld %u %u %lu",
 					  err, lstat->lst_csem, lstat->lst_rsoff,
@@ -586,12 +578,9 @@ mlog_logrecs_validate(
 			lstat->lst_cstart = 1;
 			*midrec = 0;
 		} else if (lrd.olr_rtype == OMF_LOGREC_CEND) {
-			if (!lstat->lst_csem || !lstat->lst_cstart ||
-			    lstat->lst_cend || *midrec) {
-				/* no compaction or cend before
-				 * cstart or more than one cend or
-				 * cend mid-record all of which are
-				 * logging errors
+			if (!lstat->lst_csem || !lstat->lst_cstart || lstat->lst_cend || *midrec) {
+				/* No compaction or cend before cstart or more than one cend or
+				 * cend mid-record.
 				 */
 				err = merr(ENODATA);
 				mp_pr_err("inconsistent compaction recs %u %u %u %d", err,
@@ -602,10 +591,7 @@ mlog_logrecs_validate(
 			lstat->lst_cend = 1;
 		} else if (lrd.olr_rtype == OMF_LOGREC_EOLB) {
 			if (*midrec || !recnum) {
-				/*
-				 * EOLB mid-record or first record;
-				 * logging error
-				 */
+				/* EOLB mid-record or first record. */
 				err = merr(ENODATA);
 				mp_pr_err("end of log block marker at wrong place %d %lu",
 					  err, *midrec, (ulong)recnum);
@@ -616,13 +602,10 @@ mlog_logrecs_validate(
 		} else if (lrd.olr_rtype == OMF_LOGREC_DATAFULL) {
 			if (*midrec && recnum) {
 				/*
-				 * can occur mid data rec only
-				 * if is first rec in log block
-				 * indicating partial data rec
-				 * at end of last log block
-				 * which is a valid failure
-				 * mode; otherwise is a logging
-				 * error
+				 * Can occur mid data rec only if is first rec in log block
+				 * indicating partial data rec at end of last log block
+				 * which is a valid failure mode; otherwise is a logging
+				 * error.
 				 */
 				err = merr(ENODATA);
 				mp_pr_err("data full marker at wrong place %d %lu",
@@ -641,10 +624,7 @@ mlog_logrecs_validate(
 			*midrec = 1;
 		} else if (lrd.olr_rtype == OMF_LOGREC_DATAMID) {
 			if (!*midrec) {
-				/*
-				 * must occur mid data record; logging
-				 * error
-				 */
+				/* Must occur mid data record. */
 				err = merr(ENODATA);
 				mp_pr_err("data mid marker at wrong place %d %lu",
 					  err, *midrec, (ulong)recnum);
@@ -652,10 +632,7 @@ mlog_logrecs_validate(
 			}
 		} else if (lrd.olr_rtype == OMF_LOGREC_DATALAST) {
 			if (!(*midrec)) {
-				/*
-				 * must occur mid data record; logging
-				 * error
-				 */
+				/* Must occur mid data record */
 				err = merr(ENODATA);
 				mp_pr_err("data last marker at wrong place %d %lu",
 					  err, *midrec, (ulong)recnum);
@@ -663,7 +640,6 @@ mlog_logrecs_validate(
 			}
 			*midrec = 0;
 		} else {
-			/* unknown rtype; logging error */
 			err = merr(ENODATA);
 			mp_pr_err("unknown record type %d %lu", err, lrd.olr_rtype, (ulong)recnum);
 			return err;
@@ -752,8 +728,7 @@ mlog_rw_internal(
 	if (!layout)
 		return merr(EINVAL);
 
-	return pmd_layout_rw(mp, layout, iov, iovcnt, boff,
-			     rw == MPOOL_OP_WRITE ? REQ_FUA : 0, rw);
+	return pmd_layout_rw(mp, layout, iov, iovcnt, boff, rw == MPOOL_OP_WRITE ? REQ_FUA : 0, rw);
 }
 
 /**
@@ -904,8 +879,7 @@ mlog_setup_buf(struct mlog_stat *lstat, struct iovec **riov, u16 iovcnt, u16 l_i
 
 	for (i = 0; i < iovcnt; i++, iov++) {
 
-		buf = ((op == MPOOL_OP_READ) ?
-			lstat->lst_rbuf[i] : lstat->lst_abuf[i]);
+		buf = ((op == MPOOL_OP_READ) ? lstat->lst_rbuf[i] : lstat->lst_abuf[i]);
 
 		/* iov_len for the last log page in read/write buffer. */
 		if (i == iovcnt - 1 && l_iolen != 0)
@@ -1041,8 +1015,7 @@ mlog_logpage_validate(
 		 * 5) Valid logs
 		 */
 		if (mpool_uuid_compare(&lbh.olh_magic, &layout->eld_uuid) ||
-		    (lbh.olh_gen != layout->eld_gen) ||
-		    (lbh.olh_pfsetid != *fsetidmax)) {
+		    (lbh.olh_gen != layout->eld_gen) || (lbh.olh_pfsetid != *fsetidmax)) {
 			*leol_found = true;
 			*pfsetid    = *fsetidmax;
 			rbuf       += sectsz;
@@ -1120,8 +1093,7 @@ mlog_populate_abuf(
 	off = *soff * sectsz;
 	assert(IS_ALIGNED(off, MLOG_LPGSZ(lstat)));
 
-	err = mlog_rw(mp, layout2mlog(layout), &iov, iovcnt, off,
-			MPOOL_OP_READ, skip_ser);
+	err = mlog_rw(mp, layout2mlog(layout), &iov, iovcnt, off, MPOOL_OP_READ, skip_ser);
 	if (err) {
 		mp_pr_err("mpool %s, mlog 0x%lx, read IO failed, iovcnt: %u, off: 0x%lx",
 			  err, mp->pds_name, (ulong)layout->eld_objid, iovcnt, off);
@@ -1197,8 +1169,7 @@ mlog_populate_rbuf(
 	off = *soff * sectsz;
 	assert(IS_ALIGNED(off, MLOG_LPGSZ(lstat)));
 
-	err = mlog_rw(mp, layout2mlog(layout), iov, iovcnt, off,
-			MPOOL_OP_READ, skip_ser);
+	err = mlog_rw(mp, layout2mlog(layout), iov, iovcnt, off, MPOOL_OP_READ, skip_ser);
 	if (err) {
 		mp_pr_err("mpool %s, mlog 0x%lx populate rbuf, IO failed iovcnt: %u, off: 0x%lx",
 			  err, mp->pds_name, (ulong)layout->eld_objid, iovcnt, off);
@@ -1290,14 +1261,12 @@ mlog_read_and_validate(struct mpool_descriptor *mp, struct pmd_layout *layout, b
 			/* No. of sectors in the last log page. */
 			if (rbidx == nlpgs - 1) {
 				nseclpg = nsecs % nseclpg;
-				nseclpg = nseclpg > 0 ? nseclpg :
-						MLOG_NSECLPG(lstat);
+				nseclpg = nseclpg > 0 ? nseclpg : MLOG_NSECLPG(lstat);
 			}
 
 			/* Validate the log block(s) in the log page @rbidx. */
-			err = mlog_logpage_validate(layout2mlog(layout),
-					lstat, rbidx, nseclpg, &midrec,
-					&leol_found, &fsetidmax, &pfsetid);
+			err = mlog_logpage_validate(layout2mlog(layout), lstat, rbidx, nseclpg,
+						    &midrec, &leol_found, &fsetidmax, &pfsetid);
 			if (err) {
 				mp_pr_err("mpool %s, mlog 0x%lx rbuf validate failed, leol: %d, fsetidmax: %u, pfsetid: %u",
 					  err, mp->pds_name, (ulong)layout->eld_objid, leol_found,
@@ -1393,20 +1362,19 @@ merr_t mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 fl
 	lstat = &layout->eld_lstat;
 
 	if (lstat->lst_abuf) {
-		/* log already open */
+		/* mlog already open */
 		if (csem && !lstat->lst_csem) {
 			pmd_obj_wrunlock(layout);
 
-			/* re-open has inconsistent csem flag */
+			/* Re-open has inconsistent csem flag */
 			err = merr(EINVAL);
 			mp_pr_err("mpool %s, re-opening of mlog 0x%lx, inconsistent csem %u %u",
 				  err, mp->pds_name, (ulong)layout->eld_objid,
 				  csem, lstat->lst_csem);
-		} else if (skip_ser &&
-				!(layout->eld_flags & MLOG_OF_SKIP_SER)) {
+		} else if (skip_ser && !(layout->eld_flags & MLOG_OF_SKIP_SER)) {
 			pmd_obj_wrunlock(layout);
 
-			/* re-open has inconsistent seralization flag */
+			/* Re-open has inconsistent seralization flag */
 			err = merr(EINVAL);
 			mp_pr_err("mpool %s, re-opening of mlog 0x%lx, inconsistent ser %u %u",
 				  err, mp->pds_name, (ulong)layout->eld_objid, skip_ser,
@@ -1518,15 +1486,12 @@ mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *layout, u16 ab
 		u16    aoff;
 		u16    sectsz;
 
-		/* This path is taken *only* for the first append following
-		 * an mlog_open().
-		 */
+		/* This path is taken *only* for the first append following an mlog_open(). */
 		sectsz = MLOG_SECSZ(lstat);
 		wsoff  = lstat->lst_wsoff;
 		aoff   = lstat->lst_aoff;
 
-		if ((!FORCE_4KA(lstat)) ||
-			(IS_ALIGNED(wsoff * sectsz, MLOG_LPGSZ(lstat)))) {
+		if ((!FORCE_4KA(lstat)) || (IS_ALIGNED(wsoff * sectsz, MLOG_LPGSZ(lstat)))) {
 			/* This is the common path */
 			lstat->lst_asoff = wsoff;
 			return 0;
@@ -1594,8 +1559,7 @@ static merr_t mlog_logblocks_hdrpack(struct pmd_layout *layout)
 			start = (lstat->lst_cfssoff >> ilog2(sectsz));
 
 		if (idx == abidx)
-			nseclpg = lstat->lst_wsoff -
-				(nseclpg * abidx + lstat->lst_asoff) + 1;
+			nseclpg = lstat->lst_wsoff - (nseclpg * abidx + lstat->lst_asoff) + 1;
 
 		for (sec = start; sec < nseclpg; sec++) {
 			lbh.olh_pfsetid = pfsetid;
@@ -1605,8 +1569,7 @@ static merr_t mlog_logblocks_hdrpack(struct pmd_layout *layout)
 			lpgoff = sec * sectsz;
 
 			/* Pack the log block header. */
-			err = omf_logblock_header_pack_htole(&lbh,
-						&lstat->lst_abuf[idx][lpgoff]);
+			err = omf_logblock_header_pack_htole(&lbh, &lstat->lst_abuf[idx][lpgoff]);
 			if (err) {
 				mp_pr_err("mlog packing lbh failed, log pg idx %u, vers %u failed",
 					  err, idx, lbh.olh_vers);
@@ -1614,10 +1577,7 @@ static merr_t mlog_logblocks_hdrpack(struct pmd_layout *layout)
 				return err;
 			}
 
-			/*
-			 * If there's more than one sector to flush, pfsetid
-			 * is set to cfsetid.
-			 */
+			/* If there's more than one sector to flush, pfsetid is set to cfsetid. */
 			pfsetid = cfsetid;
 		}
 	}
@@ -1652,8 +1612,7 @@ static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
 	if (!FORCE_4KA(lstat) && !(IS_SECPGA(lstat))) {
 		u8 asidx;
 
-		asidx = lstat->lst_wsoff -
-			(nseclpg * abidx + lstat->lst_asoff);
+		asidx = lstat->lst_wsoff - (nseclpg * abidx + lstat->lst_asoff);
 
 		/* No. of sectors in the last log page. */
 		if (asidx < nseclpg - 1)
@@ -1673,8 +1632,7 @@ static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
 	assert((IS_ALIGNED(off, MLOG_LPGSZ(lstat))) ||
 		(!FORCE_4KA(lstat) && IS_ALIGNED(off, MLOG_SECSZ(lstat))));
 
-	err = mlog_rw(mp, layout2mlog(layout), iov, abidx + 1, off,
-			MPOOL_OP_WRITE, skip_ser);
+	err = mlog_rw(mp, layout2mlog(layout), iov, abidx + 1, off, MPOOL_OP_WRITE, skip_ser);
 	if (ev(err)) {
 		mp_pr_err("mpool %s, mlog 0x%lx flush append buf, IO failed iovcnt %u, off 0x%lx",
 			  err, mp->pds_name, (ulong)layout->eld_objid, abidx + 1, off);
@@ -1912,9 +1870,8 @@ mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layout, boo
 		 * Inform pre-compaction of the size of the active mlog and
 		 * how much is used.
 		 */
-		pmd_precompact_alsz(mp, layout->eld_objid,
-			lstat->lst_wsoff * MLOG_SECSZ(lstat),
-			lstat->lst_mfp.mfp_totsec * MLOG_SECSZ(lstat));
+		pmd_precompact_alsz(mp, layout->eld_objid, lstat->lst_wsoff * MLOG_SECSZ(lstat),
+				    lstat->lst_mfp.mfp_totsec * MLOG_SECSZ(lstat));
 	}
 	mlog_free_abuf(lstat, start, end);
 
@@ -2067,8 +2024,7 @@ merr_t mlog_len(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *l
 
 	lstat = &layout->eld_lstat;
 	if (lstat->lst_abuf)
-		*len = ((u64) lstat->lst_wsoff * MLOG_SECSZ(lstat))
-			+ lstat->lst_aoff;
+		*len = ((u64) lstat->lst_wsoff * MLOG_SECSZ(lstat)) + lstat->lst_aoff;
 	else
 		err = merr(ENOENT);
 
@@ -2174,13 +2130,9 @@ mlog_update_append_idx(struct mpool_descriptor *mp, struct pmd_layout *layout, b
 	nseclpg = MLOG_NSECLPG(lstat);
 
 	if (sectsz - lstat->lst_aoff < OMF_LOGREC_DESC_PACKLEN) {
-		/*
-		 * If the log block is full, move to the next log
-		 * block in the buffer.
-		 */
+		/* If the log block is full, move to the next log block in the buffer. */
 		abidx = lstat->lst_abidx;
-		asidx = lstat->lst_wsoff - ((nseclpg * abidx) +
-				lstat->lst_asoff);
+		asidx = lstat->lst_wsoff - ((nseclpg * abidx) + lstat->lst_asoff);
 		if (asidx == nseclpg - 1)
 			++lstat->lst_abidx;
 		++lstat->lst_wsoff;
@@ -2217,7 +2169,7 @@ static s64 mlog_append_dmax(struct mpool_descriptor *mp, struct pmd_layout *layo
 	datalb = MLOG_TOTSEC(lstat);
 
 	if (lstat->lst_wsoff >= datalb) {
-		/* log already full */
+		/* mlog already full */
 		ev(1);
 		return -1;
 	}
@@ -2512,8 +2464,7 @@ mlog_append_data_internal(
 	lrd.olr_tlen = buflen;
 
 	while (true) {
-		if ((bufoff != buflen) &&
-				(mlog_append_dmax(mp, layout) == -1)) {
+		if ((bufoff != buflen) && (mlog_append_dmax(mp, layout) == -1)) {
 
 			/* mlog is full and there's more to write;
 			 * mlog_append_dmax() should prevent this, but it lied.
@@ -2530,16 +2481,14 @@ mlog_append_data_internal(
 
 		abidx  = lstat->lst_abidx;
 		abuf   = lstat->lst_abuf[abidx];
-		asidx  = lstat->lst_wsoff - ((nseclpg * abidx) +
-				lstat->lst_asoff);
+		asidx  = lstat->lst_wsoff - ((nseclpg * abidx) + lstat->lst_asoff);
 		lpgoff = asidx * sectsz;
 		aoff   = lstat->lst_aoff;
 
 		assert(abuf != NULL);
 
-		rlenmax = min(
-			(u64)(sectsz - aoff - OMF_LOGREC_DESC_PACKLEN),
-			(u64)OMF_LOGREC_DESC_RLENMAX);
+		rlenmax = min((u64)(sectsz - aoff - OMF_LOGREC_DESC_PACKLEN),
+			      (u64)OMF_LOGREC_DESC_RLENMAX);
 
 		if (buflen - bufoff <= rlenmax) {
 			lrd.olr_rlen = buflen - bufoff;
@@ -2568,8 +2517,7 @@ mlog_append_data_internal(
 
 		aoff = aoff + OMF_LOGREC_DESC_PACKLEN;
 		if (lrd.olr_rlen) {
-			memcpy_from_iov(iov, &abuf[lpgoff + aoff],
-					lrd.olr_rlen, &cpidx);
+			memcpy_from_iov(iov, &abuf[lpgoff + aoff], lrd.olr_rlen, &cpidx);
 			aoff   = aoff + lrd.olr_rlen;
 			bufoff = bufoff + lrd.olr_rlen;
 		}
@@ -2580,8 +2528,7 @@ mlog_append_data_internal(
 		 * if the CFS is full.
 		 */
 		if ((sync && buflen == bufoff) ||
-			(abidx == MLOG_NLPGMB(lstat) - 1 &&
-			 asidx == nseclpg - 1 &&
+			(abidx == MLOG_NLPGMB(lstat) - 1 && asidx == nseclpg - 1 &&
 			 sectsz - aoff < OMF_LOGREC_DESC_PACKLEN)) {
 
 			err = mlog_logblocks_flush(mp, layout, skip_ser);
@@ -2646,8 +2593,7 @@ mlog_append_datav(
 
 			/* Flush whatever we can. */
 			if (lstat->lst_abdirty) {
-				(void)mlog_logblocks_flush(mp, layout,
-						skip_ser);
+				(void)mlog_logblocks_flush(mp, layout, skip_ser);
 				lstat->lst_abdirty = false;
 			}
 		}
@@ -2927,8 +2873,7 @@ mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char
 		err = merr(EINVAL);
 		mp_pr_err("mpool %s, invalid offset %u %ld %ld",
 			  err, mp->pds_name, lri->lri_valid, lri->lri_soff, lstat->lst_wsoff);
-	} else if ((lri->lri_soff == lstat->lst_wsoff) ||
-			(lstat->lst_asoff > -1 &&
+	} else if ((lri->lri_soff == lstat->lst_wsoff) || (lstat->lst_asoff > -1 &&
 			lri->lri_soff >= lstat->lst_asoff &&
 			lri->lri_soff <= lstat->lst_wsoff)) {
 		/*
@@ -2941,22 +2886,16 @@ mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char
 		u8  nseclpg;
 
 		if (!lri->lri_roff)
-			/*
-			 * first read with handle from this log block
-			 * note: log block header length guaranteed that
-			 * of latest version
-			 */
+			/* First read with handle from this log block. */
 			lri->lri_roff = OMF_LOGBLOCK_HDR_PACKLEN;
 
-		if (lri->lri_soff == lstat->lst_wsoff &&
-				lri->lri_roff > lstat->lst_aoff) {
+		if (lri->lri_soff == lstat->lst_wsoff && lri->lri_roff > lstat->lst_aoff) {
 			/* lri is invalid; prior checks should prevent this */
 			err = merr(EINVAL);
 			mp_pr_err("mpool %s, invalid next offset %u %u",
 				  err, mp->pds_name, lri->lri_roff, lstat->lst_aoff);
 			goto out;
-		} else if (lri->lri_soff == lstat->lst_wsoff &&
-				lri->lri_roff == lstat->lst_aoff) {
+		} else if (lri->lri_soff == lstat->lst_wsoff && lri->lri_roff == lstat->lst_aoff) {
 			/* hit end of log */
 			err = merr(ENOMSG);
 			goto out;
@@ -2971,14 +2910,11 @@ mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char
 
 		*buf = &lstat->lst_abuf[abidx][asidx * sectsz];
 	} else {
-		/*
-		 * lri refers to an existing log block; fetch it if
-		 * not cached
-		 */
+		/* lri refers to an existing log block; fetch it if not cached. */
 		err = mlog_logblock_load_internal(mp, lri, buf);
 		if (!err) {
 			/*
-			 * note: log block header length must be based
+			 * NOTE: log block header length must be based
 			 * on version since not guaranteed to be the latest
 			 */
 			lbhlen = omf_logblock_header_len_le(*buf);
@@ -2989,10 +2925,7 @@ mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char
 					  err, mp->pds_name, (long)lbhlen);
 			} else {
 				if (!lri->lri_roff)
-					/*
-					 * first read with handle from
-					 * this log block
-					 */
+					/* First read with handle from this log block. */
 					lri->lri_roff = lbhlen;
 
 				if (lri->lri_roff == lbhlen)
@@ -3055,9 +2988,8 @@ mlog_read_data_next_impl(
 	if (layout->eld_flags & MLOG_OF_SKIP_SER)
 		skip_ser = true;
 	/*
-	 * need write lock because loading log block to read updates
-	 * lstat; currently have no use case requiring support
-	 * for concurrent readers.
+	 * Need write lock because loading log block to read updates lstat.
+	 * Currently have no use case requiring support for concurrent readers.
 	 */
 	if (!skip_ser)
 		pmd_obj_wrlock(layout);
@@ -3084,17 +3016,16 @@ mlog_read_data_next_impl(
 			  err, mp->pds_name, (ulong)layout->eld_objid);
 	} else if (lri->lri_gen != layout->eld_gen ||
 		   lri->lri_soff > lstat->lst_wsoff ||
-		   (lri->lri_soff == lstat->lst_wsoff && lri->lri_roff >
-		    lstat->lst_aoff) || lri->lri_roff > sectsz) {
+		   (lri->lri_soff == lstat->lst_wsoff && lri->lri_roff > lstat->lst_aoff) ||
+		   lri->lri_roff > sectsz) {
 
 		err = merr(EINVAL);
 		mp_pr_err("mpool %s, mlog 0x%lx, invalid args gen %lu %lu offsets %ld %ld %u %u %u",
 			  err, mp->pds_name, (ulong)layout->eld_objid, (ulong)lri->lri_gen,
 			  (ulong)layout->eld_gen, lri->lri_soff, lstat->lst_wsoff, lri->lri_roff,
 			  lstat->lst_aoff, sectsz);
-	} else if (lri->lri_soff == lstat->lst_wsoff &&
-		   lri->lri_roff == lstat->lst_aoff) {
-		/* hit end of log - do not error count */
+	} else if (lri->lri_soff == lstat->lst_wsoff && lri->lri_roff == lstat->lst_aoff) {
+		/* Hit end of log - do not error count */
 		err = merr(ENOMSG);
 	}
 
@@ -3114,10 +3045,7 @@ mlog_read_data_next_impl(
 	midrec = 0;
 
 	while (true) {
-		/*
-		 * get log block referenced by lri which can be accumulating
-		 * buffer
-		 */
+		/* Get log block referenced by lri which can be accumulating buffer */
 		err = mlog_logblock_load(mp, lri, &inbuf, &recfirst);
 		if (err) {
 			if (merr_errno(err) == ENOMSG) {
@@ -3161,26 +3089,24 @@ mlog_read_data_next_impl(
 		omf_logrec_desc_unpack_letoh(&lrd, &inbuf[lri->lri_roff]);
 
 		if (logrec_type_datarec(lrd.olr_rtype)) {
-			/* data record */
+			/* Data record */
 			if (lrd.olr_rtype == OMF_LOGREC_DATAFULL ||
 			    lrd.olr_rtype == OMF_LOGREC_DATAFIRST) {
 				if (midrec && !recfirst) {
 					err = merr(ENODATA);
 
 					/*
-					 * can occur mid data rec only if
-					 * is first rec in log block indicating
-					 * partial data rec at end of last
-					 * block which is a valid failure
-					 * mode; otherwise is a logging error
+					 * Can occur mid data rec only if is first rec in log
+					 * block indicating partial data rec at end of last
+					 * block which is a valid failure mode,
+					 * Otherwise is a logging error
 					 */
 					mp_pr_err("mpool %s, mlog 0x%lx, inconsistent 1 data rec",
 						  err, mp->pds_name, (ulong)layout->eld_objid);
 					break;
 				}
 				/*
-				 * reset copy-out; set midrec which
-				 * is needed for DATAFIRST
+				 * Reset copy-out; set midrec which is needed for DATAFIRST
 				 */
 				bufoff = 0;
 				midrec = 1;
@@ -3189,10 +3115,7 @@ mlog_read_data_next_impl(
 				if (!midrec) {
 					err = merr(ENODATA);
 
-					/*
-					 * must occur mid data record;
-					 * logging error
-					 */
+					/* Must occur mid data record. */
 					mp_pr_err("mpool %s, mlog 0x%lx, inconsistent 2 data rec",
 						  err, mp->pds_name, (ulong)layout->eld_objid);
 					break;
@@ -3200,10 +3123,10 @@ mlog_read_data_next_impl(
 			}
 
 			/*
-			 * this is inside a loop, but it is invariant;
+			 * This is inside a loop, but it is invariant;
 			 * (and it cannot be done until after the unpack)
 			 *
-			 * return the necessary length to caller
+			 * Return the necessary length to caller.
 			 */
 			if (buflen < lrd.olr_tlen) {
 				if (rdlen)
@@ -3213,14 +3136,11 @@ mlog_read_data_next_impl(
 				break;
 			}
 
-			/* copy-out data */
-
-			lri->lri_roff = lri->lri_roff +
-					OMF_LOGREC_DESC_PACKLEN;
+			/* Copy-out data */
+			lri->lri_roff = lri->lri_roff + OMF_LOGREC_DESC_PACKLEN;
 
 			if (!skip)
-				memcpy(&buf[bufoff], &inbuf[lri->lri_roff],
-				       lrd.olr_rlen);
+				memcpy(&buf[bufoff], &inbuf[lri->lri_roff], lrd.olr_rlen);
 
 			lri->lri_roff = lri->lri_roff + lrd.olr_rlen;
 			bufoff = bufoff + lrd.olr_rlen;
@@ -3230,8 +3150,7 @@ mlog_read_data_next_impl(
 				break;
 		} else {
 			/*
-			 * non data record; just skip unless midrec which
-			 * is a logging error
+			 * Non data record; just skip unless midrec which is a logging error
 			 */
 			if (midrec) {
 				err = merr(ENODATA);
@@ -3242,9 +3161,8 @@ mlog_read_data_next_impl(
 			if (lrd.olr_rtype == OMF_LOGREC_EOLB)
 				lri->lri_roff = sectsz;
 			else
-				lri->lri_roff = lri->lri_roff +
-						OMF_LOGREC_DESC_PACKLEN
-						+ lrd.olr_rlen;
+				lri->lri_roff = lri->lri_roff + OMF_LOGREC_DESC_PACKLEN +
+					lrd.olr_rlen;
 		}
 	}
 	if (!err && rdlen)
@@ -3336,8 +3254,7 @@ mlog_get_props_ex(
 	prop->lpx_zonecnt  = layout->eld_ld.ol_zcnt;
 	prop->lpx_state    = layout->eld_state;
 	prop->lpx_secshift = PD_SECTORSZ(pdp);
-	prop->lpx_totsec   = pmd_layout_cap_get(mp, layout) >>
-		prop->lpx_secshift;
+	prop->lpx_totsec   = pmd_layout_cap_get(mp, layout) >> prop->lpx_secshift;
 	pmd_obj_rdunlock(layout);
 
 	return 0;

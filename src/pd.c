@@ -101,8 +101,7 @@ static merr_t pd_bio_discard(struct mpool_dev_info  *pd, u64 off, size_t len)
 		return err;
 	}
 
-	rc = blkdev_issue_discard(bdev, off >> SECTOR_SHIFT,
-				  len >> SECTOR_SHIFT, GFP_NOIO, 0);
+	rc = blkdev_issue_discard(bdev, off >> SECTOR_SHIFT, len >> SECTOR_SHIFT, GFP_NOIO, 0);
 	if (rc) {
 		err = merr(rc);
 		mp_pr_err("bdev %s, offset 0x%lx len 0x%lx, discard faiure",
@@ -145,8 +144,7 @@ merr_t pd_zone_erase(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt, bool rea
 	 */
 	cmdopt = pd->pdi_cmdopt;
 	if ((cmdopt & PD_CMD_DISCARD) &&
-	    !(reads_erased && (cmdopt & PD_CMD_DIF_ENABLED) &&
-	      (cmdopt & PD_CMD_SED_ENABLED))) {
+	    !(reads_erased && (cmdopt & PD_CMD_DIF_ENABLED) && (cmdopt & PD_CMD_SED_ENABLED))) {
 		size_t zlen;
 
 		zlen = pd->pdi_parm.dpr_zonepg << PAGE_SHIFT;
@@ -276,8 +274,7 @@ pd_bio_rw(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, loff_t off, 
 	tot_pages = 0;
 	tot_len = 0;
 	for (i = 0; i < iovcnt; i++) {
-		if (!PAGE_ALIGNED((uintptr_t)iov[i].iov_base) ||
-		    (iov[i].iov_len & sector_mask)) {
+		if (!PAGE_ALIGNED((uintptr_t)iov[i].iov_base) || (iov[i].iov_len & sector_mask)) {
 			err = merr(ev(EINVAL));
 			mp_pr_err("bdev %s, %s off 0x%lx, misaligned iovec, base 0x%lx, len 0x%lx",
 				  err, pd->pdi_name, (rw == REQ_OP_READ) ? "read" : "write",
@@ -315,8 +312,7 @@ pd_bio_rw(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, loff_t off, 
 	 */
 	q = bdev_get_queue(bdev);
 	if (q && (pd->pdi_cmdopt & PD_CMD_DIF_ENABLED))
-		iolimit = min_t(u32, iolimit,
-				(q->limits.max_sectors << 9) >> PAGE_SHIFT);
+		iolimit = min_t(u32, iolimit, (q->limits.max_sectors << 9) >> PAGE_SHIFT);
 
 	left = 0;
 	bio = NULL;
@@ -443,8 +439,7 @@ void pd_dev_set_unavail(struct pd_dev_parm *dparm, struct omf_devparm_descriptor
 	 * PD properties we keep in metadata; no ops vector because we need
 	 * the device to be available to know it (the discovery gets it).
 	 */
-	strncpy(dparm->dpr_prop.pdp_didstr, PD_DEV_ID_PDUNAVAILABLE,
-		PD_DEV_ID_LEN);
+	strncpy(dparm->dpr_prop.pdp_didstr, PD_DEV_ID_PDUNAVAILABLE, PD_DEV_ID_LEN);
 	pd_prop->pdp_devstate = PD_DEV_STATE_UNAVAIL;
 	pd_prop->pdp_cmdopt = PD_CMD_NONE;
 

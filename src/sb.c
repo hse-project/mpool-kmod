@@ -558,8 +558,7 @@ void sbutil_mdc0_copy(struct omf_sb_descriptor *tgtsb, struct omf_sb_descriptor 
 	tgtsb->osb_mdc02desc.ol_zcnt = srcsb->osb_mdc02desc.ol_zcnt;
 	tgtsb->osb_mdc02desc.ol_zaddr = srcsb->osb_mdc02desc.ol_zaddr;
 
-	mpool_uuid_copy(&tgtsb->osb_mdc0dev.odp_devid,
-			&srcsb->osb_mdc0dev.odp_devid);
+	mpool_uuid_copy(&tgtsb->osb_mdc0dev.odp_devid, &srcsb->osb_mdc0dev.odp_devid);
 	tgtsb->osb_mdc0dev.odp_devsz    = srcsb->osb_mdc0dev.odp_devsz;
 	tgtsb->osb_mdc0dev.odp_zonetot  = srcsb->osb_mdc0dev.odp_zonetot;
 	tgtsb->osb_mdc0dev.odp_zonepg   = srcsb->osb_mdc0dev.odp_zonepg;
@@ -590,8 +589,7 @@ int sbutil_mdc0_eq(struct omf_sb_descriptor *sb1, struct omf_sb_descriptor *sb2)
 	    sb1->osb_mdc02desc.ol_zaddr != sb2->osb_mdc02desc.ol_zaddr)
 		return 0;
 
-	if (mpool_uuid_compare(&sb1->osb_mdc0dev.odp_devid,
-			     &sb2->osb_mdc0dev.odp_devid) ||
+	if (mpool_uuid_compare(&sb1->osb_mdc0dev.odp_devid, &sb2->osb_mdc0dev.odp_devid) ||
 	    sb1->osb_mdc0dev.odp_zonetot != sb2->osb_mdc0dev.odp_zonetot ||
 	    mc_cmp_omf_devparm(&sb1->osb_mdc0dev, &sb2->osb_mdc0dev))
 		return 0;
@@ -624,8 +622,7 @@ int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb, struct mpool_mdparm *mdpar
 	/* Basic consistency validation; can make more extensive as needed */
 
 	if (ev(mpool_uuid_compare(&sb->osb_mdc01devid, &sb->osb_mdc02devid) ||
-	       mpool_uuid_compare(&sb->osb_mdc01devid,
-				&sb->osb_mdc0dev.odp_devid)))
+	       mpool_uuid_compare(&sb->osb_mdc01devid, &sb->osb_mdc0dev.odp_devid)))
 		return 0;
 
 	if (ev(mpool_uuid_is_null(&sb->osb_mdc01devid)))

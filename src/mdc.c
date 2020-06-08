@@ -177,23 +177,16 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 	err1 = mlog_open(mp, mdc->mdc_logh1, mlflags, &gen1);
 	err2 = mlog_open(mp, mdc->mdc_logh2, mlflags, &gen2);
 
-	if (ev(err1) && merr_errno(err1) != EMSGSIZE &&
-	    merr_errno(err1) != EBUSY) {
+	if (ev(err1) && merr_errno(err1) != EMSGSIZE && merr_errno(err1) != EBUSY) {
 		err = err1;
-	} else if (ev(err2) && merr_errno(err2) != EMSGSIZE &&
-		   merr_errno(err2) != EBUSY) {
+	} else if (ev(err2) && merr_errno(err2) != EMSGSIZE && merr_errno(err2) != EBUSY) {
 		err = err2;
-	} else if ((err1 && err2) ||
-			(!err1 && !err2 && gen1 && gen1 == gen2)) {
+	} else if ((err1 && err2) || (!err1 && !err2 && gen1 && gen1 == gen2)) {
 
 		err = merr(EINVAL);
 
-		/*
-		 * bad pair; both have failed erases/compactions or equal
-		 * non-0 gens
-		 */
-		mp_pr_err(
-			"mpool %s, mdc open, bad mlog handle, mlog1 %p logid1 0x%lx errno %d gen1 %lu, mlog2 %p logid2 0x%lx errno %d gen2 %lu",
+		/* Bad pair; both have failed erases/compactions or equal non-0 gens. */
+		mp_pr_err("mpool %s, mdc open, bad mlog handle, mlog1 %p logid1 0x%lx errno %d gen1 %lu, mlog2 %p logid2 0x%lx errno %d gen2 %lu",
 			err, mpname, mdc->mdc_logh1, (ulong)logid1, merr_errno(err1), (ulong)gen1,
 			mdc->mdc_logh2, (ulong)logid2, merr_errno(err2), (ulong)gen2);
 	} else {
@@ -209,8 +202,7 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 			if (!err && (err1 || !empty)) {
 				err = mlog_erase(mp, mdc->mdc_logh1, gen2 + 1);
 				if (!err) {
-					err = mlog_open(mp, mdc->mdc_logh1,
-						mlflags, &gen1);
+					err = mlog_open(mp, mdc->mdc_logh1, mlflags, &gen1);
 					if (err)
 						mdc_logerr(mpname, "mlog1 open failed",
 							   mdc->mdc_logh1, logid1, gen1, gen2, err);
@@ -230,8 +222,7 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 			if (!err && (err2 || gen2 == gen1 || !empty)) {
 				err = mlog_erase(mp, mdc->mdc_logh2, gen1 + 1);
 				if (!err) {
-					err = mlog_open(mp, mdc->mdc_logh2,
-							mlflags, &gen2);
+					err = mlog_open(mp, mdc->mdc_logh2, mlflags, &gen2);
 					if (err)
 						mdc_logerr(mpname, "mlog2 open failed",
 							   mdc->mdc_logh2, logid2, gen1, gen2, err);
@@ -252,8 +243,7 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 				 */
 				err = mlog_append_cstart(mp, mdc->mdc_alogh);
 				if (!err) {
-					err = mlog_append_cend(mp,
-							       mdc->mdc_alogh);
+					err = mlog_append_cend(mp, mdc->mdc_alogh);
 					if (err)
 						mdc_logerr(mpname,
 							   "adding cend to active mlog failed",
@@ -429,10 +419,6 @@ uint64_t mp_mdc_close(struct mp_mdc *mdc)
 		rval = err;
 	}
 
-	/*
-	 * This mdc_put can go away once mp_mdc_open is modified to
-	 * operate on handles.
-	 */
 	mdc_put(mp, mdc->mdc_logh1, mdc->mdc_logh2);
 
 	mdc_invalidate(mdc);
@@ -477,8 +463,7 @@ uint64_t mp_mdc_read(struct mp_mdc *mdc, void *data, size_t len, size_t *rdlen)
 	if (ev(err))
 		return err;
 
-	err = mlog_read_data_next(mdc->mdc_mp, mdc->mdc_alogh, data,
-				  (u64)len, (u64 *)rdlen);
+	err = mlog_read_data_next(mdc->mdc_mp, mdc->mdc_alogh, data, (u64)len, (u64 *)rdlen);
 	if ((ev(err)) && (merr_errno(err) != EOVERFLOW))
 		mp_pr_err("mpool %s, mdc %p read failed, mlog %p len %lu",
 			  err, mdc->mdc_mpname, mdc, mdc->mdc_alogh, len);
@@ -500,8 +485,7 @@ uint64_t mp_mdc_append(struct mp_mdc *mdc, void *data, ssize_t len, bool sync)
 	if (ev(err))
 		return err;
 
-	err = mlog_append_data(mdc->mdc_mp, mdc->mdc_alogh,
-			       data, (u64)len, sync);
+	err = mlog_append_data(mdc->mdc_mp, mdc->mdc_alogh, data, (u64)len, sync);
 	if (err)
 		mp_pr_rl("mpool %s, mdc %p append failed, mlog %p, len %lu sync %d",
 			  err, mdc->mdc_mpname, mdc, mdc->mdc_alogh, len, sync);
