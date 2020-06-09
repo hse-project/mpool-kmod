@@ -39,7 +39,7 @@ static merr_t omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf);
 /*
  * layout_descriptor_table: track changes in OMF and in-memory layout descriptor
  */
-struct upgrade_history layout_descriptor_table[] = {
+static struct upgrade_history layout_descriptor_table[] = {
 	{
 		sizeof(struct omf_layout_descriptor),
 		omf_layout_unpack_letoh_v1,
@@ -52,7 +52,7 @@ struct upgrade_history layout_descriptor_table[] = {
 /*
  * devparm_descriptor_table: track changes in dev parm descriptor
  */
-struct upgrade_history devparm_descriptor_table[] = {
+static struct upgrade_history devparm_descriptor_table[] = {
 	{
 		sizeof(struct omf_devparm_descriptor),
 		omf_dparm_unpack_letoh_v1,
@@ -65,7 +65,7 @@ struct upgrade_history devparm_descriptor_table[] = {
 /*
  * mdcrec_data_mcspare_table: track changes in spare % record.
  */
-struct upgrade_history mdcrec_data_mcspare_table[]
+static struct upgrade_history mdcrec_data_mcspare_table[]
 	= {
 	{
 		sizeof(struct omf_mdcrec_data),
@@ -79,7 +79,7 @@ struct upgrade_history mdcrec_data_mcspare_table[]
 /*
  * sb_descriptor_table: track changes in mpool superblock descriptor
  */
-struct upgrade_history sb_descriptor_table[] = {
+static struct upgrade_history sb_descriptor_table[] = {
 	{
 		sizeof(struct omf_sb_descriptor),
 		omf_sb_unpack_letoh_v1,
@@ -92,7 +92,7 @@ struct upgrade_history sb_descriptor_table[] = {
 /*
  * mdcrec_data_ocreate_table: track changes in OCREATE mdc record.
  */
-struct upgrade_history mdcrec_data_ocreate_table[]
+static struct upgrade_history mdcrec_data_ocreate_table[]
 	= {
 	{
 		sizeof(struct omf_mdcrec_data),
@@ -147,7 +147,7 @@ struct upgrade_history mdcrec_data_ocreate_table[]
  * the sb version 3, return &abc_hist[1]
  *
  */
-struct upgrade_history *
+static struct upgrade_history *
 omf_find_upgrade_hist(
 	struct upgrade_history     *uhtab,
 	size_t                      tabsz,
@@ -208,7 +208,8 @@ omf_find_upgrade_hist(
  * or superblock beg/end versions (sbv1/sbv2). Set both mdcv1 and
  * mdcv2 to NULL, if caller wants to use superblock versions
  */
-merr_t
+__attribute__((__unused__))
+static merr_t
 omf_upgrade_convert_only(
 	void                       *out,
 	size_t                      outsz,
@@ -288,7 +289,7 @@ omf_upgrade_convert_only(
  * @sbver:   superblock version
  * @mdcver: mpool MDC content version
  */
-merr_t
+static merr_t
 omf_upgrade_unpack_only(
 	void                       *out,
 	size_t                      outsz,
@@ -323,7 +324,7 @@ omf_upgrade_unpack_only(
  * @mdcver: mdc version. if set to NULL, use sbver to find the corresponding
  *          nested structure upgrade table
  */
-merr_t
+static merr_t
 omf_unpack_letoh_and_convert(
 	void                       *out,
 	size_t                      outsz,
@@ -388,7 +389,7 @@ omf_unpack_letoh_and_convert(
 /*
  * devparm_descriptor
  */
-void omf_dparm_pack_htole(struct omf_devparm_descriptor *dp, char *outbuf)
+static void omf_dparm_pack_htole(struct omf_devparm_descriptor *dp, char *outbuf)
 {
 	struct devparm_descriptor_omf  *dp_omf;
 
@@ -433,7 +434,7 @@ static merr_t omf_dparm_unpack_letoh_v1(void *out, const char *inbuf)
 	return 0;
 }
 
-merr_t
+static merr_t
 omf_dparm_unpack_letoh(
 	struct omf_devparm_descriptor  *dp,
 	const char                     *inbuf,
@@ -457,7 +458,7 @@ omf_dparm_unpack_letoh(
 /*
  * layout_descriptor
  */
-void omf_layout_pack_htole(const struct omf_layout_descriptor *ld, char *outbuf)
+static void omf_layout_pack_htole(const struct omf_layout_descriptor *ld, char *outbuf)
 {
 	struct layout_descriptor_omf   *ld_omf;
 
@@ -485,7 +486,7 @@ merr_t omf_layout_unpack_letoh_v1(void *out, const char *inbuf)
 	return 0;
 }
 
-merr_t
+static merr_t
 omf_layout_unpack_letoh(
 	struct omf_layout_descriptor   *ld,
 	const char                     *inbuf,
@@ -508,7 +509,7 @@ omf_layout_unpack_letoh(
 /*
  * pmd_layout
  */
-int
+static int
 omf_pmd_layout_pack_htole(
 	const struct mpool_descriptor  *mp,
 	u8                              rtype,
@@ -682,21 +683,23 @@ omf_pmd_layout_unpack_letoh(
  *
  * Return: 0 if successful, merr_t(EINVAL) otherwise
  */
-merr_t omf_cksum_crc32c_le(const char *dbuf, u64 dlen, u8 *obuf)
+static merr_t omf_cksum_crc32c_le(const char *dbuf, u64 dlen, u8 *obuf)
 {
-	SHASH_DESC_ON_STACK(desc, mpool_tfm);
-
-	int rc;
+	struct shash_desc  *desc;
+	int                 rc;
+	size_t              descsz;
 
 	memset(obuf, 0, 4);
 
+	descsz = sizeof(*desc) + crypto_shash_descsize(mpool_tfm);
+	desc = kzalloc(descsz, GFP_KERNEL);
+	if (!desc)
+		return merr(ENOMEM);
 	desc->tfm = mpool_tfm;
 
-#if HAVE_SHASH_DESC_FLAGS
-	desc->flags = 0;
-#endif
-
 	rc = crypto_shash_digest(desc, (u8 *)dbuf, dlen, obuf);
+
+	kfree(desc);
 
 	return merr(rc);
 }
@@ -1107,7 +1110,7 @@ void omf_mdcver_unpack_letoh(struct omf_mdcrec_data *cdr, const char *inbuf)
 /*
  * mdcrec_mcspare
  */
-u64 omf_mdcrec_mcspare_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
+static u64 omf_mdcrec_mcspare_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
 {
 	struct mdcrec_data_mcspare_omf *mcs_omf;
 

@@ -41,7 +41,7 @@ static struct pmd_layout *mblock2layout(struct mblock_descriptor *mbh)
 	return mblock_objid(layout->eld_objid) ? layout : NULL;
 }
 
-u32 mblock_stripe_size_get(struct mpool_descriptor *mp, struct pmd_layout *layout)
+static u32 mblock_stripe_size_get(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	struct mpool_dev_info  *pd;
 
@@ -287,8 +287,6 @@ static merr_t
 mblock_rw_argcheck(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *layout,
-	struct iovec               *iov,
-	int                         iovcnt,
 	loff_t                      boff,
 	int                         rw,
 	size_t                      len)
@@ -359,7 +357,7 @@ merr_t
 mblock_write(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
-	struct iovec               *iov,
+	struct kvec                *iov,
 	int                         iovcnt,
 	size_t                      len)
 {
@@ -375,7 +373,7 @@ mblock_write(
 		return merr(EINVAL);
 	}
 
-	err = mblock_rw_argcheck(mp, layout, iov, iovcnt, layout->eld_mblen, MPOOL_OP_WRITE, len);
+	err = mblock_rw_argcheck(mp, layout, layout->eld_mblen, MPOOL_OP_WRITE, len);
 	if (ev(err)) {
 		mp_pr_debug("mblock write argcheck failed ", err);
 		return err;
@@ -406,7 +404,7 @@ merr_t
 mblock_read(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
-	struct iovec               *iov,
+	struct kvec                *iov,
 	int                         iovcnt,
 	loff_t                      boff,
 	size_t                      len)
@@ -424,7 +422,7 @@ mblock_read(
 		return merr(EINVAL);
 	}
 
-	err = mblock_rw_argcheck(mp, layout, iov, iovcnt, boff, MPOOL_OP_READ, len);
+	err = mblock_rw_argcheck(mp, layout, boff, MPOOL_OP_READ, len);
 	if (ev(err)) {
 		mp_pr_debug("mblock read argcheck failed ", err);
 		return err;

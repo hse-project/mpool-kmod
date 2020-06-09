@@ -17,6 +17,7 @@
 
 #include "mpool_config.h"
 #include "mpcore_defs.h"
+#include "mpctl.h"
 
 #ifndef SECTOR_SHIFT
 #define SECTOR_SHIFT   9
@@ -206,7 +207,7 @@ pd_bio_chain(struct bio *target, int op, unsigned int nr_pages, gfp_t gfp)
 }
 
 /*
- * pd_bio_rw() expects a list of iovecs wherein each base ptr is sector
+ * pd_bio_rw() expects a list of kvecs wherein each base ptr is sector
  * aligned and each length is multiple of sectors.
  *
  * If the IO is bigger than 1MiB (BIO_MAX_PAGES pages),
@@ -230,7 +231,7 @@ pd_bio_chain(struct bio *target, int op, unsigned int nr_pages, gfp_t gfp)
  * In order to use DIF with stock linux kernel, do not IOs larger than MDTS.
  */
 static merr_t
-pd_bio_rw(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, loff_t off, int rw, int opflags)
+pd_bio_rw(struct mpool_dev_info *pd, struct kvec *iov, int iovcnt, loff_t off, int rw, int opflags)
 {
 	struct block_device    *bdev;
 	struct bio             *bio;
@@ -274,7 +275,7 @@ pd_bio_rw(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, loff_t off, 
 	for (i = 0; i < iovcnt; i++) {
 		if (!PAGE_ALIGNED((uintptr_t)iov[i].iov_base) || (iov[i].iov_len & sector_mask)) {
 			err = merr(ev(EINVAL));
-			mp_pr_err("bdev %s, %s off 0x%lx, misaligned iovec, base 0x%lx, len 0x%lx",
+			mp_pr_err("bdev %s, %s off 0x%lx, misaligned kvec, base 0x%lx, len 0x%lx",
 				  err, pd->pdi_name, (rw == REQ_OP_READ) ? "read" : "write",
 				  (ulong)off, (ulong)iov[i].iov_base, (ulong)iov[i].iov_len);
 			return err;
@@ -371,7 +372,7 @@ pd_bio_rw(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, loff_t off, 
 merr_t
 pd_zone_pwritev(
 	struct mpool_dev_info  *pd,
-	struct iovec           *iov,
+	struct kvec            *iov,
 	int                     iovcnt,
 	u64                     zaddr,
 	loff_t                  boff,
@@ -390,7 +391,7 @@ pd_zone_pwritev(
 merr_t
 pd_zone_pwritev_sync(
 	struct mpool_dev_info  *pd,
-	struct iovec           *iov,
+	struct kvec            *iov,
 	int                     iovcnt,
 	u64                     zaddr,
 	loff_t                  boff)
@@ -416,7 +417,7 @@ pd_zone_pwritev_sync(
 }
 
 merr_t
-pd_zone_preadv(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, u64 zaddr, loff_t boff)
+pd_zone_preadv(struct mpool_dev_info *pd, struct kvec *iov, int iovcnt, u64 zaddr, loff_t boff)
 {
 	loff_t roff;
 

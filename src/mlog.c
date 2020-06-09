@@ -10,12 +10,6 @@
 
 #include "mpcore_defs.h"
 
-/**
- * Force 4K-alignment by default for 512B sectors. Having it as a non-static
- * global so that we can unit test it.
- */
-bool mlog_force_4ka = true;
-
 #define mlpriv2layout(_ptr) \
 	((struct pmd_layout *)((char *)(_ptr) - offsetof(struct pmd_layout, eld_priv)))
 
@@ -703,35 +697,6 @@ static void mlog_stat_init_common(struct pmd_layout *layout, struct mlog_stat *l
  */
 
 /**
- * mlog_rw_internal() - Called by both user and kernel mlogs for IO requests.
- * @mp:     mpool descriptor
- * @mlh:    mlog descriptor
- * @iov:    iovec
- * @iovcnt: iov cnt
- * @boff:   IO offset
- * @rw:     MPOOL_OP_READ or MPOOL_OP_WRITE
- *
- * Must enter with layout lock held in write mode.
- */
-merr_t
-mlog_rw_internal(
-	struct mpool_descriptor *mp,
-	struct mlog_descriptor  *mlh,
-	struct iovec            *iov,
-	int                      iovcnt,
-	u64                      boff,
-	u8                       rw)
-{
-	struct pmd_layout  *layout;
-
-	layout = mlog2layout(mlh);
-	if (!layout)
-		return merr(EINVAL);
-
-	return pmd_layout_rw(mp, layout, iov, iovcnt, boff, rw == MPOOL_OP_WRITE ? REQ_FUA : 0, rw);
-}
-
-/**
  * mlog_rw_raw:
  *
  * Called by mpctl kernel for mlog IO. The scatter-gather buffer must contain
@@ -748,20 +713,23 @@ merr_t
 mlog_rw_raw(
 	struct mpool_descriptor    *mp,
 	struct mlog_descriptor     *mlh,
-	struct iovec               *iov,
+	struct kvec                *iov,
 	int                         iovcnt,
 	u64                         boff,
 	u8                          rw)
 {
 	struct pmd_layout  *layout;
 	merr_t              err;
+	int                 flags;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
 		return merr(EINVAL);
 
+	flags = (rw == MPOOL_OP_WRITE) ? REQ_FUA : 0;
+
 	pmd_obj_wrlock(layout);
-	err = mlog_rw_internal(mp, mlh, iov, iovcnt, boff, rw);
+	err = pmd_layout_rw(mp, layout, iov, iovcnt, boff, flags, rw);
 	pmd_obj_wrunlock(layout);
 
 	return ev(err);
@@ -782,7 +750,7 @@ static merr_t
 mlog_rw(
 	struct mpool_descriptor *mp,
 	struct mlog_descriptor  *mlh,
-	struct iovec            *iov,
+	struct kvec             *iov,
 	int                      iovcnt,
 	u64                      boff,
 	u8                       rw,
@@ -794,8 +762,11 @@ mlog_rw(
 	if (!layout)
 		return merr(EINVAL);
 
-	if (!skip_ser)
-		return mlog_rw_internal(mp, mlh, iov, iovcnt, boff, rw);
+	if (!skip_ser) {
+		int    flags = (rw == MPOOL_OP_WRITE) ? REQ_FUA : 0;
+
+		return pmd_layout_rw(mp, layout, iov, iovcnt, boff, flags, rw);
+	}
 
 	return mlog_rw_raw(mp, mlh, iov, iovcnt, boff, rw);
 }
@@ -854,9 +825,9 @@ static merr_t mlog_stat_init(struct mpool_descriptor *mp, struct mlog_descriptor
  * @op:      MPOOL_OP_READ or MPOOL_OP_WRITE
  */
 static merr_t
-mlog_setup_buf(struct mlog_stat *lstat, struct iovec **riov, u16 iovcnt, u16 l_iolen, u8 op)
+mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u16 l_iolen, u8 op)
 {
-	struct iovec  *iov = *riov;
+	struct kvec    *iov = *riov;
 
 	char  *buf;
 	u16    i;
@@ -1067,7 +1038,7 @@ mlog_populate_abuf(
 	bool                        skip_ser)
 {
 	struct mlog_stat   *lstat = &layout->eld_lstat;
-	struct iovec        iov;
+	struct kvec         iov;
 
 	merr_t err;
 	off_t  off;
@@ -1132,7 +1103,7 @@ mlog_populate_rbuf(
 	bool                        skip_ser)
 {
 	struct mlog_stat   *lstat = &layout->eld_lstat;
-	struct iovec       *iov = NULL;
+	struct kvec        *iov = NULL;
 
 	merr_t err;
 	off_t  off;
@@ -1155,7 +1126,7 @@ mlog_populate_rbuf(
 
 	/* No. of sectors in the last log page. */
 	l_iolen = MLOG_LPGSZ(lstat);
-	if (!FORCE_4KA(lstat) && !(IS_SECPGA(lstat)))
+	if (!IS_SECPGA(lstat))
 		l_iolen = (*nsec % nseclpg) * sectsz;
 
 	err = mlog_setup_buf(lstat, &iov, iovcnt, l_iolen, MPOOL_OP_READ);
@@ -1491,7 +1462,7 @@ mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *layout, u16 ab
 		wsoff  = lstat->lst_wsoff;
 		aoff   = lstat->lst_aoff;
 
-		if ((!FORCE_4KA(lstat)) || (IS_ALIGNED(wsoff * sectsz, MLOG_LPGSZ(lstat)))) {
+		if (IS_SECPGA(lstat) || (IS_ALIGNED(wsoff * sectsz, MLOG_LPGSZ(lstat)))) {
 			/* This is the common path */
 			lstat->lst_asoff = wsoff;
 			return 0;
@@ -1555,7 +1526,7 @@ static merr_t mlog_logblocks_hdrpack(struct pmd_layout *layout)
 	for (idx = 0; idx <= abidx; idx++) {
 		start = 0;
 
-		if (FORCE_4KA(lstat) && idx == 0)
+		if (!IS_SECPGA(lstat) && idx == 0)
 			start = (lstat->lst_cfssoff >> ilog2(sectsz));
 
 		if (idx == abidx)
@@ -1595,7 +1566,7 @@ static merr_t mlog_logblocks_hdrpack(struct pmd_layout *layout)
 static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser)
 {
 	struct mlog_stat   *lstat = &layout->eld_lstat;
-	struct iovec       *iov = NULL;
+	struct kvec        *iov = NULL;
 
 	merr_t err;
 	off_t  off;
@@ -1609,7 +1580,7 @@ static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
 	abidx   = lstat->lst_abidx;
 	l_iolen = MLOG_LPGSZ(lstat);
 
-	if (!FORCE_4KA(lstat) && !(IS_SECPGA(lstat))) {
+	if (!IS_SECPGA(lstat)) {
 		u8 asidx;
 
 		asidx = lstat->lst_wsoff - (nseclpg * abidx + lstat->lst_asoff);
@@ -1630,7 +1601,7 @@ static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
 	off = lstat->lst_asoff * sectsz;
 
 	assert((IS_ALIGNED(off, MLOG_LPGSZ(lstat))) ||
-		(!FORCE_4KA(lstat) && IS_ALIGNED(off, MLOG_SECSZ(lstat))));
+		(IS_SECPGA(lstat) && IS_ALIGNED(off, MLOG_SECSZ(lstat))));
 
 	err = mlog_rw(mp, layout2mlog(layout), iov, abidx + 1, off, MPOOL_OP_WRITE, skip_ser);
 	if (ev(err)) {
@@ -1875,7 +1846,7 @@ mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layout, boo
 	}
 	mlog_free_abuf(lstat, start, end);
 
-	if (FORCE_4KA(lstat))
+	if (!IS_SECPGA(lstat))
 		mlog_flush_posthdlr_4ka(mp, layout, fsucc);
 	else
 		mlog_flush_posthdlr(mp, layout, fsucc);
@@ -2011,7 +1982,7 @@ merr_t mlog_empty(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool
  * Need to account for both metadata and user bytes while computing the
  * log length.
  */
-merr_t mlog_len(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *len)
+static merr_t mlog_len(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *len)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
 	struct mlog_stat   *lstat;
@@ -2385,7 +2356,7 @@ merr_t mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh
  * No bounds check is done on iov. The caller is expected to give the minimum
  * of source and destination buffers as the length (buflen) here.
  */
-static void memcpy_from_iov(struct iovec *iov, char *buf, size_t buflen, int *nextidx)
+static void memcpy_from_iov(struct kvec *iov, char *buf, size_t buflen, int *nextidx)
 {
 	int i = *nextidx;
 	int cp;
@@ -2432,7 +2403,7 @@ static merr_t
 mlog_append_data_internal(
 	struct mpool_descriptor *mp,
 	struct mlog_descriptor  *mlh,
-	struct iovec            *iov,
+	struct kvec             *iov,
 	u64                      buflen,
 	int                      sync,
 	bool                     skip_ser)
@@ -2551,11 +2522,11 @@ mlog_append_data_internal(
 /**
  * mlog_append_datav():
  */
-merr_t
+static merr_t
 mlog_append_datav(
 	struct mpool_descriptor *mp,
 	struct mlog_descriptor  *mlh,
-	struct iovec            *iov,
+	struct kvec             *iov,
 	u64                      buflen,
 	int                      sync)
 {
@@ -2634,7 +2605,7 @@ mlog_append_data(
 	u64                      buflen,
 	int                      sync)
 {
-	struct iovec iov;
+	struct kvec iov;
 
 	iov.iov_base = buf;
 	iov.iov_len  = buflen;
@@ -2684,7 +2655,7 @@ merr_t mlog_read_data_init(struct mpool_descriptor *mp, struct mlog_descriptor *
  * @lri:   read iterator
  * @inbuf: buffer to into (output)
  */
-merr_t
+static merr_t
 mlog_logblocks_load_media(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char **inbuf)
 {
 	struct pmd_layout  *layout = lri->lri_layout;

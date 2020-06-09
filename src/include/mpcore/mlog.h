@@ -147,7 +147,7 @@ merr_t
 mlog_rw_raw(
 	struct mpool_descriptor    *mp,
 	struct mlog_descriptor     *mlh,
-	struct iovec               *iov,
+	struct kvec                *iov,
 	int                         iovcnt,
 	u64                         boff,
 	u8                          rw);

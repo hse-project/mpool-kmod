@@ -637,7 +637,7 @@ static u32 smap_addr2rgn(struct mpool_descriptor *mp, struct mpool_dev_info *pd,
  *
  *   Returns: 0 if successful, merr_t otherwise
  */
-merr_t smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u16 zonecnt)
+static merr_t smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u16 zonecnt)
 {
 	const char             *msg __maybe_unused;
 	struct smap_zone   *elem = NULL;

@@ -8,7 +8,7 @@ SUBDIRS += bioset_init bioset_create bio_set_dev bio_set_op_attrs
 SUBDIRS += iov_iter_init iov_iter_get_pages invalidatepage
 SUBDIRS += mem_cgroup_count_vm_event count_memcg_event_mm
 SUBDIRS += bdi_alloc backing_dev_info generate_random_guid
-SUBDIRS += sched_clock shash_desc submit_bio
+SUBDIRS += sched_clock submit_bio
 
 .PHONY: all clean distclean maintainer-clean ${SUBDIRS}
 

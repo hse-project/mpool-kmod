@@ -103,7 +103,6 @@ struct mlog_stat {
 #define MLOG_NSECLPG(lstat) ((lstat)->lst_mfp.mfp_nseclpg)
 
 #define IS_SECPGA(lstat)    ((lstat)->lst_mfp.mfp_secpga)
-#define FORCE_4KA(lstat)    (!(IS_SECPGA(lstat)) && mlog_force_4ka)
 
 void mlogutil_closeall(struct mpool_descriptor *mp);
 

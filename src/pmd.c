@@ -1168,7 +1168,7 @@ errout:
 	return err;
 }
 
-void pmd_mda_free(struct mpool_descriptor *mp)
+static void pmd_mda_free(struct mpool_descriptor *mp)
 {
 	int sidx;
 
@@ -1400,7 +1400,8 @@ void pmd_mpool_deactivate(struct mpool_descriptor *mp)
 	mutex_unlock(&pmd_s_lock);
 }
 
-merr_t pmd_mdc_append(struct mpool_descriptor *mp, u8 cslot, struct omf_mdcrec_data *cdr, int sync)
+static merr_t
+pmd_mdc_append(struct mpool_descriptor *mp, u8 cslot, struct omf_mdcrec_data *cdr, int sync)
 {
 	merr_t                  err;
 	struct pmd_mdc_info    *cinfo = &mp->pds_mda.mdi_slotv[cslot];
@@ -1990,7 +1991,7 @@ merr_t pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout)
 	return 0;
 }
 
-merr_t pmd_log_erase(struct mpool_descriptor *mp, u64 objid, u64 gen)
+static merr_t pmd_log_erase(struct mpool_descriptor *mp, u64 objid, u64 gen)
 {
 	struct omf_mdcrec_data  cdr;
 
@@ -2597,7 +2598,7 @@ merr_t
 pmd_layout_rw(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *layout,
-	struct iovec               *iov,
+	struct kvec                *iov,
 	int                         iovcnt,
 	u64                         boff,
 	int                         flags,

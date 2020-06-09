@@ -14,6 +14,8 @@
 struct mpc_unit;
 struct mpc_rgnmap;
 
+extern uint mpc_chunker_size;
+
 struct mpc_mbinfo {
 	struct mblock_descriptor   *mbdesc;
 	u32                         mblen;

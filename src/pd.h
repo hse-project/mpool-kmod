@@ -10,8 +10,6 @@
 
 struct mpool_dev_info;
 
-extern uint mpc_chunker_size;
-
 /**
  * struct pd_dev_parm -
  * @dpr_prop:		drive properties including zone parameters
@@ -88,7 +86,7 @@ merr_t pd_zone_erase(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt, bool rea
 merr_t
 pd_zone_pwritev(
 	struct mpool_dev_info  *pd,
-	struct iovec           *iov,
+	struct kvec            *iov,
 	int                     iovcnt,
 	u64                     zaddr,
 	loff_t                  boff,
@@ -107,7 +105,7 @@ pd_zone_pwritev(
 merr_t
 pd_zone_pwritev_sync(
 	struct mpool_dev_info  *pd,
-	struct iovec           *iov,
+	struct kvec            *iov,
 	int                     iovcnt,
 	u64                     zaddr,
 	loff_t                  boff);
@@ -123,7 +121,7 @@ pd_zone_pwritev_sync(
  * Return:
  */
 merr_t
-pd_zone_preadv(struct mpool_dev_info *pd, struct iovec *iov, int iovcnt, u64 zaddr, loff_t boff);
+pd_zone_preadv(struct mpool_dev_info *pd, struct kvec *iov, int iovcnt, u64 zaddr, loff_t boff);
 
 /**
  * pd_dev_set_unavail() -

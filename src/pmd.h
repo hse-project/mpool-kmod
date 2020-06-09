@@ -868,7 +868,7 @@ merr_t
 pmd_layout_rw(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *layout,
-	struct iovec               *iov,
+	struct kvec                *iov,
 	int                         iovcnt,
 	u64                         boff,
 	int                         flags,

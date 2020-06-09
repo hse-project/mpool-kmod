@@ -45,7 +45,7 @@ struct mdcver_info {
 /*
  * mpool MDC types used when MDC content is written at version 1.0.0.0.
  */
-uint8_t mdcver_1_0_0_0_types[] = {
+static uint8_t mdcver_1_0_0_0_types[] = {
 	OMF_MDR_OCREATE, OMF_MDR_OUPDATE, OMF_MDR_ODELETE, OMF_MDR_OIDCKPT,
 	OMF_MDR_OERASE, OMF_MDR_MCCONFIG, OMF_MDR_MCSPARE, OMF_MDR_VERSION,
 	OMF_MDR_MPCONFIG};
@@ -75,7 +75,7 @@ uint8_t mdcver_1_0_0_0_types[] = {
  * - binary 2.0.0.0 is released and it changes MDCs content semantic.
  *   A third entry is added in the table with its mi_mdcver being 2.0.0.0.
  */
-struct mdcver_info mdcvtab[] = {
+static struct mdcver_info mdcvtab[] = {
 	{{ {MDCVER_MAJOR, MDCVER_MINOR, MDCVER_PATCH, MDCVER_DEV} },
 	mdcver_1_0_0_0_types, sizeof(mdcver_1_0_0_0_types),
 	"Initial mpool MDCs content"},

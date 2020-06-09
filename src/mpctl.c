@@ -151,7 +151,7 @@ struct mpc_mpool {
  * and which must also be preserved across that call.
  *
  * Note: We could make things more efficient by changing a_pagev[]
- * to a struct iovec if mblock_read() would guarantee that it will
+ * to a struct kvec if mblock_read() would guarantee that it will
  * not alter the given iovec.
  */
 struct readpage_args {
@@ -259,11 +259,11 @@ unsigned int mpc_xvm_size_max __read_mostly = 30;
 module_param(mpc_xvm_size_max, uint, 0444);
 MODULE_PARM_DESC(mpc_xvm_size_max, " max extended VMA size log2");
 
-unsigned int mpc_rwsz_max __read_mostly = 32;
+static unsigned int mpc_rwsz_max __read_mostly = 32;
 module_param(mpc_rwsz_max, uint, 0444);
 MODULE_PARM_DESC(mpc_rwsz_max, " max mblock/mlog r/w size (mB)");
 
-unsigned int mpc_rwconc_max __read_mostly = 8;
+static unsigned int mpc_rwconc_max __read_mostly = 8;
 module_param(mpc_rwconc_max, uint, 0444);
 MODULE_PARM_DESC(mpc_rwconc_max, " max mblock/mlog large r/w concurrency");
 
@@ -518,7 +518,7 @@ static ssize_t mpc_type_show(struct device *dev, struct device_attribute *da, ch
 	return scnprintf(buf, PAGE_SIZE, "%s\n", uuid_str);
 }
 
-void mpc_mpool_params_add(struct device_attribute *dattr)
+static void mpc_mpool_params_add(struct device_attribute *dattr)
 {
 	MPC_ATTR_RO(dattr++, uid);
 	MPC_ATTR_RO(dattr++, gid);
@@ -1256,7 +1256,7 @@ static vm_fault_t mpc_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 static int mpc_readpage_impl(struct page *page, struct mpc_xvm *xvm)
 {
 	struct mpc_mbinfo  *mbinfo;
-	struct iovec        iov[1];
+	struct kvec         iov[1];
 	off_t               offset;
 	uint                mbnum;
 	merr_t              err;
@@ -1313,8 +1313,8 @@ static void mpc_readpages_cb(struct work_struct *work)
 {
 	char                    argsbuf[MPC_RPARGSBUFSZ];
 	struct readpage_args   *args = (void *)argsbuf;
-	struct iovec           iovbuf[MPC_RA_IOV_MAX];
-	struct iovec           *iov = iovbuf;
+	struct kvec             iovbuf[MPC_RA_IOV_MAX];
+	struct kvec            *iov = iovbuf;
 	struct mpc_xvm         *xvm;
 	struct readpage_work   *w;
 
@@ -1380,7 +1380,7 @@ errout:
 	}
 }
 
-int
+static int
 mpc_readpages(
 	struct file            *file,
 	struct address_space   *mapping,
@@ -1496,7 +1496,7 @@ mpc_readpages(
 
 		w->w_args.a_pagev[w->w_args.a_pagec++] = page;
 
-		/* Restrict batch size to the number of struct iovecs
+		/* Restrict batch size to the number of struct kvecs
 		 * that will fit into a page (minus our header).
 		 */
 		if (w->w_args.a_pagec >= iovmax) {
@@ -1520,7 +1520,7 @@ mpc_readpages(
  * When the number of pages owned exceeds the limit (if defined) reap function
  * will get invoked to trim down the usage.
  */
-int mpc_releasepage(struct page *page, gfp_t gfp)
+static int mpc_releasepage(struct page *page, gfp_t gfp)
 {
 	struct mpc_xvm *xvm;
 
@@ -1571,7 +1571,7 @@ static void mpc_invalidatepage(struct page *page, ulong offset)
  * callback is added to deal with uncertainties around migration. The migration
  * will be declined so long as the page is private and it belongs to mpctl.
  */
-int
+static int
 mpc_migratepage(
 	struct address_space   *mapping,
 	struct page            *newpage,
@@ -2714,13 +2714,14 @@ static merr_t mpioc_devprops_get(struct mpc_unit *unit, struct mpioc_devprops *d
  */
 static int mpioc_proplist_get_itercb(int minor, void *item, void *arg)
 {
-	struct mpc_unit    *unit = item;
-	struct mpioc_prop  *uprop, kprop;
-	struct mpc_unit    *match;
-	struct mpioc_list  *ls;
-	void              **argv = arg;
-	int                *cntp, rc;
-	merr_t             *errp;
+	struct mpc_unit             *unit = item;
+	struct mpioc_prop __user    *uprop;
+	struct mpioc_prop            kprop;
+	struct mpc_unit             *match;
+	struct mpioc_list           *ls;
+	void                       **argv = arg;
+	int                         *cntp, rc;
+	merr_t                      *errp;
 
 	if (!unit)
 		return ITERCB_NEXT;
@@ -2744,7 +2745,7 @@ static int mpioc_proplist_get_itercb(int minor, void *item, void *arg)
 
 	mpioc_prop_get(unit, &kprop, ls->ls_cmd);
 
-	uprop = (struct mpioc_prop *)ls->ls_listv + *cntp;
+	uprop = (struct mpioc_prop __user *)ls->ls_listv + *cntp;
 
 	rc = copy_to_user(uprop, &kprop, sizeof(*uprop));
 	if (rc) {
@@ -2987,7 +2988,7 @@ errout:
 /*
  * Mpctl mlog ioctl handlers
  */
-merr_t mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
+static merr_t mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 {
 	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
@@ -3024,7 +3025,7 @@ merr_t mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 	return 0;
 }
 
-merr_t mpioc_mlog_find(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
+static merr_t mpioc_mlog_find(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 {
 	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
@@ -3044,7 +3045,7 @@ merr_t mpioc_mlog_find(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
 	return err;
 }
 
-merr_t mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mlog_id *mi)
+static merr_t mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mlog_id *mi)
 {
 	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
@@ -3096,7 +3097,8 @@ merr_t mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mlog_id
 }
 
 __attribute__((__noinline__))
-merr_t mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi, void *stkbuf, size_t stkbufsz)
+static merr_t
+mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi, void *stkbuf, size_t stkbufsz)
 {
 	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
@@ -3152,7 +3154,7 @@ errout:
 	return err;
 }
 
-merr_t mpioc_mlog_erase(struct mpc_unit *unit, struct mpioc_mlog_id *mi)
+static merr_t mpioc_mlog_erase(struct mpc_unit *unit, struct mpioc_mlog_id *mi)
 {
 	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
@@ -3493,7 +3495,7 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		cmn = argp;
 
 		if (_IOC_DIR(cmd) & _IOC_WRITE) {
-			if (copy_from_user(argp, (void *)arg, iosz)) {
+			if (copy_from_user(argp, (const void __user *)arg, iosz)) {
 				if (argp != argbuf)
 					kfree(argp);
 				return -EFAULT;
@@ -3635,7 +3637,7 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		if (err)
 			cmn->mc_err = merr_to_user(err, cmn->mc_merr_base);
 
-		if (copy_to_user((void *)arg, argp, iosz))
+		if (copy_to_user((void __user *)arg, argp, iosz))
 			rc = ev(-EFAULT);
 	}
 
@@ -3740,7 +3742,7 @@ mpc_physio(
 	void                       *stkbuf,
 	size_t                      stkbufsz)
 {
-	struct iovec       *iov_base, *iov;
+	struct kvec        *iov_base, *iov;
 	struct iov_iter     iter;
 	struct page       **pagesv;
 
@@ -3792,7 +3794,7 @@ mpc_physio(
 	if (!pagesv)
 		return merr(ENOMEM);
 
-	iov_base = (struct iovec *)((char *)pagesv + (sizeof(*pagesv) * pagesc));
+	iov_base = (struct kvec *)((char *)pagesv + (sizeof(*pagesv) * pagesc));
 
 #if HAVE_IOV_ITER_INIT_DIRECTION
 	iov_iter_init(&iter, rw, uiov, uioc, length);
@@ -3941,19 +3943,6 @@ static int mpc_uevent(struct device *dev, struct kobj_uevent_env *env)
 	}
 
 	return 0;
-}
-
-void mpool_meminfo(ulong *freep, ulong *availp, uint shift)
-{
-	struct sysinfo si;
-
-	si_meminfo(&si);
-
-	if (freep)
-		*freep = (si.freeram * si.mem_unit) >> shift;
-
-	if (availp)
-		*availp = (si_mem_available() * si.mem_unit) >> shift;
 }
 
 static int mpc_exit_unit(int minor, void *item, void *arg)

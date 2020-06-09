@@ -162,7 +162,7 @@ merr_t
 mblock_write(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
-	struct iovec               *iov,
+	struct kvec                *iov,
 	int                         iovcnt,
 	size_t                      len);
 
@@ -187,7 +187,7 @@ merr_t
 mblock_read(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
-	struct iovec               *iov,
+	struct kvec                *iov,
 	int                         iovcnt,
 	loff_t                      boff,
 	size_t                      len);

@@ -40,6 +40,7 @@
 
 #include "mpctl_sys.h"
 #include "mpctl.h"
+#include "mpctl_reap.h"
 
 #define REAP_ELEM_MAX       3
 

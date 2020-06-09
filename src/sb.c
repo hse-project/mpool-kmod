@@ -122,7 +122,7 @@ static bool sb_parm_valid(struct mpool_dev_info *pd)
  */
 static merr_t sb_write_sbx(struct mpool_dev_info *pd, char *outbuf, u32 idx)
 {
-	struct iovec iov = { outbuf, SB_AREA_SZ };
+	struct kvec  iov = { outbuf, SB_AREA_SZ };
 	merr_t       err;
 	u64          woff;
 
@@ -146,7 +146,7 @@ static merr_t sb_write_sbx(struct mpool_dev_info *pd, char *outbuf, u32 idx)
  */
 static merr_t sb_read_sbx(struct mpool_dev_info *pd, char *inbuf, u32 idx)
 {
-	struct iovec iov = { inbuf, SB_AREA_SZ };
+	struct kvec  iov = { inbuf, SB_AREA_SZ };
 	u64          woff;
 	merr_t       err;
 
@@ -198,7 +198,7 @@ int sb_magic_check(struct mpool_dev_info *pd)
 	}
 
 	for (i = 0; i < SB_SB_COUNT; i++) {
-		struct iovec iov = { inbuf, SB_AREA_SZ };
+		struct kvec iov = { inbuf, SB_AREA_SZ };
 		u64 woff = sb_idx2woff(pd, i);
 
 		memset(inbuf, 0, SB_AREA_SZ);
@@ -353,7 +353,7 @@ merr_t sb_erase(struct mpool_dev_info *pd)
 	memset(buf, 0, SB_AREA_SZ);
 
 	for (i = 0; i < SB_SB_COUNT; i++) {
-		struct iovec iov = { buf, SB_AREA_SZ };
+		struct kvec iov = { buf, SB_AREA_SZ };
 		u64 woff = sb_idx2woff(pd, i);
 
 		err = pd_zone_pwritev_sync(pd, &iov, 1, 0, woff);
@@ -570,7 +570,7 @@ void sbutil_mdc0_copy(struct omf_sb_descriptor *tgtsb, struct omf_sb_descriptor 
 /*
  * Compare mdc0 portions of sb1 and sb2.
  */
-int sbutil_mdc0_eq(struct omf_sb_descriptor *sb1, struct omf_sb_descriptor *sb2)
+static int sbutil_mdc0_eq(struct omf_sb_descriptor *sb1, struct omf_sb_descriptor *sb2)
 {
 	if (sb1->osb_mdc01gen != sb2->osb_mdc01gen ||
 	    sb1->osb_mdc01desc.ol_zcnt != sb2->osb_mdc01desc.ol_zcnt)
