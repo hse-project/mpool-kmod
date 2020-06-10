@@ -145,7 +145,7 @@ else ifeq ($(findstring relassert,$(MAKECMDGOALS)),relassert)
 else ifeq ($(findstring relwithdebug,$(MAKECMDGOALS)),relwithdebug)
 	BUILD_TYPE := relwithdebug
 	BUILD_STYPE := i
-	KCFLAGS += -O2 -DNDEBUG -g
+	KCFLAGS += -O2 -DNDEBUG
 else ifeq ($(findstring optdebug,$(MAKECMDGOALS)),optdebug)
 	BUILD_TYPE := optdebug
 	BUILD_STYPE := o
@@ -153,7 +153,7 @@ else ifeq ($(findstring optdebug,$(MAKECMDGOALS)),optdebug)
 else ifeq ($(findstring debug,$(MAKECMDGOALS)),debug)
 	BUILD_TYPE := debug
 	BUILD_STYPE := d
-	KCFLAGS += -g
+	KCFLAGS += -Og
 else
 	BUILD_TYPE := release
 	BUILD_STYPE := r

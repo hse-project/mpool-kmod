@@ -5,13 +5,11 @@ mpool-objs = evc.o init.o mblock.o mclass.o merr.o mlog.o mp.o mpcore_params.o o
 ccflags-y += -Wall
 ccflags-y += -Werror
 ccflags-y += -Wlogical-op
-ccflags-y += -Wno-missing-field-initializers
 ccflags-y += -Wuninitialized
 ccflags-y += -Wmaybe-uninitialized
 ccflags-y += -Wextra
-ccflags-y += -Wno-conversion
-ccflags-y += -Wno-sign-conversion
-ccflags-y += -Wno-sign-compare
+
+ccflags-y += -Wno-missing-field-initializers
 ccflags-y += -Wno-unused-parameter
 
 ccflags-y += -I$M -I$M/include -I$M/../include
