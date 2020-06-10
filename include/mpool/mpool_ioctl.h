@@ -495,7 +495,7 @@ struct mpioc_cmn {
 	int64_t                 mc_err;         /* mpool_err_t */
 	char __user            *mc_msg;         /* mdr_msg */
 	char __user            *mc_merr_base;
-} __aligned(8);
+} __attribute__((__aligned__(8)));
 
 struct mpioc_mpool {
 	struct mpioc_cmn        mp_cmn;         /* Must be first field! */
