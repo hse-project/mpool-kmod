@@ -208,8 +208,7 @@ omf_find_upgrade_hist(
  * or superblock beg/end versions (sbv1/sbv2). Set both mdcv1 and
  * mdcv2 to NULL, if caller wants to use superblock versions
  */
-__attribute__((__unused__))
-static merr_t
+static __maybe_unused merr_t
 omf_upgrade_convert_only(
 	void                       *out,
 	size_t                      outsz,

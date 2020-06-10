@@ -2920,8 +2920,7 @@ static merr_t mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mb
  * @cmd:    MPIOC_MB_READ or MPIOC_MB_WRITE
  * @mbiov:  mblock parameter block
  */
-__attribute__((__noinline__))
-static merr_t
+static noinline merr_t
 mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 	    void *stkbuf, size_t stkbufsz)
 {
@@ -3096,8 +3095,7 @@ static merr_t mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_
 	return err;
 }
 
-__attribute__((__noinline__))
-static merr_t
+static noinline merr_t
 mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi, void *stkbuf, size_t stkbufsz)
 {
 	struct mpool_descriptor    *mpool;

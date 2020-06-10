@@ -17,7 +17,7 @@ struct evc {
 	int         evc_line;
 } ____cacheline_aligned;
 
-#define _evc_section       __attribute__((__section__("mpool_evc")))
+#define _evc_section       __section(mpool_evc)
 
 #define ev(_expr)						\
 	({							\

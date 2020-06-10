@@ -9,10 +9,10 @@
 
 #include <mpcore/merr.h>
 
-static char merr_bug1[] _merr_attributes = "mpool_merr_bug1k";
-static char merr_bug2[] _merr_attributes = "mpool_merr_bug2k";
-static char merr_bug3[] _merr_attributes = "mpool_merr_bug3k";
-static char merr_base[] _merr_attributes = "mpool_merr_bug0k";
+DEFINE_MERR(merr_bug1, "mpool_merr_bug1k");
+DEFINE_MERR(merr_bug2, "mpool_merr_bug2k");
+DEFINE_MERR(merr_bug3, "mpool_merr_bug3k");
+DEFINE_MERR(merr_base, "mpool_merr_bug0k");
 
 merr_t merr_to_user(merr_t err, char __user *ubuf)
 {

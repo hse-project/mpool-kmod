@@ -58,10 +58,12 @@
 #define MERR_ALIGN          (1 << 6)
 #define MERR_BASE_SZ        (MERR_ALIGN * 64 * 2)
 
-#define _merr_section       __attribute__((__section__("mpool_merr")))
-#define _merr_attributes    _merr_section __aligned(MERR_ALIGN) __maybe_unused
+#define _merr_section       __section(mpool_merr)
 
-static char _merr_file[]    _merr_attributes = KBUILD_BASENAME;
+#define DEFINE_MERR(_var, _val)    \
+static char _var[] _merr_section __aligned(MERR_ALIGN) __maybe_unused = _val
+
+DEFINE_MERR(_merr_file, KBUILD_BASENAME);
 
 /* Layout of merr_t:
  *
