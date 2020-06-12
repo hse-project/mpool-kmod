@@ -17,9 +17,11 @@ case $1 in
             mpool scan --deactivate >/dev/null 2>&1 ||:
         fi
 
-        (modprobe -r -q mpool || rmmod mpool) && return 0
-        echo "Failed to unload the mpool kernel module."
-        echo "You must manually unload it after uninstall completes."
+        if modinfo mpool >/dev/null 2>&1; then
+            modprobe -r mpool && return 0
+            echo "Failed to unload the mpool kernel module."
+            echo "You must manually unload it after uninstall completes."
+        fi
         ;;
 
     *)
