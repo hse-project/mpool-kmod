@@ -1796,7 +1796,6 @@ static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 /**
  * mpioc_mp_add() - add a device to an existing mpool
  * @unit:   control device unit ptr
- * @cmd:    MPIOC_MP_DRV_ADD
  * @drv:    mpool device parameter block
  *
  * MPIOC_MP_ADD ioctl handler to add a drive to a activated mpool
@@ -1804,7 +1803,7 @@ static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
  * Return:  Returns 0 if successful,
  *          Returns merr_t otherwise...
  */
-static merr_t mpioc_mp_add(struct mpc_unit *unit, uint cmd, struct mpioc_drive *drv)
+static merr_t mpioc_mp_add(struct mpc_unit *unit, struct mpioc_drive *drv)
 {
 	struct mpool_descriptor    *desc = unit->un_mpool->mp_desc;
 	struct pd_prop             *pd_prop;
@@ -1934,7 +1933,6 @@ static merr_t mpc_mp_chown(struct mpc_unit *unit, struct mpool_params *params)
 /**
  * mpioc_params_get() - get parameters of an activated mpool
  * @unit:   mpool device unit ptr
- * @cmd:    MPIOC_PARAMS_GET
  * @get:    mpool params
  *
  * MPIOC_PARAMS_GET ioctl handler to get mpool parameters
@@ -1942,7 +1940,7 @@ static merr_t mpc_mp_chown(struct mpc_unit *unit, struct mpool_params *params)
  * Return:  Returns 0 if successful
  *          Returns merr_t otherwise...
  */
-static merr_t mpioc_params_get(struct mpc_unit *unit, uint cmd, struct mpioc_params *get)
+static merr_t mpioc_params_get(struct mpc_unit *unit, struct mpioc_params *get)
 {
 	struct mpc_softstate       *ss = &mpc_softstate;
 	struct mpool_descriptor    *desc;
@@ -1992,7 +1990,6 @@ static merr_t mpioc_params_get(struct mpc_unit *unit, uint cmd, struct mpioc_par
 /**
  * mpioc_params_set() - set parameters of an activated mpool
  * @unit:   control device unit ptr
- * @cmd:    MPIOC_PARAMS_SET
  * @set:    mpool params
  *
  * MPIOC_PARAMS_SET ioctl handler to set mpool parameters
@@ -2000,7 +1997,7 @@ static merr_t mpioc_params_get(struct mpc_unit *unit, uint cmd, struct mpioc_par
  * Return:  Returns 0 if successful
  *          Returns merr_t otherwise...
  */
-static merr_t mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_params *set)
+static merr_t mpioc_params_set(struct mpc_unit *unit, struct mpioc_params *set)
 {
 	struct mpc_softstate       *ss = &mpc_softstate;
 	struct mpool_descriptor    *mp;
@@ -2075,7 +2072,6 @@ static merr_t mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_par
 /**
  * mpioc_mp_mclass_get() - get information regarding an mpool's mclasses
  * @unit:   control device unit ptr
- * @cmd:    MPIOC_MP_MCLASS_GET
  * @mcl:    mclass info struct
  *
  * MPIOC_MP_MCLASS_GET ioctl handler to get mclass information
@@ -2083,7 +2079,7 @@ static merr_t mpioc_params_set(struct mpc_unit *unit, uint cmd, struct mpioc_par
  * Return:  Returns 0 if successful
  *          Returns merr_t otherwise...
  */
-static merr_t mpioc_mp_mclass_get(struct mpc_unit *unit, uint cmd, struct mpioc_mclass *mcl)
+static merr_t mpioc_mp_mclass_get(struct mpc_unit *unit, struct mpioc_mclass *mcl)
 {
 	struct mpool_descriptor   *desc = unit->un_mpool->mp_desc;
 	struct mpool_mclass_xprops mcxv[MP_MED_NUMBER];
@@ -2396,14 +2392,14 @@ errout:
 }
 
 /**
- * mpioc_mp_deactivate() - deactivate an mpool.
+ * mpioc_mp_deactivate_impl() - deactivate an mpool.
  * @unit:   control device unit ptr
  * @mp:     mpool parameter block
  *
  * MPIOC_MP_DEACTIVATE ioctl handler to deactivate an mpool.
  */
 static merr_t
-mp_deactivate_impl(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp, bool locked)
+mp_deactivate_impl(struct mpc_unit *ctl, struct mpioc_mpool *mp, bool locked)
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpc_unit        *unit = NULL;
@@ -2460,9 +2456,9 @@ errout:
 	return err;
 }
 
-static merr_t mpioc_mp_deactivate(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
+static merr_t mpioc_mp_deactivate(struct mpc_unit *ctl, struct mpioc_mpool *mp)
 {
-	return mp_deactivate_impl(ctl, cmd, mp, false);
+	return mp_deactivate_impl(ctl, mp, false);
 }
 
 static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
@@ -2613,7 +2609,7 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 			mpc_unit_put(unit);
 			unit = NULL;
 
-			err = mp_deactivate_impl(ctl, cmd, mp, true);
+			err = mp_deactivate_impl(ctl, mp, true);
 			if (ev(err)) {
 				action = "deactivate";
 				break;
@@ -2645,11 +2641,10 @@ errout:
 /**
  * mpioc_prop_get() - Get mpool properties.
  * @unit:   mpool unit ptr
- * @cmd:    MPIOC_PROP_GET
  *
  * MPIOC_PROP_GET ioctl handler to retrieve properties for the specified device.
  */
-static void mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop, int cmd)
+static void mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop)
 {
 	struct mpool_descriptor    *desc = unit->un_mpool->mp_desc;
 	struct mpool_params        *params;
@@ -2743,7 +2738,7 @@ static int mpioc_proplist_get_itercb(int minor, void *item, void *arg)
 	cntp = argv[2];
 	errp = argv[3];
 
-	mpioc_prop_get(unit, &kprop, ls->ls_cmd);
+	mpioc_prop_get(unit, &kprop);
 
 	uprop = (struct mpioc_prop __user *)ls->ls_listv + *cntp;
 
@@ -2759,7 +2754,6 @@ static int mpioc_proplist_get_itercb(int minor, void *item, void *arg)
 /**
  * mpioc_proplist_get() - Get mpool or dataset properties.
  * @unit:   mpool or dataset unit ptr
- * @cmd     MPIOC_PROP_GET
  * @ls:     properties parameter block
  *
  * MPIOC_PROP_GET ioctl handler to retrieve properties for one
@@ -2767,7 +2761,7 @@ static int mpioc_proplist_get_itercb(int minor, void *item, void *arg)
  *
  * Return:  Returns 0 if successful, errno via merr_t otherwise...
  */
-static merr_t mpioc_proplist_get(struct mpc_unit *unit, uint cmd, struct mpioc_list *ls)
+static merr_t mpioc_proplist_get(struct mpc_unit *unit, struct mpioc_list *ls)
 {
 	struct mpc_softstate *ss = &mpc_softstate;
 	merr_t      err = 0;
@@ -2987,7 +2981,7 @@ errout:
 /*
  * Mpctl mlog ioctl handlers
  */
-static merr_t mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
+static merr_t mpioc_mlog_alloc(struct mpc_unit *unit, struct mpioc_mlog *ml)
 {
 	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
@@ -2999,20 +2993,7 @@ static merr_t mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlo
 
 	mpool = unit->un_mpool->mp_desc;
 
-	switch (cmd) {
-	case MPIOC_MLOG_ALLOC:
-		err = mlog_alloc(mpool, &ml->ml_cap, ml->ml_mclassp, &props, &mlog);
-		break;
-
-	case MPIOC_MLOG_REALLOC:
-		err = mlog_realloc(mpool, ml->ml_objid, &ml->ml_cap, ml->ml_mclassp, &props, &mlog);
-		break;
-
-	default:
-		err = merr(EINVAL);
-		break;
-	}
-
+	err = mlog_alloc(mpool, &ml->ml_cap, ml->ml_mclassp, &props, &mlog);
 	if (ev(err))
 		return err;
 
@@ -3024,7 +3005,7 @@ static merr_t mpioc_mlog_alloc(struct mpc_unit *unit, uint cmd, struct mpioc_mlo
 	return 0;
 }
 
-static merr_t mpioc_mlog_find(struct mpc_unit *unit, uint cmd, struct mpioc_mlog *ml)
+static merr_t mpioc_mlog_find(struct mpc_unit *unit, struct mpioc_mlog *ml)
 {
 	struct mpool_descriptor    *mpool;
 	struct mlog_descriptor     *mlog;
@@ -3518,27 +3499,27 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		break;
 
 	case MPIOC_MP_DEACTIVATE:
-		err = mpioc_mp_deactivate(unit, cmd, argp);
+		err = mpioc_mp_deactivate(unit, argp);
 		break;
 
 	case MPIOC_DRV_ADD:
-		err = mpioc_mp_add(unit, cmd, argp);
+		err = mpioc_mp_add(unit, argp);
 		break;
 
 	case MPIOC_PARAMS_SET:
-		err = mpioc_params_set(unit, cmd, argp);
+		err = mpioc_params_set(unit, argp);
 		break;
 
 	case MPIOC_PARAMS_GET:
-		err = mpioc_params_get(unit, cmd, argp);
+		err = mpioc_params_get(unit, argp);
 		break;
 
 	case MPIOC_MP_MCLASS_GET:
-		err = mpioc_mp_mclass_get(unit, cmd, argp);
+		err = mpioc_mp_mclass_get(unit, argp);
 		break;
 
 	case MPIOC_PROP_GET:
-		err = mpioc_proplist_get(unit, cmd, argp);
+		err = mpioc_proplist_get(unit, argp);
 		break;
 
 	case MPIOC_DEVPROPS_GET:
@@ -3569,13 +3550,12 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		break;
 
 	case MPIOC_MLOG_ALLOC:
-	case MPIOC_MLOG_REALLOC:
-		err = mpioc_mlog_alloc(unit, cmd, argp);
+		err = mpioc_mlog_alloc(unit, argp);
 		break;
 
 	case MPIOC_MLOG_FIND:
 	case MPIOC_MLOG_PROPS:
-		err = mpioc_mlog_find(unit, cmd, argp);
+		err = mpioc_mlog_find(unit, argp);
 		break;
 
 	case MPIOC_MLOG_ABORT:
