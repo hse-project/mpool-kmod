@@ -16,9 +16,12 @@ case $1 in
         fi
 
         if modinfo mpool >/dev/null 2>&1; then
-            modprobe -r mpool && return 0
-            echo "Failed to unload the mpool kernel module."
-            echo "You must manually unload it after uninstall completes."
+            modprobe -r mpool
+            if [ $? -ne 0 ]; then
+                echo "Failed to unload the mpool kernel module."
+                echo "You must manually deactivate any activated mpool(s) and" \
+                     "unload the module after uninstall completes."
+            fi
         fi
         ;;
 
