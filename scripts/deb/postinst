@@ -11,7 +11,7 @@ PKG=$(basename ${0%.*})
 
 case $1 in
     configure)
-        depmod -A
+        depmod -a
 
         modprobe mpool || echo "Failed to load mpool module, run modprobe manually"
 
