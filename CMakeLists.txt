@@ -4,12 +4,15 @@
 # Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
 #
 
-cmake_minimum_required( VERSION 3.6 )
+cmake_minimum_required( VERSION 2.8.12 )
 
-project( kmod-mpool
-    VERSION       ${BUILD_PKG_VERSION}
-    HOMEPAGE_URL  "https://github.com/hse-project/mpool-kmod"
-    LANGUAGES     NONE )
+project( kmod-mpool C )
+
+set( PROJECT_VERSION            "${BUILD_PKG_VERSION}" )
+set( PROJECT_HOMEPAGE_URL       "https://github.com/hse-project/mpool-kmod" )
+
+set( CMAKE_PROJECT_VERSION      "${PROJECT_VERSION}" )
+set( CMAKE_PROJECT_HOMEPAGE_URL "${PROJECT_HOMEPAGE_URL}" )
 
 message( STATUS "Configuring ${PROJECT_NAME}-${KREL} common ..." )
 
@@ -25,9 +28,10 @@ INSTALL(
 
 # Common package options
 #
-set( CPACK_PACKAGE_NAME           "${PROJECT_NAME}-${KREL}" )
-set( CPACK_PACKAGE_LICENSE        "GPLv2 and MIT" )
-set( CPACK_PACKAGE_VENDOR         "${BUILD_PKG_VENDOR}" )
+set( CPACK_PACKAGE_NAME         "${PROJECT_NAME}-${KREL}" )
+set( CPACK_PACKAGE_LICENSE      "GPLv2 and MIT" )
+set( CPACK_PACKAGE_VENDOR       "${BUILD_PKG_VENDOR}" )
+set( CPACK_PACKAGE_VERSION      "${PROJECT_VERSION}${BUILD_PKG_VQUAL}" )
 
 set( CPACK_PACKAGE_DESCRIPTION_SUMMARY
     "Object Storage Media Pool (mpool) ${BUILD_TYPE} kernel module" )
@@ -39,6 +43,13 @@ if( "${BUILD_NUMBER}" )
     set( BUILD_RTYPE "${BUILD_STYPE}${BUILD_NUMBER}" )
 else()
     set( BUILD_RTYPE "" )
+endif()
+
+set( CPACK_PACKAGE_RELEASE      "${BUILD_PKG_REL}${BUILD_RTYPE}${BUILD_PKG_DIST}" )
+
+if( ${CMAKE_MINIMUM_REQUIRED_VERSION} VERSION_LESS 3.6.2 )
+    set( CPACK_PACKAGE_FILE_NAME
+	"${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CPACK_PACKAGE_RELEASE}" )
 endif()
 
 include( ${SCRIPTS_DIR}/CMakeLists.txt )
