@@ -102,7 +102,7 @@ BUILD_PKG_VQUAL := '~dev'
 BUILD_PKG_VENDOR ?= "Micron Technology, Inc."
 
 BUILD_PKG_TAG := $(shell test -d ".git" && \
-	git describe --always --long --tags --dirty --abbrev=10)
+	git describe --always --long --tags --dirty --abbrev=10 2>/dev/null)
 
 ifeq (${BUILD_PKG_TAG},)
 BUILD_PKG_TAG := ${BUILD_PKG_VERSION}
@@ -274,7 +274,7 @@ allv all: src/mpool_config.h
 clean: MAKEFLAGS += --no-print-directory
 clean:
 	-test -f "${CONFIG_PKG}" && $(MAKE) -C $(BUILD_PKG_DIR) clean
-	$(MAKE) -C $(KDIR) M=$${PWD}/src clean
+	-$(MAKE) -C $(KDIR) M=$${PWD}/src clean 2>/dev/null
 	$(MAKE) -C config clean
 	rm -rf kmod-mpool-$(KREL)*.${BUILD_PKG} src/mpool_config.h
 
