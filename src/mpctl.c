@@ -128,7 +128,6 @@ struct mpc_unit {
 	uint                        un_rawio;       /* log2(max_mblock_size) */
 	u64                         un_ds_oidv[2];
 	u32                         un_ra_pages_max;
-	enum mp_media_classp        un_ds_mclassp;
 	u64                         un_mdc_captgt;
 	uuid_le                     un_utype;
 	u8                          un_label[MPOOL_LABELSZ_MAX];
@@ -390,9 +389,6 @@ static void mpool_params_merge_defaults(struct mpool_params *params)
 	if (params->mp_spare_stg == MPOOL_SPARES_INVALID)
 		params->mp_spare_stg = MPOOL_SPARES_DEFAULT;
 
-	if (params->mp_mclassp == MPOOL_MCLASS_INVALID)
-		params->mp_mclassp = MPOOL_MCLASS_DEFAULT;
-
 	if (params->mp_ra_pages_max == U32_MAX)
 		params->mp_ra_pages_max = MPOOL_RA_PAGES_MAX;
 	params->mp_ra_pages_max = clamp_t(u32, params->mp_ra_pages_max, 0, MPOOL_RA_PAGES_MAX);
@@ -402,6 +398,7 @@ static void mpool_params_merge_defaults(struct mpool_params *params)
 
 	params->mp_vma_size_max = mpc_xvm_size_max;
 
+	params->mp_rsvd0 = 0;
 	params->mp_rsvd1 = 0;
 	params->mp_rsvd2 = 0;
 	params->mp_rsvd3 = 0;
@@ -898,7 +895,6 @@ mpc_unit_setup(
 	unit->un_mode = cfg->mc_mode;
 
 	unit->un_mdc_captgt = cfg->mc_captgt;
-	unit->un_ds_mclassp = cfg->mc_mclassp;
 	memcpy(&unit->un_utype, &cfg->mc_utype, sizeof(unit->un_utype));
 	strlcpy(unit->un_label, cfg->mc_label, sizeof(unit->un_label));
 	unit->un_ds_oidv[0] = cfg->mc_oid1;
@@ -1960,7 +1956,6 @@ static merr_t mpioc_params_get(struct mpc_unit *unit, struct mpioc_params *get)
 	params->mp_uid = unit->un_uid;
 	params->mp_gid = unit->un_gid;
 	params->mp_mode = unit->un_mode;
-	params->mp_mclassp = unit->un_ds_mclassp;
 	params->mp_mdc_captgt = MPOOL_ROOT_LOG_CAP;
 	params->mp_oidv[0] = unit->un_ds_oidv[0];
 	params->mp_oidv[1] = unit->un_ds_oidv[1];
@@ -2132,7 +2127,6 @@ mpioc_mp_create(
 	struct mpool_config     cfg = { };
 	struct mpool_devrpt    *devrpt;
 	struct mpcore_params    mpc_params;
-	struct mpool_mdparm     mdparm;
 	struct mpc_unit        *unit = NULL;
 	struct mpc_mpool       *mpool = NULL;
 	size_t                  len;
@@ -2182,9 +2176,7 @@ mpioc_mp_create(
 
 	mpool_to_mpcore_params(&mp->mp_params, &mpc_params);
 
-	mdparm.mdp_mclassp = mp->mp_params.mp_mclassp;
-
-	err = mpool_create(mp->mp_params.mp_name, mp->mp_flags, &mdparm, *dpathv,
+	err = mpool_create(mp->mp_params.mp_name, mp->mp_flags, *dpathv,
 			   pd_prop, &mpc_params, MPOOL_ROOT_LOG_CAP, devrpt);
 	if (err) {
 		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "%s: mpool %s, create failed",
@@ -2213,7 +2205,7 @@ mpioc_mp_create(
 	cfg.mc_uid = uid;
 	cfg.mc_gid = gid;
 	cfg.mc_mode = mode;
-	cfg.mc_mclassp = mdparm.mdp_mclassp;
+	cfg.mc_rsvd0 = mp->mp_params.mp_rsvd0;
 	cfg.mc_captgt = MPOOL_ROOT_LOG_CAP;
 	cfg.mc_ra_pages_max = mp->mp_params.mp_ra_pages_max;
 	cfg.mc_vma_size_max = mp->mp_params.mp_vma_size_max;
@@ -2245,7 +2237,6 @@ mpioc_mp_create(
 	mp->mp_params.mp_uid = uid;
 	mp->mp_params.mp_gid = gid;
 	mp->mp_params.mp_mode = mode;
-	mp->mp_params.mp_mclassp = cfg.mc_mclassp;
 	mp->mp_params.mp_mdc_captgt = cfg.mc_captgt;
 	mp->mp_params.mp_oidv[0] = cfg.mc_oid1;
 	mp->mp_params.mp_oidv[1] = cfg.mc_oid2;
@@ -2358,7 +2349,6 @@ mpioc_mp_activate(
 	mp->mp_params.mp_uid = cfg.mc_uid;
 	mp->mp_params.mp_gid = cfg.mc_gid;
 	mp->mp_params.mp_mode = cfg.mc_mode;
-	mp->mp_params.mp_mclassp = cfg.mc_mclassp;
 	mp->mp_params.mp_mdc_captgt = cfg.mc_captgt;
 	mp->mp_params.mp_oidv[0] = cfg.mc_oid1;
 	mp->mp_params.mp_oidv[1] = cfg.mc_oid2;
@@ -2658,7 +2648,6 @@ static void mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop)
 	params->mp_uid = unit->un_uid;
 	params->mp_gid = unit->un_gid;
 	params->mp_mode = unit->un_mode;
-	params->mp_mclassp = unit->un_ds_mclassp;
 	params->mp_mdc_captgt = unit->un_mdc_captgt;
 	params->mp_oidv[0] = unit->un_ds_oidv[0];
 	params->mp_oidv[1] = unit->un_ds_oidv[1];
@@ -3891,9 +3880,9 @@ static merr_t mpc_cf_journal(struct mpc_unit *unit)
 	cfg.mc_mode = unit->un_mode;
 	cfg.mc_oid1 = unit->un_ds_oidv[0];
 	cfg.mc_oid2 = unit->un_ds_oidv[1];
-	cfg.mc_mclassp = unit->un_ds_mclassp;
 	cfg.mc_captgt = unit->un_mdc_captgt;
 	cfg.mc_ra_pages_max = unit->un_ra_pages_max;
+	cfg.mc_vma_size_max = mpc_xvm_size_max;
 	memcpy(&cfg.mc_utype, &unit->un_utype, sizeof(cfg.mc_utype));
 	strlcpy(cfg.mc_label, unit->un_label, sizeof(cfg.mc_label));
 

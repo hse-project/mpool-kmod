@@ -110,7 +110,7 @@ void smap_mpool_free(struct mpool_descriptor *mp)
 /**
  * See smap.h.
  */
-void smap_mpool_usage(struct mpool_descriptor *mp, u8 mclass, struct mp_usage *usage)
+void smap_mpool_usage(struct mpool_descriptor *mp, u8 mclass, struct mpool_usage *usage)
 {
 	if (mclass == MP_MED_ALL) {
 		u32 i;
@@ -181,7 +181,7 @@ static void smap_calc_znstats(struct mpool_dev_info *pd, struct smap_dev_znstats
 /**
  * See smap.h.
  */
-merr_t smap_drive_usage(struct mpool_descriptor *mp, u16 pdh, struct mp_devprops *dprop)
+merr_t smap_drive_usage(struct mpool_descriptor *mp, u16 pdh, struct mpool_devprops *dprop)
 {
 	struct smap_dev_znstats zones;
 	struct mpool_dev_info   *pd = &mp->pds_pdv[pdh];
@@ -593,7 +593,7 @@ static merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh)
 	return err;
 }
 
-void smap_mclass_usage(struct mpool_descriptor *mp, u8 mclass, struct mp_usage *usage)
+void smap_mclass_usage(struct mpool_descriptor *mp, u8 mclass, struct mpool_usage *usage)
 {
 	struct media_class         *mc;
 	struct smap_dev_znstats     zones;
@@ -1008,7 +1008,7 @@ void smap_log_mpool_usage(struct work_struct *ws)
 	struct smap_usage_work     *smapu;
 	struct mpool_descriptor    *mp;
 	int                         last, cur, delta;
-	struct mp_usage             usage;
+	struct mpool_usage          usage;
 
 	smapu = container_of(ws, struct smap_usage_work, smapu_wstruct.work);
 	mp = smapu->smapu_mp;

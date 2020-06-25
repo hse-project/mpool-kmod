@@ -733,8 +733,8 @@ merr_t omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf)
 
 	/* pack drive-specific info */
 	omf_set_psb_magic(sb_omf, sb->osb_magic);
-	assert(OMF_MPOOL_NAME_LEN == MPOOL_NAME_LEN_MAX);
-	omf_set_psb_name(sb_omf, sb->osb_name, MPOOL_NAME_LEN_MAX);
+	assert(OMF_MPOOL_NAME_LEN == MPOOL_NAMESZ_MAX);
+	omf_set_psb_name(sb_omf, sb->osb_name, MPOOL_NAMESZ_MAX);
 	assert(MPOOL_UUID_SIZE == OMF_UUID_PACKLEN);
 	omf_set_psb_poolid(sb_omf, sb->osb_poolid.uuid, MPOOL_UUID_SIZE);
 	omf_set_psb_vers(sb_omf, sb->osb_vers);
@@ -802,8 +802,8 @@ merr_t omf_sb_unpack_letoh_v1(void *out, const char *inbuf)
 
 	sb->osb_magic = omf_psb_magic(sb_omf);
 
-	assert(OMF_MPOOL_NAME_LEN == MPOOL_NAME_LEN_MAX);
-	omf_psb_name(sb_omf, sb->osb_name, MPOOL_NAME_LEN_MAX);
+	assert(OMF_MPOOL_NAME_LEN == MPOOL_NAMESZ_MAX);
+	omf_psb_name(sb_omf, sb->osb_name, MPOOL_NAMESZ_MAX);
 
 	sb->osb_vers = omf_psb_vers(sb_omf);
 	assert(sb->osb_vers == OMF_SB_DESC_V1);
@@ -1187,7 +1187,7 @@ static u64 omf_mdcrec_mpconfig_pack_htole(struct omf_mdcrec_data *cdr, char *out
 	omf_set_pdmc_uid(cfg_omf, cfg->mc_uid);
 	omf_set_pdmc_gid(cfg_omf, cfg->mc_gid);
 	omf_set_pdmc_mode(cfg_omf, cfg->mc_mode);
-	omf_set_pdmc_mclassp(cfg_omf, cfg->mc_mclassp);
+	omf_set_pdmc_rsvd0(cfg_omf, cfg->mc_rsvd0);
 	omf_set_pdmc_captgt(cfg_omf, cfg->mc_captgt);
 	omf_set_pdmc_ra_pages_max(cfg_omf, cfg->mc_ra_pages_max);
 	omf_set_pdmc_vma_size_max(cfg_omf, cfg->mc_vma_size_max);
@@ -1222,7 +1222,7 @@ static void omf_mdcrec_mpconfig_unpack_letoh(struct omf_mdcrec_data *cdr, const 
 	cfg->mc_uid = omf_pdmc_uid(cfg_omf);
 	cfg->mc_gid = omf_pdmc_gid(cfg_omf);
 	cfg->mc_mode = omf_pdmc_mode(cfg_omf);
-	cfg->mc_mclassp = omf_pdmc_mclassp(cfg_omf);
+	cfg->mc_rsvd0 = omf_pdmc_rsvd0(cfg_omf);
 	cfg->mc_captgt = omf_pdmc_captgt(cfg_omf);
 	cfg->mc_ra_pages_max = omf_pdmc_ra_pages_max(cfg_omf);
 	cfg->mc_vma_size_max = omf_pdmc_vma_size_max(cfg_omf);

@@ -823,7 +823,7 @@ void pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 ca
  * @mp:
  * @usage:
  */
-void pmd_mpool_usage(struct mpool_descriptor *mp, struct mp_usage *usage);
+void pmd_mpool_usage(struct mpool_descriptor *mp, struct mpool_usage *usage);
 
 /**
  * pmd_mdc_addrec_version() -add a version record in a mpool MDC.

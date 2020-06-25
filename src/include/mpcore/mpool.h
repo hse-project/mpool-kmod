@@ -167,7 +167,7 @@ struct mpool_config {
 	uid_t                   mc_uid;
 	gid_t                   mc_gid;
 	mode_t                  mc_mode;
-	enum mp_media_classp    mc_mclassp;
+	u32                     mc_rsvd0;
 	u64                     mc_captgt;
 	u32                     mc_ra_pages_max;
 	u32                     mc_vma_size_max;
@@ -198,7 +198,6 @@ merr_t mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
  * mpool_create() - Create an mpool
  * @mpname:
  * @flags: enum mp_mgmt_flags
- * @mdparm:
  * @dpaths:
  * @pd_prop: PDs properties obtained by mpool_create() caller.
  * @params:  mpcore parameters
@@ -215,8 +214,7 @@ merr_t mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
 merr_t
 mpool_create(
 	const char              *name,
-	u32			 flags,
-	struct mpool_mdparm     *mdparm,
+	u32                      flags,
 	char                   **dpaths,
 	struct pd_prop	        *pd_prop,
 	struct mpcore_params    *params,
@@ -376,7 +374,7 @@ void mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops);
  * -ENOENT if device with specified name cannot be found
  */
 merr_t
-mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname, struct mp_devprops *dprop);
+mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname, struct mpool_devprops *dprop);
 
 /**
  * mpool_get_usage() -
@@ -390,7 +388,10 @@ mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname, struct mp_
  * Return: %0 if successful; err_t otherwise...
  */
 void
-mpool_get_usage(struct mpool_descriptor *mp, enum mp_media_classp mclassp, struct mp_usage *usage);
+mpool_get_usage(
+	struct mpool_descriptor    *mp,
+	enum mp_media_classp        mclassp,
+	struct mpool_usage         *usage);
 
 /**
  * mpool_config_store() - store a config record in MDC0

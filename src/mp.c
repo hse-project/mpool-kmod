@@ -412,7 +412,6 @@ mpool_dev_check_new(
  * mpool_desc_init_newpool() -
  * @mp:
  * @flags: enum mp_mgmt_flags
- * @mdparm:
  * @devrpt:
  *
  * Called on mpool create.
@@ -423,11 +422,7 @@ mpool_dev_check_new(
  * and correct when entering this function.
  */
 static merr_t
-mpool_desc_init_newpool(
-	struct mpool_descriptor    *mp,
-	u32                         flags,
-	struct mpool_mdparm        *mdparm,
-	struct mpool_devrpt        *devrpt)
+mpool_desc_init_newpool(struct mpool_descriptor *mp, u32 flags, struct mpool_devrpt *devrpt)
 {
 	u64    pdh = 0;
 	merr_t err;
@@ -567,7 +562,6 @@ merr_t
 mpool_create(
 	const char             *mpname,
 	u32                     flags,
-	struct mpool_mdparm    *mdparm,
 	char                  **dpaths,
 	struct pd_prop	       *pd_prop,
 	struct mpcore_params   *params,
@@ -584,12 +578,8 @@ mpool_create(
 
 	mpool_devrpt_init(devrpt);
 
-	if (!mpname || !*mpname || !mclass_isvalid(mdparm->mdp_mclassp)) {
-		err = merr(EINVAL);
-		mp_pr_err("mpool %s, class perf %u",
-			  err, mpname ? mpname : "?", mdparm->mdp_mclassp);
-		return err;
-	}
+	if (!mpname || !*mpname || !dpaths || !pd_prop)
+		return merr(EINVAL);
 
 	mdc01 = mdc02 = NULL;
 	active = sbvalid = false;
@@ -641,7 +631,7 @@ mpool_create(
 	 * Creates the media classes and place the PDs in them.
 	 * Determine the media class used for the metadata.
 	 */
-	err = mpool_desc_init_newpool(mp, flags, mdparm, devrpt);
+	err = mpool_desc_init_newpool(mp, flags, devrpt);
 	if (err) {
 		mp_pr_err("mpool %s, desc init from new drive info failed", err, mpname);
 		goto errout;
@@ -793,7 +783,6 @@ mpool_desc_init_sb(
 	const char                 *mp_newname)
 {
 	struct omf_sb_descriptor   *sb = NULL;
-	struct mpool_mdparm         mdtemp;
 	struct mpool_dev_info      *pd = NULL;
 
 	merr_t err;
@@ -891,7 +880,7 @@ mpool_desc_init_sb(
 
 		/* Validate mdc0 info in superblock if present */
 		if (!sbutil_mdc0_isclear(sb)) {
-			if (!force && !sbutil_mdc0_isvalid(sb, &mdtemp)) {
+			if (!force && !sbutil_mdc0_isvalid(sb)) {
 				mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
 					     "invalid superblock MDC0 in pd %s", pd->pdi_name);
 				kfree(sb);
@@ -1867,9 +1856,6 @@ void mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops)
 		xprops->ppx_drive_spares[mclassp] = mc->mc_sparms.mcsp_spzone;
 		xprops->ppx_uacnt[mclassp] = mc->mc_uacnt;
 		ftmax = max((u16)ftmax, (u16)(xprops->ppx_uacnt[mclassp]));
-		if (mclassp == mp->pds_mdparm.md_mclass)
-			xprops->ppx_mdparm.mdp_mclassp = mclassp;
-
 		xprops->ppx_params.mp_mblocksz[mclassp] =
 			(mc->mc_parms.mcp_zonepg << PAGE_SHIFT) >> 20;
 	}
@@ -1891,7 +1877,7 @@ void mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops)
 	xprops->ppx_params.mp_stat = ftmax ? MPOOL_STAT_FAULTED : MPOOL_STAT_OPTIMAL;
 }
 
-static void fill_in_devprops(struct mpool_descriptor *mp, u64 pdh, struct mp_devprops *dprop)
+static void fill_in_devprops(struct mpool_descriptor *mp, u64 pdh, struct mpool_devprops *dprop)
 {
 	merr_t			err;
 	struct mpool_dev_info  *pd;
@@ -1912,7 +1898,7 @@ static void fill_in_devprops(struct mpool_descriptor *mp, u64 pdh, struct mp_dev
 }
 
 merr_t
-mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname, struct mp_devprops *dprop)
+mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname, struct mpool_devprops *dprop)
 {
 	int    i;
 
@@ -1929,7 +1915,10 @@ mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname, struct mp_
 }
 
 void
-mpool_get_usage(struct mpool_descriptor *mp, enum mp_media_classp mclassp, struct mp_usage *usage)
+mpool_get_usage(
+	struct mpool_descriptor    *mp,
+	enum mp_media_classp        mclassp,
+	struct mpool_usage         *usage)
 {
 	memset(usage, 0, sizeof(*usage));
 

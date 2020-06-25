@@ -67,7 +67,7 @@
 	}
 
 
-/* MPOOL_NAME_LEN_MAX should match OMF_MPOOL_NAME_LEN */
+/* MPOOL_NAMESZ_MAX should match OMF_MPOOL_NAME_LEN */
 #define OMF_MPOOL_NAME_LEN 32
 
 /* MPOOL_UUID_SIZE should match OMF_UUID_PACKLEN */
@@ -480,7 +480,7 @@ struct mdcrec_data_mpconfig_omf {
 	__le32  pdmc_uid;
 	__le32  pdmc_gid;
 	__le32  pdmc_mode;
-	__le32  pdmc_mclassp;
+	__le32  pdmc_rsvd0;
 	__le64  pdmc_captgt;
 	__le32  pdmc_ra_pages_max;
 	__le32  pdmc_vma_size_max;
@@ -499,7 +499,7 @@ OMF_SETGET(struct mdcrec_data_mpconfig_omf, pdmc_oid2, 64)
 OMF_SETGET(struct mdcrec_data_mpconfig_omf, pdmc_uid, 32)
 OMF_SETGET(struct mdcrec_data_mpconfig_omf, pdmc_gid, 32)
 OMF_SETGET(struct mdcrec_data_mpconfig_omf, pdmc_mode, 32)
-OMF_SETGET(struct mdcrec_data_mpconfig_omf, pdmc_mclassp, 32)
+OMF_SETGET(struct mdcrec_data_mpconfig_omf, pdmc_rsvd0, 32)
 OMF_SETGET(struct mdcrec_data_mpconfig_omf, pdmc_captgt, 64)
 OMF_SETGET(struct mdcrec_data_mpconfig_omf, pdmc_ra_pages_max, 32)
 OMF_SETGET(struct mdcrec_data_mpconfig_omf, pdmc_vma_size_max, 32)

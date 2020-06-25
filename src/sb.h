@@ -7,7 +7,6 @@
 #define MPOOL_SB_PRIV_H
 
 struct mpool_dev_info;
-struct mpool_mdparm;
 
 /*
  * Drives have 2 superblocks.
@@ -150,12 +149,11 @@ void sbutil_mdc0_copy(struct omf_sb_descriptor *tgtsb, struct omf_sb_descriptor 
 /**
  * sbutil_mdc0_isvalid() - validate mdc0 of a superblock
  * @sb: struct omf_sb_descriptor *
- * @mdparm: struct mpool_mdparm *
  *
  * Validate mdc0 portion of sb and extract mdparm.
  * Return: 1 if valid and mdparm set; 0 otherwise.
  */
-int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb, struct mpool_mdparm *mdparm);
+int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb);
 
 /*
  * sb internal functions

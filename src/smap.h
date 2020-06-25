@@ -7,8 +7,8 @@
 #define MPOOL_SMAP_PRIV_H
 
 /* Forward Decls */
-struct mp_usage;
-struct mp_devprops;
+struct mpool_usage;
+struct mpool_devprops;
 struct mpool_dev_info;
 struct mc_smap_parms;
 
@@ -178,7 +178,7 @@ void smap_mpool_free(struct mpool_descriptor *mp);
  * smap_mpool_usage() - present stats of smap usage
  * @mp: struct mpool_descriptor *
  * @mclass: media class or MP_MED_ALL for all classes
- * @usage: struct mp_usage *
+ * @usage: struct mpool_usage *
  *
  * Fill in stats with space usage for media class; if MP_MED_ALL
  * report on all media classes; caller must hold mp.pdvlock.
@@ -188,7 +188,7 @@ void smap_mpool_free(struct mpool_descriptor *mp);
  *
  * Return: 0 if successful, merr_t otherwise...
  */
-void smap_mpool_usage(struct mpool_descriptor *mp, u8 mclass, struct mp_usage *usage);
+void smap_mpool_usage(struct mpool_descriptor *mp, u8 mclass, struct mpool_usage *usage);
 
 /**
  * smap_drive_spares() - Set percentage of zones to set aside as spares
@@ -210,13 +210,13 @@ merr_t smap_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclas
  * smap_drive_usage() - Fill in a given drive's portion of dprop struct.
  * @mp:    struct mpool_descriptor *
  * @pdh:   drive number within the mpool_descriptor
- * @dprop: struct mp_devprops *, structure to fill in
+ * @dprop: struct mpool_devprops *, structure to fill in
  *
  * Fill in usage portion of dprop for drive pdh; caller must hold mp.pdvlock
  *
  * Return: 0 if successful, merr_t otherwise
  */
-merr_t smap_drive_usage(struct mpool_descriptor *mp, u16 pdh, struct mp_devprops *dprop);
+merr_t smap_drive_usage(struct mpool_descriptor *mp, u16 pdh, struct mpool_devprops *dprop);
 
 /**
  * smap_drive_init() - Initialize a specific drive within a mpool_descriptor
@@ -311,7 +311,7 @@ merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp,
  * Locking: the caller should hold the pds_pdvlock at least in read to
  *	to be protected against media classes updates.
  */
-void smap_mclass_usage(struct mpool_descriptor *mp, u8 mclass, struct mp_usage *usage);
+void smap_mclass_usage(struct mpool_descriptor *mp, u8 mclass, struct mpool_usage *usage);
 
 /**
  * smap_log_mpool_usage() - check drive mpool free usable space %, and log

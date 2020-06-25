@@ -3530,7 +3530,7 @@ void pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 ca
 	atomic64_set(&pco_cnt->pcc_cap, cap);
 }
 
-void pmd_mpool_usage(struct mpool_descriptor *mp, struct mp_usage *usage)
+void pmd_mpool_usage(struct mpool_descriptor *mp, struct mpool_usage *usage)
 {
 	int    sidx;
 	u16    slotvcnt;

@@ -44,43 +44,10 @@ struct mp_mdc {
 	struct mlog_descriptor     *mdc_logh2;
 	struct mlog_descriptor     *mdc_alogh;
 	struct mutex                mdc_lock;
-	char                        mdc_mpname[MPOOL_NAME_LEN_MAX];
+	char                        mdc_mpname[MPOOL_NAMESZ_MAX];
 	int                         mdc_valid;
 	int                         mdc_magic;
 	u8                          mdc_flags;
-};
-
-/**
- * mdc_open_flags -
- * @MDC_OF_SKIP_SER: appends and reads are guaranteed to be serialized
- *                   outside of the MDC API
- */
-enum mdc_open_flags {
-	MDC_OF_SKIP_SER  = 0x1,
-};
-
-/**
- * mdc_capacity -
- * @mdt_captgt: capacity target for mlog in bytes
- * @mpt_spare:  true if alloc MDC from spare space
- */
-struct mdc_capacity {
-	uint64_t   mdt_captgt;
-	bool       mdt_spare;
-};
-
-/**
- * mdc_props -
- * @mdc_objid1:
- * @mdc_objid2:
- * @mdc_alloc_cap:
- * @mdc_mclassp:
- */
-struct mdc_props {
-	uint64_t               mdc_objid1;
-	uint64_t               mdc_objid2;
-	uint64_t               mdc_alloc_cap;
-	enum mp_media_classp   mdc_mclassp;
 };
 
 /* MDC (Metadata Container) APIs

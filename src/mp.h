@@ -214,7 +214,7 @@ struct mpool_descriptor {
 	struct mpool_config         pds_cfg;
 	struct rb_node              pds_node;
 	struct mpool_uuid           pds_poolid;
-	char                        pds_name[MPOOL_NAME_LEN_MAX];
+	char                        pds_name[MPOOL_NAMESZ_MAX];
 
 	/* pds_mda is enormous (91K)
 	 */

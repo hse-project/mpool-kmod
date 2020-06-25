@@ -83,7 +83,7 @@ struct omf_devparm_descriptor {
  */
 struct omf_sb_descriptor {
 	u64                            osb_magic;
-	u8                             osb_name[MPOOL_NAME_LEN_MAX];
+	u8                             osb_name[MPOOL_NAMESZ_MAX];
 	u8                             osb_cktype;
 	u16                            osb_vers;
 	struct mpool_uuid              osb_poolid;

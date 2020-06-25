@@ -613,10 +613,10 @@ int sbutil_mdc0_isclear(struct omf_sb_descriptor *sb)
 }
 
 /*
- * Validate mdc0 portion of sb and extract mdparm.
- * Returns: 1 if valid and mdparm set; 0 otherwise.
+ * Validate mdc0 portion of sb
+ * Returns: 1 if valid; 0 otherwise.
  */
-int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb, struct mpool_mdparm *mdparm)
+int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb)
 {
 	/* Basic consistency validation; can make more extensive as needed */
 
@@ -642,11 +642,8 @@ int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb, struct mpool_mdparm *mdpar
 		return 0;
 	}
 
-	/* validate mdparm info derived from mdc0 and output it */
 	if (ev(sb->osb_mdc01desc.ol_zcnt != sb->osb_mdc02desc.ol_zcnt))
 		return 0;
-
-	mdparm->mdp_mclassp = sb->osb_parm.odp_mclassp;
 
 	return 1;
 }
