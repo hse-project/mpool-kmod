@@ -122,9 +122,9 @@ static bool sb_parm_valid(struct mpool_dev_info *pd)
  */
 static merr_t sb_write_sbx(struct mpool_dev_info *pd, char *outbuf, u32 idx)
 {
-	struct kvec  iov = { outbuf, SB_AREA_SZ };
-	merr_t       err;
-	u64          woff;
+	const struct kvec  iov = { outbuf, SB_AREA_SZ };
+	merr_t             err;
+	u64                woff;
 
 	woff = sb_idx2woff(pd, idx);
 
@@ -146,9 +146,9 @@ static merr_t sb_write_sbx(struct mpool_dev_info *pd, char *outbuf, u32 idx)
  */
 static merr_t sb_read_sbx(struct mpool_dev_info *pd, char *inbuf, u32 idx)
 {
-	struct kvec  iov = { inbuf, SB_AREA_SZ };
-	u64          woff;
-	merr_t       err;
+	const struct kvec  iov = { inbuf, SB_AREA_SZ };
+	u64                woff;
+	merr_t             err;
 
 	woff = sb_idx2woff(pd, idx);
 
@@ -198,7 +198,7 @@ int sb_magic_check(struct mpool_dev_info *pd)
 	}
 
 	for (i = 0; i < SB_SB_COUNT; i++) {
-		struct kvec iov = { inbuf, SB_AREA_SZ };
+		const struct kvec iov = { inbuf, SB_AREA_SZ };
 		u64 woff = sb_idx2woff(pd, i);
 
 		memset(inbuf, 0, SB_AREA_SZ);
@@ -353,7 +353,7 @@ merr_t sb_erase(struct mpool_dev_info *pd)
 	memset(buf, 0, SB_AREA_SZ);
 
 	for (i = 0; i < SB_SB_COUNT; i++) {
-		struct kvec iov = { buf, SB_AREA_SZ };
+		const struct kvec iov = { buf, SB_AREA_SZ };
 		u64 woff = sb_idx2woff(pd, i);
 
 		err = pd_zone_pwritev_sync(pd, &iov, 1, 0, woff);

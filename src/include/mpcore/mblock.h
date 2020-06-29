@@ -153,8 +153,8 @@ merr_t mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
  *
  * Write iov to mblock.  Mblocks can be written until they are committed, or
  * until they are full.  If a caller needs to issue more than one write call
- * to the same mblock, all but the last write call must be stripe-aligned.
- * The mpr_stripe_len field in struct mblock_props gives the stripe size.
+ * to the same mblock, all but the last write call must be optimal write size aligned.
+ * The mpr_optimal_wrsz field in struct mblock_props gives the optimal write size.
  *
  * Return: %0 if success, merr_t otherwise...
  */
@@ -162,7 +162,7 @@ merr_t
 mblock_write(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
-	struct kvec                *iov,
+	const struct kvec          *iov,
 	int                         iovcnt,
 	size_t                      len);
 
@@ -187,7 +187,7 @@ merr_t
 mblock_read(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
-	struct kvec                *iov,
+	const struct kvec          *iov,
 	int                         iovcnt,
 	loff_t                      boff,
 	size_t                      len);

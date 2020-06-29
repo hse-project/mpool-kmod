@@ -41,7 +41,7 @@ static struct pmd_layout *mblock2layout(struct mblock_descriptor *mbh)
 	return mblock_objid(layout->eld_objid) ? layout : NULL;
 }
 
-static u32 mblock_stripe_size_get(struct mpool_descriptor *mp, struct pmd_layout *layout)
+static u32 mblock_optimal_iosz_get(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	struct mpool_dev_info  *pd;
 
@@ -70,10 +70,10 @@ mblock_getprops_cmn(
 	assert(layout);
 	assert(prop);
 
-	prop->mpr_objid      = layout->eld_objid;
-	prop->mpr_alloc_cap  = pmd_layout_cap_get(mp, layout);
-	prop->mpr_write_len  = layout->eld_mblen;
-	prop->mpr_stripe_len = mblock_stripe_size_get(mp, layout);
+	prop->mpr_objid = layout->eld_objid;
+	prop->mpr_alloc_cap = pmd_layout_cap_get(mp, layout);
+	prop->mpr_write_len = layout->eld_mblen;
+	prop->mpr_optimal_wrsz = mblock_optimal_iosz_get(mp, layout);
 	prop->mpr_mclassp = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_mclass;
 	prop->mpr_iscommitted = layout->eld_state & PMD_LYT_COMMITTED;
 }
@@ -291,12 +291,12 @@ mblock_rw_argcheck(
 	int                         rw,
 	size_t                      len)
 {
-	u64    stripe_bytes;
+	u64    opt_iosz;
 	u32    mblock_cap;
 	merr_t err;
 
 	mblock_cap = pmd_layout_cap_get(mp, layout);
-	stripe_bytes = mblock_stripe_size_get(mp, layout);
+	opt_iosz = mblock_optimal_iosz_get(mp, layout);
 
 	if (rw == MPOOL_OP_READ) {
 		/* boff must be a multiple of the OS page size */
@@ -333,10 +333,10 @@ mblock_rw_argcheck(
 			return err;
 		}
 
-		/* Writes must be stripe-aligned */
-		if (boff % stripe_bytes) {
+		/* Writes must be optimal iosz aligned */
+		if (boff % opt_iosz) {
 			err = merr(EINVAL);
-			mp_pr_err("mpool %s, write not stripe-aligned, offset 0x%lx",
+			mp_pr_err("mpool %s, write not optimal iosz aligned, offset 0x%lx",
 				  err, mp->pds_name, (ulong)boff);
 			return err;
 		}
@@ -357,7 +357,7 @@ merr_t
 mblock_write(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
-	struct kvec                *iov,
+	const struct kvec          *iov,
 	int                         iovcnt,
 	size_t                      len)
 {
@@ -404,7 +404,7 @@ merr_t
 mblock_read(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
-	struct kvec                *iov,
+	const struct kvec          *iov,
 	int                         iovcnt,
 	loff_t                      boff,
 	size_t                      len)

@@ -231,7 +231,13 @@ pd_bio_chain(struct bio *target, int op, unsigned int nr_pages, gfp_t gfp)
  * In order to use DIF with stock linux kernel, do not IOs larger than MDTS.
  */
 static merr_t
-pd_bio_rw(struct mpool_dev_info *pd, struct kvec *iov, int iovcnt, loff_t off, int rw, int opflags)
+pd_bio_rw(
+	struct mpool_dev_info  *pd,
+	const struct kvec      *iov,
+	int                     iovcnt,
+	loff_t                  off,
+	int                     rw,
+	int                     opflags)
 {
 	struct block_device    *bdev;
 	struct bio             *bio;
@@ -372,7 +378,7 @@ pd_bio_rw(struct mpool_dev_info *pd, struct kvec *iov, int iovcnt, loff_t off, i
 merr_t
 pd_zone_pwritev(
 	struct mpool_dev_info  *pd,
-	struct kvec            *iov,
+	const struct kvec      *iov,
 	int                     iovcnt,
 	u64                     zaddr,
 	loff_t                  boff,
@@ -391,7 +397,7 @@ pd_zone_pwritev(
 merr_t
 pd_zone_pwritev_sync(
 	struct mpool_dev_info  *pd,
-	struct kvec            *iov,
+	const struct kvec      *iov,
 	int                     iovcnt,
 	u64                     zaddr,
 	loff_t                  boff)
@@ -417,7 +423,12 @@ pd_zone_pwritev_sync(
 }
 
 merr_t
-pd_zone_preadv(struct mpool_dev_info *pd, struct kvec *iov, int iovcnt, u64 zaddr, loff_t boff)
+pd_zone_preadv(
+	struct mpool_dev_info  *pd,
+	const struct kvec      *iov,
+	int                     iovcnt,
+	u64                     zaddr,
+	loff_t                  boff)
 {
 	loff_t roff;
 

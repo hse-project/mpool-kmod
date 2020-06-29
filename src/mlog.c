@@ -713,7 +713,7 @@ merr_t
 mlog_rw_raw(
 	struct mpool_descriptor    *mp,
 	struct mlog_descriptor     *mlh,
-	struct kvec                *iov,
+	const struct kvec          *iov,
 	int                         iovcnt,
 	u64                         boff,
 	u8                          rw)
