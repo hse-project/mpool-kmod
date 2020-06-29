@@ -4176,3 +4176,4 @@ module_exit(mpc_exit);
 MODULE_DESCRIPTION("Object Storage Media Pool (mpool)");
 MODULE_AUTHOR("Micron Technology, Inc.");
 MODULE_LICENSE("GPL v2");
+MODULE_VERSION(MPOOL_VERSION);
