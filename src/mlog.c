@@ -1123,11 +1123,7 @@ mlog_populate_rbuf(
 
 	*nsec   = min_t(u32, maxsec, *nsec);
 	iovcnt  = (*nsec + nseclpg - 1) / nseclpg;
-
-	/* No. of sectors in the last log page. */
 	l_iolen = MLOG_LPGSZ(lstat);
-	if (!IS_SECPGA(lstat))
-		l_iolen = (*nsec % nseclpg) * sectsz;
 
 	err = mlog_setup_buf(lstat, &iov, iovcnt, l_iolen, MPOOL_OP_READ);
 	if (err) {
@@ -1579,16 +1575,6 @@ static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
 
 	abidx   = lstat->lst_abidx;
 	l_iolen = MLOG_LPGSZ(lstat);
-
-	if (!IS_SECPGA(lstat)) {
-		u8 asidx;
-
-		asidx = lstat->lst_wsoff - (nseclpg * abidx + lstat->lst_asoff);
-
-		/* No. of sectors in the last log page. */
-		if (asidx < nseclpg - 1)
-			l_iolen = (asidx + 1) * sectsz;
-	}
 
 	err = mlog_setup_buf(lstat, &iov, abidx + 1, l_iolen, MPOOL_OP_WRITE);
 	if (err) {
