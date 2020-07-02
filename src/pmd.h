@@ -878,4 +878,6 @@ merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 u64 pmd_layout_cap_get(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
+struct mpool_dev_info *pmd_layout_pd_get(struct mpool_descriptor *mp, struct pmd_layout *layout);
+
 #endif /* MPOOL_PMD_PRIV_H */

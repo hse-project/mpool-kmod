@@ -101,6 +101,8 @@ struct mpool_dev_info {
 #define pdi_mclass    pdi_parm.dpr_prop.pdp_mclassp
 #define pdi_devsz     pdi_parm.dpr_prop.pdp_devsz
 #define pdi_sectorsz  pdi_parm.dpr_prop.pdp_sectorsz
+#define pdi_optiosz   pdi_parm.dpr_prop.pdp_optiosz
+#define pdi_fua       pdi_parm.dpr_prop.pdp_fua
 #define pdi_prop      pdi_parm.dpr_prop
 
 enum pd_status mpool_pd_status_get(struct mpool_dev_info *pd);

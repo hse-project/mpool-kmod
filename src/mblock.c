@@ -43,11 +43,9 @@ static struct pmd_layout *mblock2layout(struct mblock_descriptor *mbh)
 
 static u32 mblock_optimal_iosz_get(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
-	struct mpool_dev_info  *pd;
+	struct mpool_dev_info *pd = pmd_layout_pd_get(mp, layout);
 
-	pd = &mp->pds_pdv[layout->eld_ld.ol_pdh];
-
-	return pd->pdi_parm.dpr_optiosz;
+	return pd->pdi_optiosz;
 }
 
 /**
@@ -67,14 +65,18 @@ mblock_getprops_cmn(
 	struct pmd_layout          *layout,
 	struct mblock_props        *prop)
 {
+	struct mpool_dev_info *pd;
+
 	assert(layout);
 	assert(prop);
+
+	pd = pmd_layout_pd_get(mp, layout);
 
 	prop->mpr_objid = layout->eld_objid;
 	prop->mpr_alloc_cap = pmd_layout_cap_get(mp, layout);
 	prop->mpr_write_len = layout->eld_mblen;
 	prop->mpr_optimal_wrsz = mblock_optimal_iosz_get(mp, layout);
-	prop->mpr_mclassp = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_mclass;
+	prop->mpr_mclassp = pd->pdi_mclass;
 	prop->mpr_iscommitted = layout->eld_state & PMD_LYT_COMMITTED;
 }
 
@@ -209,13 +211,21 @@ do {									\
 
 merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 {
-	struct pmd_layout  *layout;
-	merr_t              err;
+	struct pmd_layout     *layout;
+	merr_t                 err;
+	struct mpool_dev_info *pd;
 
 	layout = mblock2layout(mbh);
 	if (ev(!layout)) {
 		mp_pr_layout_not_found(mp, mbh);
 		return merr(EINVAL);
+	}
+
+	pd = pmd_layout_pd_get(mp, layout);
+	if (!pd->pdi_fua) {
+		err = pd_dev_flush(pd);
+		if (ev(err))
+			return err;
 	}
 
 	/* Commit will fail with EBUSY if aborting flag set. */
@@ -391,7 +401,13 @@ mblock_write(
 	pmd_obj_wrlock(layout);
 	state = layout->eld_state;
 	if (!(state & PMD_LYT_COMMITTED)) {
-		err = pmd_layout_rw(mp, layout, iov, iovcnt, boff, REQ_FUA, MPOOL_OP_WRITE);
+		struct mpool_dev_info *pd = pmd_layout_pd_get(mp, layout);
+		int                    flags = 0;
+
+		if (pd->pdi_fua)
+			flags = REQ_FUA;
+
+		err = pmd_layout_rw(mp, layout, iov, iovcnt, boff, flags, MPOOL_OP_WRITE);
 		if (!err)
 			layout->eld_mblen += len;
 	}

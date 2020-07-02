@@ -2675,6 +2675,11 @@ u64 pmd_layout_cap_get(struct mpool_descriptor *mp, struct pmd_layout *layout)
 	return 0;
 }
 
+struct mpool_dev_info *pmd_layout_pd_get(struct mpool_descriptor *mp, struct pmd_layout *layout)
+{
+	return &mp->pds_pdv[layout->eld_ld.ol_pdh];
+}
+
 static merr_t pmd_log_idckpt(struct mpool_descriptor *mp, u64 objid)
 {
 	struct omf_mdcrec_data  cdr;

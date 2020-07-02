@@ -26,11 +26,7 @@
 static const fmode_t    pd_bio_fmode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
 static char            *pd_bio_holder = "mpool";
 
-merr_t
-pd_dev_open(
-	const char         *path,
-	struct pd_dev_parm *dparm,
-	struct pd_prop     *pd_prop)
+merr_t pd_dev_open(const char *path, struct pd_dev_parm *dparm, struct pd_prop *pd_prop)
 {
 	struct block_device *bdev;
 
@@ -66,13 +62,36 @@ merr_t pd_dev_close(struct pd_dev_parm *dparm)
 	return bdev ? 0 : ev(EINVAL);
 }
 
+merr_t pd_dev_flush(struct mpool_dev_info *pd)
+{
+	struct block_device    *bdev;
+	merr_t                  err = 0;
+	int                     rc;
+	sector_t                esect;
+
+	bdev = pd->pdi_parm.dpr_dev_private;
+	if (!bdev) {
+		err = merr(EINVAL);
+		mp_pr_err("bdev %s not registered", err, pd->pdi_name);
+		return err;
+	}
+
+	rc = blkdev_issue_flush(bdev, GFP_NOIO, &esect);
+	if (rc) {
+		err = merr(rc);
+		mp_pr_err("bdev %s, flush failed at sector %lu", err, pd->pdi_name, (ulong)esect);
+	}
+
+	return err;
+}
+
 /**
  * pd_bio_discard_() - issue discard command to erase a byte-aligned region
  * @pd:
  * @off:
  * @len:
  */
-static merr_t pd_bio_discard(struct mpool_dev_info  *pd, u64 off, size_t len)
+static merr_t pd_bio_discard(struct mpool_dev_info *pd, u64 off, size_t len)
 {
 	struct block_device    *bdev;
 	merr_t                  err = 0;

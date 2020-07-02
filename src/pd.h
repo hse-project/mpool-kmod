@@ -58,6 +58,12 @@ merr_t pd_dev_open(const char *path, struct pd_dev_parm *dparm, struct pd_prop *
 merr_t pd_dev_close(struct pd_dev_parm *dparm);
 
 /**
+ * pd_dev_flush() -
+ * @pd:
+ */
+merr_t pd_dev_flush(struct mpool_dev_info *pd);
+
+/**
  * pd_bio_erase() -
  * @pd:
  * @zaddr:
