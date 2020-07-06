@@ -1075,7 +1075,7 @@ mpool_activate(
 
 	u64     mdcmax, mdcnum, mdcncap, mdc0cap;
 	bool    active;
-	int     dup, doff, cnt, i;
+	int     dup, doff, i;
 	u8      pdh;
 	bool    mc_resize[MP_MED_NUMBER] = { };
 	bool    force = ((flags & (1 << MP_FLAGS_FORCE)) != 0);
@@ -1120,13 +1120,7 @@ mpool_activate(
 
 	mutex_lock(&mpool_s_lock);
 
-	/* Note:  On Linux 2.x (and maybe somewhere in the 3.x train) you get
-	 * exactly one worker thread if you ask for exactly one, and exactly
-	 * one thread per-cpu if you ask for any other number of threads.
-	 */
-	cnt = max_t(int, 16, num_online_cpus());
-
-	mp->pds_workq = alloc_workqueue("mpoolwq", WQ_UNBOUND, cnt);
+	mp->pds_workq = alloc_workqueue("mpoolwq", WQ_UNBOUND, 0);
 	if (!mp->pds_workq) {
 		err = merr(ENOMEM);
 		mp_pr_err("alloc mpoolwq failed, first drive path %s", err, dpaths[0]);

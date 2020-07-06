@@ -24,7 +24,5 @@ void mpcore_params_defaults(struct mpcore_params *params)
 	params->mp_crtmdcpctfull   = MPOOL_CREATE_MDC_PCTFULL;
 	params->mp_crtmdcpctgrbg   = MPOOL_CREATE_MDC_PCTGRBG;
 	params->mp_mpusageperiod   = MPOOL_PD_USAGE_PERIOD;
-
-	params->mp_objloadjobs = clamp_t(int, MPOOL_OBJ_LOAD_JOBS_DEFAULT,
-					 1, num_online_cpus());
+	params->mp_objloadjobs     = MPOOL_OBJ_LOAD_JOBS_DEFAULT;
 }
