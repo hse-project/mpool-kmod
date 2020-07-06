@@ -1,0 +1,16 @@
+#!/bin/sh
+#
+# SPDX-License-Identifier: GPL-2.0-only
+#
+# Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
+#
+
+KDIR=${KDIR:-/lib/modules/`uname -r`/build}
+
+make -C ${KDIR} M=$(pwd) modules > /dev/null 2>&1
+
+if [ $? -eq 0 ] ; then
+	echo "#define HAVE_MMAP_LOCK 1"
+else
+	echo "#define HAVE_MMAP_LOCK 0"
+fi

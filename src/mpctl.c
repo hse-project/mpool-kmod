@@ -43,6 +43,10 @@
 #include "mpctl_reap.h"
 #include "init.h"
 
+#if HAVE_MMAP_LOCK
+#include <linux/mmap_lock.h>
+#endif
+
 #ifndef lru_to_page
 #define lru_to_page(_head)  (list_entry((_head)->prev, struct page, lru))
 #endif
@@ -1124,7 +1128,11 @@ static bool mpc_lock_page_or_retry(struct page *page, struct mm_struct *mm, uint
 		if (flags & FAULT_FLAG_RETRY_NOWAIT)
 			return false;
 
+#if HAVE_MMAP_LOCK
+		mmap_read_unlock(mm);
+#else
 		up_read(&mm->mmap_sem);
+#endif
 		/* _killable version is not exported by the kernel. */
 		wait_on_page_locked(page);
 		return false;
@@ -1135,7 +1143,11 @@ static bool mpc_lock_page_or_retry(struct page *page, struct mm_struct *mm, uint
 
 		rc = lock_page_killable(page);
 		if (rc) {
+#if HAVE_MMAP_LOCK
+			mmap_read_unlock(mm);
+#else
 			up_read(&mm->mmap_sem);
+#endif
 			return false;
 		}
 	} else {

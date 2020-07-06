@@ -67,7 +67,6 @@ merr_t pd_dev_flush(struct mpool_dev_info *pd)
 	struct block_device    *bdev;
 	merr_t                  err = 0;
 	int                     rc;
-	sector_t                esect;
 
 	bdev = pd->pdi_parm.dpr_dev_private;
 	if (!bdev) {
@@ -75,11 +74,14 @@ merr_t pd_dev_flush(struct mpool_dev_info *pd)
 		mp_pr_err("bdev %s not registered", err, pd->pdi_name);
 		return err;
 	}
-
-	rc = blkdev_issue_flush(bdev, GFP_NOIO, &esect);
+#if HAVE_BLKDEV_FLUSH_3
+	rc = blkdev_issue_flush(bdev, GFP_NOIO, NULL);
+#else
+	rc = blkdev_issue_flush(bdev, GFP_NOIO);
+#endif
 	if (rc) {
 		err = merr(rc);
-		mp_pr_err("bdev %s, flush failed at sector %lu", err, pd->pdi_name, (ulong)esect);
+		mp_pr_err("bdev %s, flush failed", err, pd->pdi_name);
 	}
 
 	return err;
