@@ -212,7 +212,7 @@ static struct mpc_reap *mpc_reap __read_mostly;
 static size_t mpc_xvm_cachesz[2] __read_mostly;
 static struct kmem_cache *mpc_xvm_cache[2] __read_mostly;
 
-#if !HAVE_BDI_ALLOC
+#if HAVE_ADDRESS_SPACE_BDI
 static struct backing_dev_info mpc_bdi = {
 	.name          = "mpctl",
 	.capabilities  = BDI_CAP_NO_ACCT_AND_WRITEBACK,
@@ -1583,7 +1583,7 @@ mpc_migratepage(
 	return migrate_page(mapping, newpage, page, mode);
 }
 
-#if !HAVE_BDI_ALLOC
+#if HAVE_ADDRESS_SPACE_BDI
 static int mpc_bdi_alloc(void)
 {
 	int    rc;
@@ -3957,7 +3957,7 @@ static void mpc_exit_impl(void)
 	kmem_cache_destroy(mpc_xvm_cache[0]);
 	mpc_vcache_fini(&mpc_physio_vcache);
 
-#if !HAVE_BDI_ALLOC
+#if HAVE_ADDRESS_SPACE_BDI
 	mpc_bdi_free();
 #endif
 
@@ -4105,7 +4105,7 @@ static __init int mpc_init(void)
 	cfg.mc_gid = mpc_ctl_gid;
 	cfg.mc_mode = mpc_ctl_mode;
 
-#if !HAVE_BDI_ALLOC
+#if HAVE_ADDRESS_SPACE_BDI
 	rc = mpc_bdi_alloc();
 	if (ev(rc)) {
 		errmsg = "bdi alloc failed";
