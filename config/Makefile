@@ -7,8 +7,9 @@ SUBDIRS := vm_fault_t vm_fault_func
 SUBDIRS += bioset_init bioset_create bio_set_dev bio_set_op_attrs
 SUBDIRS += iov_iter_init iov_iter_get_pages invalidatepage
 SUBDIRS += mem_cgroup_count_vm_event count_memcg_event_mm
-SUBDIRS += backing_dev_info generate_random_guid blkdev_flush
+SUBDIRS += generate_random_guid blkdev_flush
 SUBDIRS += sched_clock submit_bio mmap_lock
+SUBDIRS += bdi_init bdi_alloc_node bdi_name backing_dev_info
 
 .PHONY: all clean distclean maintainer-clean ${SUBDIRS}
 
