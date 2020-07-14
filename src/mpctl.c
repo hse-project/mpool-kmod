@@ -215,14 +215,7 @@ static struct mpc_reap *mpc_reap __read_mostly;
 
 static size_t mpc_xvm_cachesz[2] __read_mostly;
 static struct kmem_cache *mpc_xvm_cache[2] __read_mostly;
-
-#if HAVE_ADDRESS_SPACE_BDI
-static struct backing_dev_info mpc_bdi = {
-	.name          = "mpctl",
-	.capabilities  = BDI_CAP_NO_ACCT_AND_WRITEBACK,
-	.ra_pages      = MPOOL_RA_PAGES_MAX,
-};
-#endif
+static struct backing_dev_info *mpc_bdi;
 
 /* Module params...
  */
@@ -1595,23 +1588,83 @@ mpc_migratepage(
 	return migrate_page(mapping, newpage, page, mode);
 }
 
-#if HAVE_ADDRESS_SPACE_BDI
 static int mpc_bdi_alloc(void)
 {
-	int    rc;
+#if HAVE_BDI_INIT
+	mpc_bdi = kzalloc(sizeof(*mpc_bdi), GFP_KERNEL);
+	if (mpc_bdi) {
+		int    rc;
 
-	rc = bdi_init(&mpc_bdi);
-	if (ev(rc))
-		return rc;
+		rc = bdi_init(mpc_bdi);
+		if (ev(rc)) {
+			kfree(mpc_bdi);
+			return rc;
+		}
+	}
+#elif HAVE_BDI_ALLOC_NODE
+	mpc_bdi = bdi_alloc_node(GFP_KERNEL, NUMA_NO_NODE);
+#else
+	mpc_bdi = bdi_alloc(NUMA_NO_NODE);
+#endif
+	if (!mpc_bdi)
+		return -ENOMEM;
 
 	return 0;
 }
 
-static void mpc_bdi_free(void)
+static void mpc_bdi_save(struct mpc_unit *unit, struct inode *ip, struct file *fp)
 {
-	bdi_destroy(&mpc_bdi);
+#if HAVE_ADDRESS_SPACE_BDI
+	unit->un_saved_bdi = fp->f_mapping->backing_dev_info;
+	fp->f_mapping->backing_dev_info = mpc_bdi;
+#else
+	unit->un_saved_bdi = ip->i_sb->s_bdi;
+#if HAVE_BDI_INIT
+	ip->i_sb->s_bdi = mpc_bdi;
+#else
+	ip->i_sb->s_bdi = bdi_get(mpc_bdi);
+#endif /* HAVE_BDI_INIT */
+#endif /* HAVE_ADDRESS_SPACE_BDI */
 }
+
+static void mpc_bdi_restore(struct mpc_unit *unit, struct inode *ip, struct file *fp)
+{
+#if HAVE_ADDRESS_SPACE_BDI
+		fp->f_mapping->backing_dev_info = unit->un_saved_bdi;
+#else
+		ip->i_sb->s_bdi = unit->un_saved_bdi;
+#if !HAVE_BDI_INIT
+		bdi_put(mpc_bdi);
+#endif /* !HAVE_BDI_INIT */
+#endif /* HAVE_ADDRESS_SPACE_BDI */
+}
+
+static int mpc_bdi_setup(void)
+{
+	int    rc;
+
+	rc = mpc_bdi_alloc();
+	if (ev(rc))
+		return rc;
+
+#if HAVE_BDI_NAME
+	mpc_bdi->name = "mpoolctl";
 #endif
+	mpc_bdi->capabilities = BDI_CAP_NO_ACCT_AND_WRITEBACK;
+	mpc_bdi->ra_pages = MPOOL_RA_PAGES_MAX;
+
+	return 0;
+}
+
+static void mpc_bdi_teardown(void)
+{
+#if HAVE_BDI_INIT
+	bdi_destroy(mpc_bdi);
+	kfree(mpc_bdi);
+#else
+	bdi_put(mpc_bdi);
+#endif
+}
 
 /*
  * MPCTL file operations.
@@ -1679,10 +1732,7 @@ static int mpc_open(struct inode *ip, struct file *fp)
 	fp->f_op = &mpc_fops_default;
 	fp->f_mapping->a_ops = &mpc_aops_default;
 
-#if HAVE_ADDRESS_SPACE_BDI
-	unit->un_saved_bdi = fp->f_mapping->backing_dev_info;
-	fp->f_mapping->backing_dev_info = &mpc_bdi;
-#endif
+	mpc_bdi_save(unit, ip, fp);
 
 	unit->un_mapping = fp->f_mapping;
 	unit->un_ds_reap = mpc_reap;
@@ -1738,9 +1788,7 @@ static int mpc_release(struct inode *ip, struct file *fp)
 		unit->un_ds_reap = NULL;
 		unit->un_mapping = NULL;
 
-#if HAVE_ADDRESS_SPACE_BDI
-		fp->f_mapping->backing_dev_info = unit->un_saved_bdi;
-#endif
+		mpc_bdi_restore(unit, ip, fp);
 	}
 
 	unit->un_open_excl = false;
@@ -3969,10 +4017,7 @@ static void mpc_exit_impl(void)
 	kmem_cache_destroy(mpc_xvm_cache[0]);
 	mpc_vcache_fini(&mpc_physio_vcache);
 
-#if HAVE_ADDRESS_SPACE_BDI
-	mpc_bdi_free();
-#endif
-
+	mpc_bdi_teardown();
 	evc_fini();
 }
 
@@ -4117,14 +4162,12 @@ static __init int mpc_init(void)
 	cfg.mc_gid = mpc_ctl_gid;
 	cfg.mc_mode = mpc_ctl_mode;
 
-#if HAVE_ADDRESS_SPACE_BDI
-	rc = mpc_bdi_alloc();
+	rc = mpc_bdi_setup();
 	if (ev(rc)) {
-		errmsg = "bdi alloc failed";
+		errmsg = "mpc bdi setup failed";
 		err = merr(rc);
 		goto errout;
 	}
-#endif
 
 	err = mpc_unit_setup(&mpc_uinfo_ctl, MPC_DEV_CTLNAME, &cfg, NULL, &ctlunit, &cmn);
 	if (err) {
