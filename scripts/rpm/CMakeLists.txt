@@ -20,6 +20,9 @@ set( CPACK_RPM_PACKAGE_URL          "${PROJECT_HOMEPAGE_URL}" )
 set( CPACK_RPM_PACKAGE_RELOCATABLE  "ON" )
 set( CPACK_RPM_RELOCATION_PATHS     /usr /etc )
 
+string( REGEX REPLACE ".${KARCH}" "" KVER ${KREL} )
+set( CPACK_RPM_PACKAGE_REQUIRES "kernel%{?_isa} = ${KVER}" )
+
 set( CPACK_RPM_PRE_INSTALL_SCRIPT_FILE     "${SCRIPTS_DIR}/rpm-pre-install.sh" )
 set( CPACK_RPM_POST_INSTALL_SCRIPT_FILE    "${SCRIPTS_DIR}/rpm-post-install.sh" )
 set( CPACK_RPM_PRE_UNINSTALL_SCRIPT_FILE   "${SCRIPTS_DIR}/rpm-pre-uninstall.sh" )
