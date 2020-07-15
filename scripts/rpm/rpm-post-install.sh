@@ -12,7 +12,7 @@
 depmod -a
 
 # load kernel modules
-modprobe mpool
+modprobe mpool || echo "Failed to load mpool module, run modprobe/insmod manually"
 
 # additional work if we did a "force install" via /tmp/mpool-force-install
 if [[ -f /tmp/mpool-needs-reboot ]]; then

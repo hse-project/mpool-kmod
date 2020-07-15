@@ -13,7 +13,7 @@ case $1 in
     configure)
         depmod -a
 
-        modprobe mpool || echo "Failed to load mpool module, run modprobe manually"
+        modprobe mpool || echo "Failed to load mpool module, run modprobe/insmod manually"
 
         # Clean up if we did a "force install" via /tmp/mpool-force-install
         if [ -f /tmp/mpool-needs-reboot ]; then
