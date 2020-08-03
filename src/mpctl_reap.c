@@ -316,8 +316,8 @@ static void mpc_reap_tune(struct mpc_reap *reap)
 		return;
 
 	mp_pr_info(
-		"%s: %lu %lu, hot %lu, warm %lu, cold %lu, freepct %u, lwm %u, hwm %u, %2u, ttl %u",
-		__func__, mfree >> (20 - PAGE_SHIFT), total_pages >> (20 - PAGE_SHIFT),
+		"%lu %lu, hot %lu, warm %lu, cold %lu, freepct %u, lwm %u, hwm %u, %2u, ttl %u",
+		mfree >> (20 - PAGE_SHIFT), total_pages >> (20 - PAGE_SHIFT),
 		hpages >> (20 - PAGE_SHIFT), wpages >> (20 - PAGE_SHIFT),
 		cpages >> (20 - PAGE_SHIFT), freepct, lwm, hwm,
 		atomic_read(&reap->reap_lwm), atomic_read(&reap->reap_ttl_cur) / 1000);

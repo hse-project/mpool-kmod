@@ -833,12 +833,7 @@ merr_t omf_sb_unpack_letoh_v1(void *out, const char *inbuf)
 	return 0;
 }
 
-merr_t
-omf_sb_unpack_letoh(
-	struct omf_sb_descriptor   *sb,
-	const char                 *inbuf,
-	u16                        *omf_ver,
-	struct mpool_devrpt        *devrpt)
+merr_t omf_sb_unpack_letoh(struct omf_sb_descriptor *sb, const char *inbuf, u16 *omf_ver)
 {
 	struct sb_descriptor_omf   *sb_omf;
 
@@ -865,9 +860,9 @@ omf_sb_unpack_letoh(
 	*omf_ver = omf_psb_vers(sb_omf);
 
 	if (*omf_ver > OMF_SB_DESC_VER_LAST) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "superblock version %d not supported",
-			     *omf_ver);
-		return merr(EPROTONOSUPPORT);
+		err = merr(EPROTONOSUPPORT);
+		mp_pr_err("Unsupported sb version %d", err, *omf_ver);
+		return err;
 	}
 
 	err = omf_unpack_letoh_and_convert(sb, sizeof(*sb), inbuf, sb_descriptor_table,

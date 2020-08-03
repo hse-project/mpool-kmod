@@ -425,13 +425,7 @@ static merr_t sb_reconcile(struct omf_sb_descriptor *sb, struct mpool_dev_info *
  * Returns: 0 if successful; merr_t otherwise
  *
  */
-merr_t
-sb_read(
-	struct mpool_dev_info    *pd,
-	struct omf_sb_descriptor *sb,
-	u16                      *omf_ver,
-	bool                      force,
-	struct mpool_devrpt      *devrpt)
+merr_t sb_read(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb, u16 *omf_ver, bool force)
 {
 	struct omf_sb_descriptor *sbtmp;
 
@@ -470,7 +464,7 @@ sb_read(
 		if (err)
 			mp_pr_err("sb(%s, %d) read sbx failed", err, pd->pdi_name, i);
 		else {
-			err = omf_sb_unpack_letoh(sbtmp, buf, omf_ver, devrpt);
+			err = omf_sb_unpack_letoh(sbtmp, buf, omf_ver);
 			if (err)
 				mp_pr_err("sb(%s, %d) bad magic/version/cksum",
 					  err, pd->pdi_name, i);

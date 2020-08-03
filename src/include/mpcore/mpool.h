@@ -15,7 +15,6 @@
  * in multiple media classes used for storing mblocks and mlogs.
  */
 
-#include <mpool/mpool_devrpt.h>
 #include <mpool/mpool_ioctl.h>
 
 #include <mpcore/uuid.h>
@@ -202,7 +201,6 @@ merr_t mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
  * @pd_prop: PDs properties obtained by mpool_create() caller.
  * @params:  mpcore parameters
  * @mlog_cap:
- * @devrpt:
  *
  * Create an mpool from dcnt drive paths dpaths; store mpool metadata as
  * specified by mdparm;
@@ -218,8 +216,7 @@ mpool_create(
 	char                   **dpaths,
 	struct pd_prop	        *pd_prop,
 	struct mpcore_params    *params,
-	u64                      mlog_cap,
-	struct mpool_devrpt     *devrpt);
+	u64                      mlog_cap);
 
 /**
  * mpool_activate() - Activate an mpool
@@ -230,7 +227,6 @@ mpool_create(
  * @params:   mpcore parameters
  * @flags:
  * @mpp: *mpp is set to NULL if error
- * @devrpt:
  *
  * Activate mpool on dcnt drive paths dpaths; if force flag is set tolerate
  * unavailable drives up to redundancy limit; if successful *mpp is a handle
@@ -249,8 +245,7 @@ mpool_activate(
 	u64                          mlog_cap,
 	struct mpcore_params        *params,
 	u32                          flags,
-	struct mpool_descriptor    **mpp,
-	struct mpool_devrpt         *devrpt);
+	struct mpool_descriptor    **mpp);
 
 
 /**
@@ -268,20 +263,13 @@ merr_t mpool_deactivate(struct mpool_descriptor *mp);
  * @dpaths:
  * @pd_prop: PD properties.
  * @flags:
- * @devrpt:
  *
  * Destroy mpool on dcnt drive paths dpaths;
  *
  * Return:
  * %0 if successful, merr_t otherwise
  */
-merr_t
-mpool_destroy(
-	u64                         dcnt,
-	char                      **dpaths,
-	struct pd_prop             *pd_prop,
-	u32                         flags,
-	struct mpool_devrpt        *devrpt);
+merr_t mpool_destroy(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags);
 
 /**
  * mpool_rename() - Rename an mpool
@@ -290,7 +278,6 @@ mpool_destroy(
  * @pd_prop: PD properties.
  * @flags:
  * @mp_newname:
- * @devrpt:
  *
  * Rename mpool to mp_newname.
  *
@@ -298,29 +285,17 @@ mpool_destroy(
  * %0 if successful, merr_t otherwise
  */
 merr_t
-mpool_rename(
-	u64                         dcnt,
-	char                      **dpaths,
-	struct pd_prop             *pd_prop,
-	u32                         flags,
-	const char                 *mp_newname,
-	struct mpool_devrpt        *devrpt);
+mpool_rename(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags, const char *mp_newname);
 
 /**
  * mpool_drive_add() - Add new drive dpath to mpool.
  * @mp:
  * @dpath:
  * @pd_prop: PD properties.
- * @devrpt:
  *
  * Return: %0 if successful; merr_t otherwise...
  */
-merr_t
-mpool_drive_add(
-	struct mpool_descriptor    *mp,
-	char                       *dpath,
-	struct pd_prop             *pd_prop,
-	struct mpool_devrpt        *devrpt);
+merr_t mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop *pd_prop);
 
 /**
  * mpool_drive_spares() -

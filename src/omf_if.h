@@ -249,17 +249,11 @@ merr_t omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf);
  * @sb: struct omf_sb_descriptor *
  * @inbuf: char *
  * @omf_ver: on-media-format superblock version
- * @devrpt:
  * Unpack little-endian superblock from inbuf into sb verifying checksum.
  *
  * Return: 0 if successful, merr_t otherwise
  */
-merr_t
-omf_sb_unpack_letoh(
-	struct omf_sb_descriptor   *sb,
-	const char                 *inbuf,
-	u16                        *omf_ver,
-	struct mpool_devrpt        *devrpt);
+merr_t omf_sb_unpack_letoh(struct omf_sb_descriptor *sb, const char *inbuf, u16 *omf_ver);
 
 /**
  * omf_sb_has_magic_le() - Determine if buffer has superblock magic value

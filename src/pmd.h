@@ -22,7 +22,6 @@
 
 enum obj_type_omf;
 struct mpool_descriptor;
-struct mpool_devrpt;
 struct pmd_layout;
 
 /**
@@ -441,14 +440,12 @@ struct pmd_obj_erase_work {
  *                pmd_obj_load_work structs can point to a single atomic_t
  *                for grabbing the next MDC number to be processed.
  * @olw_err:
- * @olw_devrpt:
  */
 struct pmd_obj_load_work {
 	struct work_struct          olw_work;
 	struct mpool_descriptor    *olw_mp;
 	atomic_t                   *olw_progress; /* relaxed is correct */
 	atomic64_t                 *olw_err;
-	struct mpool_devrpt         olw_devrpt;
 };
 
 /*
@@ -533,7 +530,6 @@ void pmd_mdc_unlock(struct mutex *lock);
  * @mdc01:
  * @mdc02:
  * @create:
- * @devrpt:
  * @flags: to know if mpool metadata conversion is permitted during activate.
  *
  * Load all metadata for mpool mp; create flag indicates if is a new pool;
@@ -548,7 +544,6 @@ pmd_mpool_activate(
 	struct pmd_layout          *mdc01,
 	struct pmd_layout          *mdc02,
 	int                         create,
-	struct mpool_devrpt        *devrpt,
 	u32                         flags);
 
 /**

@@ -245,7 +245,6 @@ merr_t mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_de
  * @omf_devparm:
  * @check_only: if true, the call doesn't change any state, it only check
  *	if the PD could be added in a media class.
- * @devrpt:
  *
  * If the media class doesn't exist yet, it is created here.
  *
@@ -293,7 +292,6 @@ mpool_desc_pdmc_add(
 	u32				 flags,
 	u16				 pdh,
 	struct omf_devparm_descriptor	*omf_devparm,
-	bool				 check_only,
-	struct mpool_devrpt             *devrpt);
+	bool				 check_only);
 
 #endif /* MPOOL_MPOOL_PRIV_H */

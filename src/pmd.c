@@ -24,11 +24,7 @@
 
 #include <mpool/mpool_ioctl.h>
 
-static merr_t
-pmd_write_meta_to_latest_version(
-	struct mpool_descriptor    *mp,
-	bool                        permitted,
-	struct mpool_devrpt        *devrpt);
+static merr_t pmd_write_meta_to_latest_version(struct mpool_descriptor *mp, bool permitted);
 
 static void pmd_layout_unprovision(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
@@ -384,14 +380,9 @@ pmd_mdc0_init(struct mpool_descriptor *mp, struct pmd_layout *mdc01, struct pmd_
  * @mp:
  * @pdh:
  * @omd:
- * @devrpt:
  */
 static merr_t
-pmd_cmp_drv_mdc0(
-	struct mpool_descriptor        *mp,
-	u8                              pdh,
-	struct omf_devparm_descriptor  *omd,
-	struct mpool_devrpt	       *devrpt)
+pmd_cmp_drv_mdc0(struct mpool_descriptor *mp, u8 pdh, struct omf_devparm_descriptor *omd)
 {
 	const char            *msg __maybe_unused;
 	struct mpool_dev_info *pd;
@@ -408,10 +399,8 @@ pmd_cmp_drv_mdc0(
 
 	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
 		msg = "UNAVAIL mdc0 drive parms don't match those in drive list record";
-	else {
-		mpool_devrpt(devrpt, MPOOL_RC_PARM, pdh, NULL);
+	else
 		msg = "mismatch between MDC0 drive list record and drive parms";
-	}
 
 	mp_pr_warn("mpool %s, %s for %s, mclassp %d %d zonepg %u %u sectorsz %u %u devtype %u %u features %lu %lu",
 		   mp->pds_name, msg, pd->pdi_name, mcp_pd.mcp_classp, mcp_mdc0list.mcp_classp,
@@ -428,7 +417,7 @@ static const char *msg_unavail1 __maybe_unused =
 static const char *msg_unavail2 __maybe_unused =
 	"defunct and available drive still belong to the mpool";
 
-static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
+static merr_t pmd_props_load(struct mpool_descriptor *mp)
 {
 	struct omf_mdcrec_data          cdr;
 	struct pmd_mdc_info            *cinfo = NULL;
@@ -521,9 +510,6 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 				omfu_mdcver_to_str(&cinfo->mmi_mdcver, buf1, sizeof(buf1));
 				omfu_mdcver_to_str(omfu_mdcver_cur(), buf2, sizeof(buf2));
 
-				mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-					     "binary too old for metadata %s", buf1);
-
 				err = merr(EOPNOTSUPP);
 				mp_pr_err("mpool %s, MDC0 version %s, binary version %s",
 					  err, mp->pds_name, buf1, buf2);
@@ -560,7 +546,7 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 
 		if (j >= 0) {
 			zombie[j] = false;
-			err = pmd_cmp_drv_mdc0(mp, j, omd, devrpt);
+			err = pmd_cmp_drv_mdc0(mp, j, omd);
 			if (ev(err))
 				break;
 		} else {
@@ -592,11 +578,9 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp, struct mpool_devrpt *d
 				if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
 					mp_pr_err("mpool %s, drive %s %s %s", err, mp->pds_name,
 						   uuid_str, pd->pdi_name, msg_unavail1);
-				else {
-					mpool_devrpt(devrpt, MPOOL_RC_ZOMBIE, pdh, NULL);
+				else
 					mp_pr_err("mpool %s, drive %s %s %s", err, mp->pds_name,
 						  uuid_str, pd->pdi_name, msg_unavail2);
-				}
 				break;
 			} else if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL) {
 				mc->mc_uacnt += 1;
@@ -874,7 +858,7 @@ pmd_update_mdc_stats(
 	mutex_unlock(&cinfo->mmi_stats_lock);
 }
 
-static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot, struct mpool_devrpt *devrpt)
+static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 {
 	u64                         argv[2] = { 0 };
 	struct omf_mdcrec_data      cdr;
@@ -956,9 +940,6 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot, struct mpool_
 
 				omfu_mdcver_to_str(&cinfo->mmi_mdcver, buf1, sizeof(buf1));
 				omfu_mdcver_to_str(omfu_mdcver_cur(), buf2, sizeof(buf2));
-
-				mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-					     "binary too old for metadata %s", buf1);
 
 				err = merr(EOPNOTSUPP);
 				mp_pr_err("mpool %s, MDC%u version %s, binary version %s",
@@ -1229,7 +1210,7 @@ static void pmd_objs_load_worker(struct work_struct *ws)
 		if (sidx >= olw->olw_mp->pds_mda.mdi_slotvcnt)
 			break; /* No more MDCs to load */
 
-		err = pmd_objs_load(olw->olw_mp, sidx, &olw->olw_devrpt);
+		err = pmd_objs_load(olw->olw_mp, sidx);
 		if (ev(err))
 			atomic64_set(olw->olw_err, err);
 	}
@@ -1238,14 +1219,13 @@ static void pmd_objs_load_worker(struct work_struct *ws)
 /**
  * pmd_objs_load_parallel() - load MDC 1~N in parallel
  * @mp:
- * @devrpt:
  *
  * By loading user MDCs in parallel, we can reduce the mpool activate
  * time, since the jobs of loading MDC 1~N are independent.
  * On the other hand, we don't want to start all the jobs at once.
  * If any one fails, we don't have to start others.
  */
-static merr_t pmd_objs_load_parallel(struct mpool_descriptor *mp, struct mpool_devrpt *devrpt)
+static merr_t pmd_objs_load_parallel(struct mpool_descriptor *mp)
 {
 	struct pmd_obj_load_work   *olwv;
 
@@ -1290,15 +1270,6 @@ static merr_t pmd_objs_load_parallel(struct mpool_descriptor *mp, struct mpool_d
 	/* Wait for all worker threads to complete */
 	flush_workqueue(mp->pds_workq);
 
-	if (ev(atomic64_read(&err) != 0)) {
-		/* Update devrpt passed in. */
-		for (i = 0; i < njobs; i++)
-			if (olwv[i].olw_devrpt.mdr_rcode) {
-				*devrpt = olwv[i].olw_devrpt;
-				break;
-			}
-	}
-
 	kfree(olwv);
 
 	return atomic64_read(&err);
@@ -1310,7 +1281,6 @@ pmd_mpool_activate(
 	struct pmd_layout          *mdc01,
 	struct pmd_layout          *mdc02,
 	int                         create,
-	struct mpool_devrpt        *devrpt,
 	u32                         flags)
 {
 	merr_t  err;
@@ -1337,7 +1307,7 @@ pmd_mpool_activate(
 
 	/* load mpool properties from mdc0 including drive list and states */
 	if (!create) {
-		err = pmd_props_load(mp, devrpt);
+		err = pmd_props_load(mp);
 		if (ev(err))
 			goto exit;
 	}
@@ -1351,12 +1321,12 @@ pmd_mpool_activate(
 		goto exit;
 
 	/* load mdc layouts from mdc0 and finalize mda initialization */
-	err = pmd_objs_load(mp, 0, devrpt);
+	err = pmd_objs_load(mp, 0);
 	if (ev(err))
 		goto exit;
 
 	/* load user object layouts from all other mdc */
-	err = pmd_objs_load_parallel(mp, devrpt);
+	err = pmd_objs_load_parallel(mp);
 	if (ev(err)) {
 		mp_pr_err("mpool %s, failed to load user MDCs", err, mp->pds_name);
 		goto exit;
@@ -1368,7 +1338,7 @@ pmd_mpool_activate(
 	 * the latest format.
 	 */
 	if (!create) {
-		err = pmd_write_meta_to_latest_version(mp, true, devrpt);
+		err = pmd_write_meta_to_latest_version(mp, true);
 		if (ev(err)) {
 			mp_pr_err("mpool %s, failed to compact MDCs (metadata conversion)",
 				  err, mp->pds_name);
@@ -3572,11 +3542,7 @@ void pmd_mpool_usage(struct mpool_descriptor *mp, struct mpool_usage *usage)
 	usage->mpu_wlen = (usage->mpu_mblock_wlen + usage->mpu_mlog_alen);
 }
 
-static merr_t
-pmd_write_meta_to_latest_version(
-	struct mpool_descriptor   *mp,
-	bool                       permitted,
-	struct mpool_devrpt       *devrpt)
+static merr_t pmd_write_meta_to_latest_version(struct mpool_descriptor *mp, bool permitted)
 {
 	struct pmd_mdc_info *cinfo;
 	struct pmd_mdc_info *cinfo_converted = NULL;
@@ -3605,11 +3571,6 @@ pmd_write_meta_to_latest_version(
 		omfu_mdcver_to_str(omfu_mdcver_cur(), buf2, sizeof(buf2));
 
 		if (!permitted) {
-			mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-				"metadata upgrade needed from version %s (%s) to %s (%s)",
-				buf1, omfu_mdcver_comment(&cinfo->mmi_mdcver),
-				buf2, omfu_mdcver_comment(omfu_mdcver_cur()));
-
 			err = merr(EPERM);
 			mp_pr_err("mpool %s, MDC%u upgrade needed from version %s to %s",
 				  err, mp->pds_name, cslot, buf1, buf2);
@@ -3626,7 +3587,8 @@ pmd_write_meta_to_latest_version(
 		pmd_mdc_unlock(&cinfo->mmi_compactlock);
 
 		if (ev(err)) {
-			mpool_devrpt(devrpt, MPOOL_RC_MDC_COMPACT_ACTIVATE, -1, NULL);
+			mp_pr_err("mpool %s, failed to compact MDC %u post upgrade from %s to %s",
+				  err, mp->pds_name, cslot, buf1, buf2);
 			return err;
 		}
 	}

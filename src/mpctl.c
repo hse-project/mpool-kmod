@@ -270,24 +270,6 @@ unsigned int mpc_chunker_size __read_mostly = 128;
 module_param(mpc_chunker_size, uint, 0644);
 MODULE_PARM_DESC(mpc_chunker_size, "Chunking size (in KiB) for device I/O");
 
-
-static void mpc_errinfo(struct mpioc_cmn *cmn, enum mpool_rc rcode, const char *msg)
-{
-	size_t  len;
-	ulong   rc;
-
-	cmn->mc_rcode = rcode;
-
-	if (!cmn->mc_msg)
-		return;
-
-	len = strnlen(msg, MPOOL_DEVRPT_SZ - 1);
-
-	rc = copy_to_user(cmn->mc_msg, msg, len + 1);
-	if (rc)
-		mp_pr_err("copy_to_user(%s, %lu), rc %lu", merr(EFAULT), msg, len + 1, rc);
-}
-
 static struct mpc_softstate *mpc_cdev2ss(struct cdev *cdev)
 {
 	if (ev(!cdev || cdev->owner != THIS_MODULE)) {
@@ -568,7 +550,6 @@ static void mpc_params_unregister(struct mpc_unit *unit)
  * @dpathc: drive count
  * @dpathv: drive path name vector
  * @mpoolp: mpool ptr. Set only if success.
- * @devrpt:
  * @pd_prop: PDs properties
  *
  * Return:  Returns 0 if successful and sets *mpoolp.
@@ -579,7 +560,6 @@ mpc_mpool_open(
 	uint                    dpathc,
 	char                  **dpathv,
 	struct mpc_mpool      **mpoolp,
-	struct mpool_devrpt    *devrpt,
 	struct pd_prop	       *pd_prop,
 	struct mpool_params    *params,
 	u32			flags)
@@ -612,14 +592,9 @@ mpc_mpool_open(
 	mpool_to_mpcore_params(params, &mpc_params);
 
 	err = mpool_activate(dpathc, dpathv, pd_prop, MPOOL_ROOT_LOG_CAP,
-			     &mpc_params, flags, &mpool->mp_desc, devrpt);
+			     &mpc_params, flags, &mpool->mp_desc);
 	if (err) {
-		if (devrpt->mdr_off > -1)
-			mp_pr_err("Activating %s failed: dev %s, rcode %d", err,
-				  params->mp_name, dpathv[devrpt->mdr_off], devrpt->mdr_rcode);
-		else
-			mp_pr_err("Activating %s failed", err, params->mp_name);
-
+		mp_pr_err("Activating %s failed", err, params->mp_name);
 		module_put(THIS_MODULE);
 		kfree(mpool);
 		return err;
@@ -851,17 +826,14 @@ mpc_unit_setup(
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpc_unit        *unit;
-	enum mpool_rc           rcode;
 	struct device          *device;
 	merr_t                  err;
 
 	if (!ss || !uinfo || !name || !name[0] || !cfg || !unitp || !cmn)
 		return merr(EINVAL);
 
-	if (cfg->mc_uid == -1 || cfg->mc_gid == -1 || cfg->mc_mode == -1) {
-		mpc_errinfo(cmn, MPCTL_RC_BADMNT, name);
+	if (cfg->mc_uid == -1 || cfg->mc_gid == -1 || cfg->mc_mode == -1)
 		return merr(EINVAL);
-	}
 
 	if (!capable(CAP_MKNOD))
 		return merr(EPERM);
@@ -875,7 +847,6 @@ mpc_unit_setup(
 	if (mpool && strcmp(mpool->mp_name, name))
 		return merr(EINVAL);
 
-	rcode = MPOOL_RC_NONE;
 	*unitp = NULL;
 	unit = NULL;
 
@@ -902,7 +873,6 @@ mpc_unit_setup(
 	if (ev(IS_ERR(device))) {
 		err = merr(PTR_ERR(device));
 		mp_pr_err("device_create %s failed", err, name);
-		rcode = MPCTL_RC_BADMNT;
 		goto errout;
 	}
 
@@ -916,8 +886,6 @@ mpc_unit_setup(
 
 errout:
 	if (err) {
-		mpc_errinfo(cmn, rcode, name);
-
 		/* Acquire an additional reference on mpool so that it is not
 		 * errantly destroyed along with the unit, then release both
 		 * the unit's birth and caller's references which should
@@ -1878,32 +1846,35 @@ static merr_t mpioc_mp_add(struct mpc_unit *unit, struct mpioc_drive *drv)
 	dpathvsz = drv->drv_dpathc * sizeof(*dpathv) + drv->drv_dpathssz;
 	if (drv->drv_dpathc > MPOOL_DRIVES_MAX ||
 	    dpathvsz > MPOOL_DRIVES_MAX * (PATH_MAX + sizeof(*dpathv))) {
-		mpc_errinfo(&drv->drv_cmn, MPCTL_RC_TOOMANY, "member drives");
-		return merr(E2BIG);
+		err = merr(E2BIG);
+		mp_pr_err("%s: invalid pathc %u, pathsz %zu",
+			  err, unit->un_name, drv->drv_dpathc, dpathvsz);
+		return err;
 	}
 
 	dpathv = kmalloc(dpathvsz, GFP_KERNEL);
 	if (!dpathv) {
-		mpool_devrpt(&drv->drv_devrpt, MPOOL_RC_ERRMSG, -1, "%s: alloc dpathsz %zu failed",
-			     __func__, dpathvsz);
-		return merr(ENOMEM);
+		err = merr(ENOMEM);
+		mp_pr_err("%s: alloc dpathv %zu failed", err, unit->un_name, dpathvsz);
+		return err;
 	}
 
 	dpaths = (char *)dpathv + drv->drv_dpathc * sizeof(*dpathv);
 	rc = copy_from_user(dpaths, drv->drv_dpaths, drv->drv_dpathssz);
 	if (rc) {
-		mpool_devrpt(&drv->drv_devrpt, MPOOL_RC_ERRMSG, -1, "%s: copyin dpaths %zu failed",
-			     __func__, drv->drv_dpathssz);
+		err = merr(EFAULT);
+		mp_pr_err("%s: copyin dpaths %u failed", err, unit->un_name, drv->drv_dpathssz);
 		kfree(dpathv);
-		return merr(EFAULT);
+		return err;
 	}
 
 	for (i = 0; i < drv->drv_dpathc; ++i) {
 		dpathv[i] = strsep(&dpaths, "\n");
 		if (!dpathv[i] || (strlen(dpathv[i]) > PATH_MAX - 1)) {
-			mpool_devrpt(&drv->drv_devrpt, MPCTL_RC_NLIST, -1, NULL);
+			err = merr(EINVAL);
+			mp_pr_err("%s: ill-formed dpathv list ", err, unit->un_name);
 			kfree(dpathv);
-			return merr(EINVAL);
+			return err;
 		}
 	}
 
@@ -1913,23 +1884,23 @@ static merr_t mpioc_mp_add(struct mpc_unit *unit, struct mpioc_drive *drv)
 
 	pd_prop = kmalloc(pd_prop_sz, GFP_KERNEL);
 	if (!pd_prop) {
-		mpool_devrpt(&drv->drv_devrpt, MPOOL_RC_ERRMSG, -1, "%s: alloc pd prop %zu failed",
-			     __func__, pd_prop_sz);
+		err = merr(ENOMEM);
+		mp_pr_err("%s: alloc pd prop %zu failed", err, unit->un_name, pd_prop_sz);
 		kfree(dpathv);
-		return merr(ENOMEM);
+		return err;
 	}
 
 	rc = copy_from_user(pd_prop, drv->drv_pd_prop, pd_prop_sz);
 	if (rc) {
-		mpool_devrpt(&drv->drv_devrpt, MPOOL_RC_ERRMSG, -1, "%s: copyin pd prop %zu failed",
-			     __func__, pd_prop_sz);
+		err = merr(EFAULT);
+		mp_pr_err("%s: copyin pd prop %zu failed", err, unit->un_name, pd_prop_sz);
 		kfree(pd_prop);
 		kfree(dpathv);
-		return merr(EFAULT);
+		return err;
 	}
 
 	for (i = 0; i < drv->drv_dpathc; ++i) {
-		err = mpool_drive_add(desc, dpathv[i], &pd_prop[i], &drv->drv_devrpt);
+		err = mpool_drive_add(desc, dpathv[i], &pd_prop[i]);
 		if (ev(err))
 			break;
 	}
@@ -2103,7 +2074,7 @@ static merr_t mpioc_params_set(struct mpc_unit *unit, struct mpioc_params *set)
 	mutex_unlock(&ss->ss_lock);
 
 	if (ev(err)) {
-		mpc_errinfo(cmn, MPOOL_RC_EIO, "mpool params commit metadata");
+		mp_pr_err("%s: params commit failed", err, unit->un_name);
 		return err;
 	}
 
@@ -2185,7 +2156,6 @@ mpioc_mp_create(
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpool_config     cfg = { };
-	struct mpool_devrpt    *devrpt;
 	struct mpcore_params    mpc_params;
 	struct mpc_unit        *unit = NULL;
 	struct mpc_mpool       *mpool = NULL;
@@ -2201,8 +2171,6 @@ mpioc_mp_create(
 	len = mpc_toascii(mp->mp_params.mp_name, sizeof(mp->mp_params.mp_name));
 	if (len < 1 || len >= MPOOL_NAMESZ_MAX)
 		return merr(len < 1 ? EINVAL : ENAMETOOLONG);
-
-	devrpt = &mp->mp_devrpt;
 
 	mpool_params_merge_defaults(&mp->mp_params);
 
@@ -2220,27 +2188,29 @@ mpioc_mp_create(
 	mode &= 0777;
 
 	if (uid != mpc_current_uid() && !capable(CAP_CHOWN)) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "chown permission denied");
-		return merr(EPERM);
+		err = merr(EPERM);
+		mp_pr_err("chown permission denied, uid %d", err, uid);
+		return err;
 	}
 
 	if (gid != mpc_current_gid() && !capable(CAP_CHOWN)) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "chown permission denied");
-		return merr(EPERM);
+		err = merr(EPERM);
+		mp_pr_err("chown permission denied, gid %d", err, gid);
+		return err;
 	}
 
 	if (!capable(CAP_SYS_ADMIN)) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "chmod/activate permission denied");
-		return merr(EPERM);
+		err = merr(EPERM);
+		mp_pr_err("chmod/activate permission denied", err);
+		return err;
 	}
 
 	mpool_to_mpcore_params(&mp->mp_params, &mpc_params);
 
 	err = mpool_create(mp->mp_params.mp_name, mp->mp_flags, *dpathv,
-			   pd_prop, &mpc_params, MPOOL_ROOT_LOG_CAP, devrpt);
+			   pd_prop, &mpc_params, MPOOL_ROOT_LOG_CAP);
 	if (err) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "%s: mpool %s, create failed",
-			     __func__, mp->mp_params.mp_name);
+		mp_pr_err("%s: create failed", err, mp->mp_params.mp_name);
 		return err;
 	}
 
@@ -2250,12 +2220,10 @@ mpioc_mp_create(
 	 */
 	mpool_params_merge_defaults(&mp->mp_params);
 
-	err = mpc_mpool_open(mp->mp_dpathc, *dpathv, &mpool, &mp->mp_devrpt, pd_prop,
-			     &mp->mp_params, mp->mp_flags);
+	err = mpc_mpool_open(mp->mp_dpathc, *dpathv, &mpool, pd_prop, &mp->mp_params, mp->mp_flags);
 	if (err) {
-		if (mp->mp_devrpt.mdr_off == -1)
-			mpc_errinfo(&mp->mp_cmn, MPOOL_RC_STAT, mp->mp_params.mp_name);
-		mpool_destroy(mp->mp_dpathc, *dpathv, pd_prop, mp->mp_flags, devrpt);
+		mp_pr_err("%s: mpc_mpool_open failed", err, mp->mp_params.mp_name);
+		mpool_destroy(mp->mp_dpathc, *dpathv, pd_prop, mp->mp_flags);
 		return err;
 	}
 
@@ -2278,7 +2246,7 @@ mpioc_mp_create(
 
 	err = mpool_config_store(mpool->mp_desc, &cfg);
 	if (err) {
-		mp_pr_err("%s: %s config store failed", err, __func__, mp->mp_params.mp_name);
+		mp_pr_err("%s: config store failed", err, mp->mp_params.mp_name);
 		goto errout;
 	}
 
@@ -2288,7 +2256,7 @@ mpioc_mp_create(
 	err = mpc_unit_setup(&mpc_uinfo_mpool, mp->mp_params.mp_name,
 			     &cfg, mpool, &unit, &mp->mp_cmn);
 	if (err) {
-		mp_pr_err("%s unit setup failed", err, mp->mp_params.mp_name);
+		mp_pr_err("%s: unit setup failed", err, mp->mp_params.mp_name);
 		goto errout;
 	}
 
@@ -2317,7 +2285,7 @@ errout:
 	if (mpool) {
 		mpool_deactivate(mpool->mp_desc);
 		mpool->mp_desc = NULL;
-		mpool_destroy(mp->mp_dpathc, mpool->mp_dpathv, pd_prop, mp->mp_flags, devrpt);
+		mpool_destroy(mp->mp_dpathc, mpool->mp_dpathv, pd_prop, mp->mp_flags);
 	}
 
 	/* For failures after mpc_unit_setup() (i.e., mpool != NULL)
@@ -2353,7 +2321,6 @@ mpioc_mp_activate(
 	struct mpool_config     cfg;
 	struct mpc_mpool       *mpool = NULL;
 	struct mpc_unit        *unit = NULL;
-	struct mpool_devrpt    *devrpt;
 	merr_t                  err;
 	size_t                  len;
 
@@ -2367,19 +2334,15 @@ mpioc_mp_activate(
 	if (len < 1 || len >= MPOOL_NAMESZ_MAX)
 		return merr(len < 1 ? EINVAL : ENAMETOOLONG);
 
-	devrpt = &mp->mp_devrpt;
-
 	mpool_params_merge_defaults(&mp->mp_params);
 
 	/*
 	 * Create an mpc_mpool object through which we can (re)open and manage
 	 * the mpool.  If successful, mpc_mpool_open() adopts dpathv.
 	 */
-	err = mpc_mpool_open(mp->mp_dpathc, *dpathv, &mpool, &mp->mp_devrpt, pd_prop,
-			     &mp->mp_params, mp->mp_flags);
+	err = mpc_mpool_open(mp->mp_dpathc, *dpathv, &mpool, pd_prop, &mp->mp_params, mp->mp_flags);
 	if (err) {
-		if (mp->mp_devrpt.mdr_off == -1)
-			mpc_errinfo(&mp->mp_cmn, MPOOL_RC_STAT, mp->mp_params.mp_name);
+		mp_pr_err("%s: mpc_mpool_open failed", err, mp->mp_params.mp_name);
 		return err;
 	}
 
@@ -2486,8 +2449,8 @@ mp_deactivate_impl(struct mpc_unit *ctl, struct mpioc_mpool *mp, bool locked)
 	 */
 	mutex_lock(&ss->ss_lock);
 	if (unit->un_open_cnt > 0 || kref_read(&unit->un_ref) != 2) {
-		mpc_errinfo(&mp->mp_cmn, MPOOL_RC_STAT, unit->un_name);
 		err = merr(EBUSY);
+		mp_pr_err("%s: busy, cannot deactivate", err, unit->un_name);
 	} else {
 		idr_replace(&ss->ss_unitmap, NULL, MINOR(unit->un_devno));
 		err = 0;
@@ -2517,12 +2480,11 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 	struct mpc_unit        *unit = NULL;
 	struct pd_prop         *pd_prop = NULL;
 	char                  **dpathv = NULL;
-	struct mpool_devrpt    *devrpt;
 	merr_t                  err = 0;
 	size_t                  dpathvsz;
 	char                   *dpaths;
 	int                     rc, i;
-	u64                     pd_prop_sz;
+	size_t                  pd_prop_sz;
 	const char             *action;
 	size_t                  len;
 
@@ -2538,8 +2500,6 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 	len = mpc_toascii(mp->mp_params.mp_name, sizeof(mp->mp_params.mp_name));
 	if (len < 1 || len >= MPOOL_NAMESZ_MAX)
 		return merr(len < 1 ? EINVAL : ENAMETOOLONG);
-
-	devrpt = &mp->mp_devrpt;
 
 	switch (cmd) {
 	case MPIOC_MP_CREATE:
@@ -2563,12 +2523,12 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 	}
 
 	if (!mp->mp_pd_prop || !mp->mp_dpaths) {
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1,
-			     "mpool %s, %s: (%d drives), drives names %p or PD props %p invalid",
-			     mp->mp_params.mp_name, action, mp->mp_dpathc,
-			     mp->mp_dpaths, mp->mp_pd_prop);
+		err = merr(EINVAL);
+		mp_pr_err("%s: %s, (%d drives), drives names %p or PD props %p invalid",
+			  err, mp->mp_params.mp_name, action, mp->mp_dpathc,
+			  mp->mp_dpaths, mp->mp_pd_prop);
 
-		return merr(EINVAL);
+		return err;
 	}
 
 	if (ev(mp->mp_dpathssz > (mp->mp_dpathc + 1) * PATH_MAX))
@@ -2587,8 +2547,8 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 	if (unit && cmd != MPIOC_MP_DESTROY) {
 		if (cmd == MPIOC_MP_ACTIVATE)
 			goto errout;
-		mpool_devrpt(devrpt, MPOOL_RC_ERRMSG, -1, "already activated");
 		err = merr(EEXIST);
+		mp_pr_err("%s: mpool already activated", err, mp->mp_params.mp_name);
 		goto errout;
 	}
 
@@ -2598,8 +2558,9 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 	 */
 	dpathvsz = mp->mp_dpathc * sizeof(*dpathv) + mp->mp_dpathssz;
 	if (dpathvsz > MPOOL_DRIVES_MAX * (PATH_MAX + sizeof(*dpathv))) {
-		mpc_errinfo(&mp->mp_cmn, MPCTL_RC_TOOMANY, "member drives");
 		err = merr(E2BIG);
+		mp_pr_err("%s: %s, too many member drives %zu",
+			  err, mp->mp_params.mp_name, action, dpathvsz);
 		goto errout;
 	}
 
@@ -2629,19 +2590,17 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 	pd_prop_sz = mp->mp_dpathc * sizeof(*pd_prop);
 	pd_prop = kmalloc(pd_prop_sz, GFP_KERNEL);
 	if (!pd_prop) {
-		mpool_devrpt(&mp->mp_devrpt, MPOOL_RC_ERRMSG, -1,
-			     "mpool %s, %s: pd prop alloc %zu failed",
-			     mp->mp_params.mp_name, action, pd_prop_sz);
 		err = merr(ENOMEM);
+		mp_pr_err("%s: %s, alloc pd prop %zu failed",
+			  err, mp->mp_params.mp_name, action, pd_prop_sz);
 		goto errout;
 	}
 
 	rc = copy_from_user(pd_prop, mp->mp_pd_prop, pd_prop_sz);
 	if (rc) {
-		mpool_devrpt(&mp->mp_devrpt, MPOOL_RC_ERRMSG, -1,
-			     "mpool %s, %s: pd prop %zu copyin failed",
-			     mp->mp_params.mp_name, action, pd_prop_sz);
 		err = merr(EFAULT);
+		mp_pr_err("%s: %s, copyin pd prop %zu failed",
+			  err, mp->mp_params.mp_name, action, pd_prop_sz);
 		goto errout;
 	}
 
@@ -2665,18 +2624,17 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 				break;
 			}
 		}
-		err = mpool_destroy(mp->mp_dpathc, dpathv, pd_prop, mp->mp_flags, &mp->mp_devrpt);
+		err = mpool_destroy(mp->mp_dpathc, dpathv, pd_prop, mp->mp_flags);
 		break;
 
 	case MPIOC_MP_RENAME:
 		err = mpool_rename(mp->mp_dpathc, dpathv, pd_prop, mp->mp_flags,
-				   mp->mp_params.mp_name, &mp->mp_devrpt);
+				   mp->mp_params.mp_name);
 		break;
 	}
 
 	if (ev(err))
-		mpool_devrpt(&mp->mp_devrpt, MPOOL_RC_ERRMSG, -1,
-			     "mpool %s, %s failed", mp->mp_params.mp_name, action);
+		mp_pr_err("%s: %s failed", err, mp->mp_params.mp_name, action);
 
 errout:
 	mpc_unit_put(unit);
@@ -3529,7 +3487,7 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				return -EFAULT;
 			}
 
-			if (cmn->mc_rcode || cmn->mc_err) {
+			if (cmn->mc_err) {
 				if (argp != argbuf)
 					kfree(argp);
 				return -EINVAL;

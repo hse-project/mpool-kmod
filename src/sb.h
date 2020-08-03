@@ -95,20 +95,13 @@ merr_t sb_erase(struct mpool_dev_info *pd);
  * @sb: struct omf_sb_descriptor *
  * @omf_ver: omf sb version
  * @force:
- * @devrpt:
  * Read superblock from drive pd; make repairs as necessary.
  *
  * Note: only pd.status and pd.parm must be set; no other pd fields accessed.
  *
  * Return: 0 if successful; merr_t otherwise
  */
-merr_t
-sb_read(
-	struct mpool_dev_info      *pd,
-	struct omf_sb_descriptor   *sb,
-	u16                        *omf_ver,
-	bool                        force,
-	struct mpool_devrpt        *devrpt);
+merr_t sb_read(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb, u16 *omf_ver, bool force);
 
 /**
  * sb_zones_for_sbs() - compute how many zones are needed to contain the
