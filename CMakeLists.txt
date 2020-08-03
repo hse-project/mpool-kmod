@@ -4,7 +4,7 @@
 # Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
 #
 
-cmake_minimum_required( VERSION 2.8.12 )
+cmake_minimum_required( VERSION 3.6 )
 
 project( kmod-mpool C )
 
@@ -46,11 +46,6 @@ else()
 endif()
 
 set( CPACK_PACKAGE_RELEASE      "${BUILD_PKG_REL}${BUILD_RTYPE}${BUILD_PKG_DIST}" )
-
-if( ${CMAKE_MINIMUM_REQUIRED_VERSION} VERSION_LESS 3.6.2 )
-    set( CPACK_PACKAGE_FILE_NAME
-	"${CPACK_PACKAGE_NAME}-${CPACK_PACKAGE_VERSION}-${CPACK_PACKAGE_RELEASE}" )
-endif()
 
 include( ${SCRIPTS_DIR}/CMakeLists.txt )
 include( CPack )
