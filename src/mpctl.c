@@ -4099,10 +4099,10 @@ static __init int mpc_init(void)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
-		int     maxactive = WQ_DFL_ACTIVE / ARRAY_SIZE(mpc_wq_rav);
+		int     maxactive = 16;
 		char    name[16];
 
-		snprintf(name, sizeof(name), "mpc_wa_ra%d", i);
+		snprintf(name, sizeof(name), "mpc_wq_ra%d", i);
 
 		mpc_wq_rav[i] = alloc_workqueue(name, 0, maxactive);
 		if (!mpc_wq_rav[i]) {
