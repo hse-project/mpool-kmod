@@ -3,11 +3,6 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-/* DOC: Module info.
- *
- * Common headers definitions for mpool.
- *
- */
 #ifndef MPOOL_DEFS_H
 #define MPOOL_DEFS_H
 

@@ -39,7 +39,7 @@ static bool sb_prop_valid(struct mpool_dev_info *pd)
 	if (SB_AREA_SZ < OMF_SB_DESC_PACKLEN) {
 		merr_t err = merr(EINVAL);
 
-		/* guarantee that the SB area is large enough to hold an SB */
+		/* Guarantee that the SB area is large enough to hold an SB */
 		mp_pr_err("sb(%s): structure too big %lu %lu",
 			  err, pd->pdi_name, (ulong)SB_AREA_SZ, OMF_SB_DESC_PACKLEN);
 		return false;
@@ -91,12 +91,12 @@ static bool sb_parm_valid(struct mpool_dev_info *pd)
 	u32    cnt;
 
 	if (SB_AREA_SZ < OMF_SB_DESC_PACKLEN) {
-		/* guarantee that the SB area is large enough to hold an SB */
+		/* Guarantee that the SB area is large enough to hold an SB */
 		return false;
 	}
 
 	if (pd_prop->pdp_zparam.dvb_zonepg == 0) {
-		/* zone size can't be 0. */
+		/* Zone size can't be 0. */
 		return false;
 	}
 
@@ -107,9 +107,7 @@ static bool sb_parm_valid(struct mpool_dev_info *pd)
 	}
 
 	if (pd->pdi_zonetot < (cnt + 1)) {
-		/* guarantee that there is at least one zone not
-		 * consumed by SBs.
-		 */
+		/* Guarantee that there is at least one zone not consumed by SBs. */
 		return false;
 	}
 
@@ -129,7 +127,7 @@ static merr_t sb_write_sbx(struct mpool_dev_info *pd, char *outbuf, u32 idx)
 	woff = sb_idx2woff(pd, idx);
 
 	err = pd_zone_pwritev_sync(pd, &iov, 1, 0, woff);
-	/* reset the rval as per api */
+	/* Reset the rval as per api */
 	if (err >= 0)
 		err = 0;
 	else
@@ -469,7 +467,7 @@ merr_t sb_read(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb, u16 *omf
 				mp_pr_err("sb(%s, %d) bad magic/version/cksum",
 					  err, pd->pdi_name, i);
 			else if (i == 0)
-				/* deep copy to main struct  */
+				/* Deep copy to main struct  */
 				*sb = *sbtmp;
 		}
 		if (err && (i == 0)) {
@@ -624,12 +622,9 @@ int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb)
 	if (ev(mpool_uuid_is_null(&sb->osb_parm.odp_devid)))
 		return 0;
 
-	/* confirm this drive is supposed to contain this mdc0 info */
+	/* Confirm this drive is supposed to contain this mdc0 info */
 	if (!mpool_uuid_compare(&sb->osb_mdc01devid, &sb->osb_parm.odp_devid)) {
-		/*
-		 * found this drive in mdc0 strip list;
-		 * confirm param and ownership
-		 */
+		/* Found this drive in mdc0 strip list; confirm param and ownership */
 		if (ev(mc_cmp_omf_devparm(&sb->osb_parm, &sb->osb_mdc0dev)))
 			return 0;
 	} else {

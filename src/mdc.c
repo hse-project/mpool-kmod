@@ -190,7 +190,7 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 			err, mpname, mdc->mdc_logh1, (ulong)logid1, merr_errno(err1), (ulong)gen1,
 			mdc->mdc_logh2, (ulong)logid2, merr_errno(err2), (ulong)gen2);
 	} else {
-		/* active log is valid log with smallest gen */
+		/* Active log is valid log with smallest gen */
 		if (err1 || (!err2 && gen2 < gen1)) {
 			mdc->mdc_alogh = mdc->mdc_logh2;
 			if (!err1) {
@@ -237,7 +237,7 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 			err = mlog_empty(mp, mdc->mdc_alogh, &empty);
 			if (!err && empty) {
 				/*
-				 * first use of log pair so need to add
+				 * First use of log pair so need to add
 				 * cstart/cend recs; above handles case of
 				 * failure between adding cstart and cend
 				 */

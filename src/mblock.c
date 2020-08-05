@@ -317,8 +317,7 @@ mblock_rw_argcheck(
 			return err;
 		}
 
-		/* Check that boff is not past end of mblock capacity.
-		 */
+		/* Check that boff is not past end of mblock capacity. */
 		if (mblock_cap <= boff) {
 			err = merr(EINVAL);
 			mp_pr_err("mpool %s, read offset 0x%lx >= mblock capacity 0x%x",
@@ -326,7 +325,8 @@ mblock_rw_argcheck(
 			return err;
 		}
 
-		/* Check that the request does not extend past the data
+		/*
+		 * Check that the request does not extend past the data
 		 * written.  Don't record an error if this appears to
 		 * be an mcache readahead request.
 		 *

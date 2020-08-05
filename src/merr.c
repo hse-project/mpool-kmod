@@ -92,9 +92,10 @@ const char *merr_file(merr_t err)
 
 	off = (s64)(err & MERR_FILE_MASK) >> MERR_FILE_SHIFT;
 
-	/* Rough guess, the offset shouldn't be larger than the number
-	 * of .c files in the module.  Better to check the bounds of
-	 * the "mpool_merr" segment, but how?
+	/*
+	 * Rough guess, the offset shouldn't be larger than the number
+	 * of .c files in the module.
+	 * TODO: Better to check the bounds of the "mpool_merr" segment, but how?
 	 */
 	if (off < -32 || off > 32)
 		return merr_bug2;

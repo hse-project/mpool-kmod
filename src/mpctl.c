@@ -28,6 +28,7 @@
 #include <linux/delay.h>
 #include <linux/ctype.h>
 #include <linux/uio.h>
+#include <linux/prefetch.h>
 
 #include "mpool_ioctl.h"
 
@@ -73,8 +74,7 @@ typedef int vm_fault_t;
 
 struct mpc_mpool;
 
-/* mpc pseudo-driver instance data (i.e., all globals live here).
- */
+/* mpc pseudo-driver instance data (i.e., all globals live here). */
 struct mpc_softstate {
 	struct mutex        ss_lock;        /* Protects ss_unitmap */
 	struct idr          ss_unitmap;     /* minor-to-unit map */
@@ -88,8 +88,7 @@ struct mpc_softstate {
 	bool                ss_mpcore_inited;
 };
 
-/* Unit-type specific information.
- */
+/* Unit-type specific information. */
 struct mpc_uinfo {
 	const char     *ui_typename;
 	const char     *ui_subdirfmt;
@@ -110,8 +109,7 @@ struct mpc_rgnmap {
 	atomic_t        rm_rgncnt;
 } ____cacheline_aligned;
 
-/* There is one unit object for each device object created by the driver.
- */
+/* There is one unit object for each device object created by the driver. */
 struct mpc_unit {
 	struct kref                 un_ref;
 	int                         un_open_cnt;    /* Unit open count */
@@ -138,8 +136,7 @@ struct mpc_unit {
 	char                        un_name[];
 };
 
-/* One mpc_mpool object per mpool.
- */
+/* One mpc_mpool object per mpool. */
 struct mpc_mpool {
 	struct kref                 mp_ref;
 	struct rw_semaphore         mp_lock;
@@ -150,7 +147,8 @@ struct mpc_mpool {
 	char                        mp_name[];
 };
 
-/* Arguments required to initiate an asynchronous call to mblock_read()
+/*
+ * Arguments required to initiate an asynchronous call to mblock_read()
  * and which must also be preserved across that call.
  *
  * Note: We could make things more efficient by changing a_pagev[]
@@ -191,8 +189,7 @@ static int mpc_readpage_impl(struct page *page, struct mpc_xvm *map);
 #define ITERCB_NEXT     (0)
 #define ITERCB_DONE     (1)
 
-/* The following structures are initialized at the end of this file.
- */
+/* The following structures are initialized at the end of this file. */
 static const struct file_operations            mpc_fops_default;
 static const struct vm_operations_struct       mpc_vops_default;
 static const struct address_space_operations   mpc_aops_default;
@@ -217,32 +214,16 @@ static size_t mpc_xvm_cachesz[2] __read_mostly;
 static struct kmem_cache *mpc_xvm_cache[2] __read_mostly;
 static struct backing_dev_info *mpc_bdi;
 
-/* Module params...
- */
 static unsigned int mpc_ctl_uid __read_mostly;
-module_param(mpc_ctl_uid, uint, 0444);
-MODULE_PARM_DESC(mpc_ctl_uid, " control device uid");
-
 static unsigned int mpc_ctl_gid __read_mostly = 6;
-module_param(mpc_ctl_gid, uint, 0444);
-MODULE_PARM_DESC(mpc_ctl_gid, " control device gid");
-
 static unsigned int mpc_ctl_mode __read_mostly = 0664;
-module_param(mpc_ctl_mode, uint, 0444);
-MODULE_PARM_DESC(mpc_ctl_mode, " control device mode");
-
 static unsigned int mpc_default_uid __read_mostly;
-module_param(mpc_default_uid, uint, 0644);
-MODULE_PARM_DESC(mpc_default_uid, " default mpool device uid");
-
 static unsigned int mpc_default_gid __read_mostly = 6;
-module_param(mpc_default_gid, uint, 0644);
-MODULE_PARM_DESC(mpc_default_gid, " default mpool device gid");
-
 static unsigned int mpc_default_mode __read_mostly = 0660;
-module_param(mpc_default_mode, uint, 0644);
-MODULE_PARM_DESC(mpc_default_mode, " default mpool device mode");
 
+/*
+ * Module params...
+ */
 static unsigned int mpc_maxunits __read_mostly = 1024;
 module_param(mpc_maxunits, uint, 0444);
 MODULE_PARM_DESC(mpc_maxunits, " max mpools");
@@ -850,7 +831,8 @@ mpc_unit_setup(
 	*unitp = NULL;
 	unit = NULL;
 
-	/* Try to create a new unit object.  If successful, then all error
+	/*
+	 * Try to create a new unit object.  If successful, then all error
 	 * handling beyond this point must route through the errout label
 	 * to ensure the unit is fully destroyed.
 	 */
@@ -886,7 +868,8 @@ mpc_unit_setup(
 
 errout:
 	if (err) {
-		/* Acquire an additional reference on mpool so that it is not
+		/*
+		 * Acquire an additional reference on mpool so that it is not
 		 * errantly destroyed along with the unit, then release both
 		 * the unit's birth and caller's references which should
 		 * destroy the unit.
@@ -925,11 +908,11 @@ static void mpc_rgnmap_flush(struct mpc_rgnmap *rm)
 	if (!rm)
 		return;
 
-	/* Wait for all mpc_xvm_free_cb() callbacks to complete...
-	 */
+	/* Wait for all mpc_xvm_free_cb() callbacks to complete... */
 	flush_workqueue(mpc_wq_trunc);
 
-	/* Build a list of all orphaned XVMs and release their birth
+	/*
+	 * Build a list of all orphaned XVMs and release their birth
 	 * references (i.e., XVMs that were created but never mmapped).
 	 */
 	mutex_lock(&rm->rm_lock);
@@ -941,8 +924,7 @@ static void mpc_rgnmap_flush(struct mpc_rgnmap *rm)
 		mpc_xvm_put(xvm);
 	}
 
-	/* Wait for reaper to prune its lists...
-	 */
+	/* Wait for reaper to prune its lists... */
 	while (atomic_read(&rm->rm_rgncnt) > 0)
 		usleep_range(100000, 150000);
 }
@@ -1021,7 +1003,8 @@ static void mpc_xvm_release(struct kref *kref)
 	idr_replace(&rm->rm_root, NULL, xvm->xvm_rgn);
 	mutex_unlock(&rm->rm_lock);
 
-	/* Wait for all in-progress readaheads to complete
+	/*
+	 * Wait for all in-progress readaheads to complete
 	 * before we drop our mblock references.
 	 */
 	if (atomic_add_return(WQ_MAX_ACTIVE, &xvm->xvm_rabusy) > WQ_MAX_ACTIVE)
@@ -1195,7 +1178,7 @@ retry_find:
 		goto retry_find;
 	}
 
-	/* page is locked with a ref. */
+	/* Page is locked with a ref. */
 	vmf->page = page;
 
 	mpc_reap_xvm_touch(vma->vm_private_data, page->index);
@@ -1304,7 +1287,8 @@ static void mpc_readpages_cb(struct work_struct *work)
 
 	xvm = args->a_xvm;
 
-	/* Synchronize with mpc_xvm_put() to prevent dropping our
+	/*
+	 * Synchronize with mpc_xvm_put() to prevent dropping our
 	 * mblock references while there are reads in progress.
 	 */
 	if (ev(atomic_inc_return(&xvm->xvm_rabusy) > WQ_MAX_ACTIVE)) {
@@ -1386,11 +1370,11 @@ mpc_readpages(
 
 	key = offset >> mpc_xvm_size_max;
 
-	/* The idr value here (xvm) is pinned for the lifetime
-	 * of the address map.  Therefore, we can exit the rcu
-	 * read-side critsec without worry that xvm will be
-	 * destroyed before put_page() has been called on each
-	 * and every page in the given list of pages.
+	/*
+	 * The idr value here (xvm) is pinned for the lifetime of the address map.
+	 * Therefore, we can exit the rcu read-side critsec without worry that xvm will be
+	 * destroyed before put_page() has been called on each and every page in the given
+	 * list of pages.
 	 */
 	rcu_read_lock();
 	xvm = idr_find(&unit->un_rgnmap.rm_root, key);
@@ -1423,13 +1407,11 @@ mpc_readpages(
 		offset  = page->index << PAGE_SHIFT;
 		offset %= (1ul << mpc_xvm_size_max);
 
-		/* Don't read past the end of the mblock.
-		 */
+		/* Don't read past the end of the mblock. */
 		if (offset >= mbend)
 			break;
 
-		/* mblock reads must be logically contiguous.
-		 */
+		/* mblock reads must be logically contiguous. */
 		if (page->index != index && work) {
 			queue_work(wq, work);
 			work = NULL;
@@ -1465,7 +1447,8 @@ mpc_readpages(
 
 		w->w_args.a_pagev[w->w_args.a_pagec++] = page;
 
-		/* Restrict batch size to the number of struct kvecs
+		/*
+		 * Restrict batch size to the number of struct kvecs
 		 * that will fit into a page (minus our header).
 		 */
 		if (w->w_args.a_pagec >= iovmax) {
@@ -1658,9 +1641,7 @@ static int mpc_open(struct inode *ip, struct file *fp)
 	if (!ss || ss != &mpc_softstate)
 		return -EBADFD;
 
-	/* Acquire a reference on the unit object.  We'll release it
-	 * in mpc_release().
-	 */
+	/* Acquire a reference on the unit object.  We'll release it in mpc_release(). */
 	mpc_unit_lookup(iminor(fp->f_inode), &unit);
 	if (!unit)
 		return -ENODEV;
@@ -1690,8 +1671,7 @@ static int mpc_open(struct inode *ip, struct file *fp)
 		goto unlock; /* control device */
 	}
 
-	/* First open of an mpool unit (not the control device).
-	 */
+	/* First open of an mpool unit (not the control device). */
 	if (!fp->f_mapping || fp->f_mapping != ip->i_mapping) {
 		err = merr(EINVAL);
 		goto unlock;
@@ -1781,20 +1761,19 @@ static int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 	off = vma->vm_pgoff << PAGE_SHIFT;
 	len = vma->vm_end - vma->vm_start - 1;
 
-	/* Verify that the request does not cross an xvm region boundary.
-	 */
+	/* Verify that the request does not cross an xvm region boundary. */
 	if ((off >> mpc_xvm_size_max) != ((off + len) >> mpc_xvm_size_max))
 		return -EINVAL;
 
-	/* Acquire a reference on the region map for this region.
-	 */
+	/* Acquire a reference on the region map for this region. */
 	key = off >> mpc_xvm_size_max;
 
 	xvm = mpc_xvm_lookup(&unit->un_rgnmap, key);
 	if (!xvm)
 		return -EINVAL;
 
-	/* Drop the birth ref on first open so that the final call
+	/*
+	 * Drop the birth ref on first open so that the final call
 	 * to mpc_vm_close() will cause the vma to be destroyed.
 	 */
 	if (atomic_inc_return(&xvm->xvm_opened) == 1)
@@ -1839,7 +1818,8 @@ static merr_t mpioc_mp_add(struct mpc_unit *unit, struct mpioc_drive *drv)
 	char   *dpaths;
 	int     rc, i;
 
-	/* The device path names are in one long string separated by
+	/*
+	 * The device path names are in one long string separated by
 	 * newlines.  Here we allocate one chunk of memory to hold
 	 * all the device paths and a vector of ptrs to them.
 	 */
@@ -1878,8 +1858,7 @@ static merr_t mpioc_mp_add(struct mpc_unit *unit, struct mpioc_drive *drv)
 		}
 	}
 
-	/* Get the PDs properties from user space buffer.
-	 */
+	/* Get the PDs properties from user space buffer. */
 	pd_prop_sz = drv->drv_dpathc * sizeof(*pd_prop);
 
 	pd_prop = kmalloc(pd_prop_sz, GFP_KERNEL);
@@ -1996,8 +1975,7 @@ static merr_t mpioc_params_get(struct mpc_unit *unit, struct mpioc_params *get)
 	strlcpy(params->mp_label, unit->un_label, sizeof(params->mp_label));
 	strlcpy(params->mp_name, unit->un_name, sizeof(params->mp_name));
 
-	/* Get mpool properties..
-	 */
+	/* Get mpool properties.. */
 	mpool_get_xprops(desc, &xprops);
 
 	for (mclass = 0; mclass < MP_MED_NUMBER; mclass++)
@@ -2250,9 +2228,7 @@ mpioc_mp_create(
 		goto errout;
 	}
 
-	/* A unit is born with two references:  A birth reference,
-	 * and one for the caller.
-	 */
+	/* A unit is born with two references:  A birth reference, and one for the caller. */
 	err = mpc_unit_setup(&mpc_uinfo_mpool, mp->mp_params.mp_name,
 			     &cfg, mpool, &unit, &mp->mp_cmn);
 	if (err) {
@@ -2260,8 +2236,7 @@ mpioc_mp_create(
 		goto errout;
 	}
 
-	/* Return resolved params to caller.
-	 */
+	/* Return resolved params to caller. */
 	mp->mp_params.mp_uid = uid;
 	mp->mp_params.mp_gid = gid;
 	mp->mp_params.mp_mode = mode;
@@ -2288,7 +2263,8 @@ errout:
 		mpool_destroy(mp->mp_dpathc, mpool->mp_dpathv, pd_prop, mp->mp_flags);
 	}
 
-	/* For failures after mpc_unit_setup() (i.e., mpool != NULL)
+	/*
+	 * For failures after mpc_unit_setup() (i.e., mpool != NULL)
 	 * dropping the final unit ref will release the mpool ref.
 	 */
 	if (unit)
@@ -2357,9 +2333,7 @@ mpioc_mp_activate(
 	if (mpool_params_merge_config(&mp->mp_params, &cfg))
 		mpool_config_store(mpool->mp_desc, &cfg);
 
-	/* A unit is born with two references:  A birth reference,
-	 * and one for the caller.
-	 */
+	/* A unit is born with two references:  A birth reference, and one for the caller. */
 	err = mpc_unit_setup(&mpc_uinfo_mpool, mp->mp_params.mp_name,
 			     &cfg, mpool, &unit, &mp->mp_cmn);
 	if (err) {
@@ -2367,8 +2341,7 @@ mpioc_mp_activate(
 		goto errout;
 	}
 
-	/* Return resolved params to caller.
-	 */
+	/* Return resolved params to caller. */
 	mp->mp_params.mp_uid = cfg.mc_uid;
 	mp->mp_params.mp_gid = cfg.mc_gid;
 	mp->mp_params.mp_mode = cfg.mc_mode;
@@ -2393,7 +2366,8 @@ mpioc_mp_activate(
 	mpool = NULL;
 
 errout:
-	/* For failures after mpc_unit_setup() (i.e., mpool != NULL)
+	/*
+	 * For failures after mpc_unit_setup() (i.e., mpool != NULL)
 	 * dropping the final unit ref will release the mpool ref.
 	 */
 	if (unit)
@@ -2443,7 +2417,8 @@ mp_deactivate_impl(struct mpc_unit *ctl, struct mpioc_mpool *mp, bool locked)
 		goto errout;
 	}
 
-	/* In order to be determined idle, a unit shall not be open
+	/*
+	 * In order to be determined idle, a unit shall not be open
 	 * and shall have a ref count of exactly two (the birth ref
 	 * and the lookup ref from above).
 	 */
@@ -2538,7 +2513,8 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 	if (rc)
 		return merr(rc);
 
-	/* If mpc_unit_lookup_by_name() succeeds it will have acquired
+	/*
+	 * If mpc_unit_lookup_by_name() succeeds it will have acquired
 	 * a reference on unit.  We release that reference at the
 	 * end of this function.
 	 */
@@ -2552,7 +2528,8 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 		goto errout;
 	}
 
-	/* The device path names are in one long string separated by
+	/*
+	 * The device path names are in one long string separated by
 	 * newlines.  Here we allocate one chunk of memory to hold
 	 * all the device paths and a vector of ptrs to them.
 	 */
@@ -2660,8 +2637,7 @@ static void mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop)
 
 	memset(kprop, 0, sizeof(*kprop));
 
-	/* Get unit properties..
-	 */
+	/* Get unit properties.. */
 	params = &kprop->pr_xprops.ppx_params;
 	params->mp_uid = unit->un_uid;
 	params->mp_gid = unit->un_gid;
@@ -2675,8 +2651,7 @@ static void mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop)
 	strlcpy(params->mp_label, unit->un_label, sizeof(params->mp_label));
 	strlcpy(params->mp_name, unit->un_name, sizeof(params->mp_name));
 
-	/* Get mpool properties..
-	 */
+	/* Get mpool properties.. */
 	xprops = &kprop->pr_xprops;
 	mpool_get_xprops(desc, xprops);
 	mpool_get_usage(desc, MP_MED_ALL, &kprop->pr_usage);
@@ -2940,7 +2915,8 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 	if (!mblock_objid(mbrw->mb_objid))
 		return merr(EINVAL);
 
-	/* For small iovec counts we simply copyin the array of iovecs
+	/*
+	 * For small iovec counts we simply copyin the array of iovecs
 	 * to local storage (stkbuf).  Otherwise, we must kmalloc a
 	 * buffer into which to perform the copyin.
 	 */
@@ -3097,7 +3073,8 @@ mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi, void *stkbuf, siz
 	if (!unit || !unit->un_mpool || !mi || !mlog_objid(mi->mi_objid))
 		return merr(EINVAL);
 
-	/* For small iovec counts we simply copyin the array of iovecs
+	/*
+	 * For small iovec counts we simply copyin the array of iovecs
 	 * to the the stack (kiov_buf). Otherwise, we must kmalloc a
 	 * buffer into which to perform the copyin.
 	 */
@@ -3449,7 +3426,7 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			break;
 
 		default:
-			return -EBADF;
+			return -EINVAL;
 		}
 	}
 
@@ -3458,11 +3435,10 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	iosz = _IOC_SIZE(cmd);
 	argp = (void *)arg;
 
-	if (iosz > sizeof(union mpioc_union))
+	if (!unit || (iosz > sizeof(union mpioc_union)))
 		return -EINVAL;
 
-	/* Set up argp/argbuf for read/write requests.
-	 */
+	/* Set up argp/argbuf for read/write requests. */
 	if (_IOC_DIR(cmd) & (_IOC_READ | _IOC_WRITE)) {
 		struct mpioc_cmn *cmn;
 
@@ -3748,7 +3724,8 @@ mpc_physio(
 	if (length > (mpc_rwsz_max << 20))
 		return merr(EINVAL);
 
-	/* Allocate an array of page pointers for iov_iter_get_pages()
+	/*
+	 * Allocate an array of page pointers for iov_iter_get_pages()
 	 * and an array of iovecs for mblock_read() and mblock_write().
 	 *
 	 * Note: the only way we can calculate the number of required
@@ -3757,7 +3734,8 @@ mpc_physio(
 	pagesc = length / PAGE_SIZE;
 	pagesvsz = (sizeof(*pagesv) + sizeof(*iov)) * pagesc;
 
-	/* pagesvsz may be big, and it will not be used as the iovec_list
+	/*
+	 * pagesvsz may be big, and it will not be used as the iovec_list
 	 * for the block stack - pd will chunk it up to the underlying
 	 * devices (with another iovec list per pd).
 	 */
@@ -3789,8 +3767,7 @@ mpc_physio(
 
 	for (i = 0, cc = 0; i < pagesc; i += (cc / PAGE_SIZE)) {
 
-		/* Get struct page vector for the user buffers.
-		 */
+		/* Get struct page vector for the user buffers. */
 #if HAVE_IOV_ITER_GET_PAGES
 		cc = iov_iter_get_pages(&iter, &pagesv[i], length - (i * PAGE_SIZE),
 					pagesc - i, &pgbase);
@@ -3819,7 +3796,8 @@ mpc_physio(
 			goto errout;
 		}
 
-		/* pgbase is the offset into the 1st iovec - our alignment
+		/*
+		 * pgbase is the offset into the 1st iovec - our alignment
 		 * requirements force it to be 0
 		 */
 		if (cc < PAGE_SIZE || pgbase != 0) {
@@ -4010,8 +3988,7 @@ static __init int mpc_init(void)
 
 	mpc_chunker_size = clamp_t(uint, mpc_chunker_size, 128, 1024);
 
-	/* Must be same as mpc_physio() pagesvsz calculation.
-	 */
+	/* Must be same as mpc_physio() pagesvsz calculation. */
 	sz = (mpc_rwsz_max << 20) / PAGE_SIZE;
 	sz *= (sizeof(void *) + sizeof(struct iovec));
 

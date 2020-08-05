@@ -51,7 +51,8 @@
 
 #define EBUG                (666)
 
-/* MERR_ALIGN      Alignment of _merr_file in section ".merr"
+/*
+ * MERR_ALIGN      Alignment of _merr_file in section ".merr"
  * MERR_INFO_SZ    Max size of struct merr_info message buffer
  * MERR_BASE_SZ    Size of struct merr_base[] user buffer for module file names
  */
@@ -65,7 +66,8 @@ static char _var[] _merr_section __aligned(MERR_ALIGN) __maybe_unused = _val
 
 DEFINE_MERR(_merr_file, KBUILD_BASENAME);
 
-/* Layout of merr_t:
+/*
+ * Layout of merr_t:
  *
  *   Field   #bits  Description
  *   ------  -----  ----------
@@ -91,8 +93,7 @@ typedef s64                 merr_t;
 #define merr(_errnum)       merr_pack((_errnum), _merr_file, __LINE__)
 #define merr_once(_errnum)  merr_pack((_errnum), _merr_file, __LINE__)
 
-/* Not a public API, called only via the merr() macro.
- */
+/* Not a public API, called only via the merr() macro. */
 merr_t merr_pack(int error, const char *file, const int line);
 
 /**

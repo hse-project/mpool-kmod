@@ -188,8 +188,7 @@ struct mpool_descriptor {
 	struct mutex                pds_oml_lock;
 	struct rb_root              pds_oml_root;
 
-	/* Read-mostly fields...
-	 */
+	/* Read-mostly fields... */
 	____cacheline_aligned
 	u16                         pds_pdvcnt;
 	struct mpdesc_mdparm        pds_mdparm;
@@ -203,15 +202,13 @@ struct mpool_descriptor {
 	struct pre_compact_ctrl     pds_pco;
 	struct smap_usage_work      pds_smap_usage_work;
 
-	/* Rarey used fields...
-	 */
+	/* Rarey used fields... */
 	struct mpool_config         pds_cfg;
 	struct rb_node              pds_node;
 	struct mpool_uuid           pds_poolid;
 	char                        pds_name[MPOOL_NAMESZ_MAX];
 
-	/* pds_mda is enormous (91K)
-	 */
+	/* pds_mda is enormous (91K) */
 	struct pmd_mda_info         pds_mda;
 };
 

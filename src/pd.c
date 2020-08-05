@@ -144,7 +144,7 @@ merr_t pd_zone_erase(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt, bool rea
 	merr_t err = 0;
 	u64    cmdopt;
 
-	/* validate args against zone param */
+	/* Validate args against zone param */
 	if (zaddr >= pd->pdi_parm.dpr_zonetot)
 		return merr(EINVAL);
 

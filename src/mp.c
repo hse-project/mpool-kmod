@@ -22,7 +22,7 @@
  */
 static DEFINE_MUTEX(mpool_s_lock);
 
-/* rbtree maps mpool UUID to mpool descriptor node: uuid_to_mpdesc_rb */
+/* Rbtree mapping mpool UUID to mpool descriptor node: uuid_to_mpdesc_rb */
 static struct rb_root mpool_pools = { NULL };
 
 static merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap);
@@ -49,7 +49,7 @@ mpool_mdc0_sb2obj(
 	merr_t err;
 	int    i;
 
-	/* mdc0 mlog1 layout */
+	/* MDC0 mlog1 layout */
 	*l1 = pmd_layout_alloc(mp, &sb->osb_mdc01uuid, MDC0_OBJID_LOG1, sb->osb_mdc01gen, 0,
 			       sb->osb_mdc01desc.ol_zcnt);
 	if (!*l1) {
@@ -85,7 +85,7 @@ mpool_mdc0_sb2obj(
 		return err;
 	}
 
-	/* mdc0 mlog2 layout */
+	/* MDC0 mlog2 layout */
 	*l2 = pmd_layout_alloc(mp, &sb->osb_mdc02uuid, MDC0_OBJID_LOG2, sb->osb_mdc02gen, 0,
 			       sb->osb_mdc02desc.ol_zcnt);
 	if (!*l2) {
@@ -111,7 +111,7 @@ mpool_mdc0_sb2obj(
 	if (i >= mp->pds_pdvcnt) {
 		char uuid_str[40];
 
-		/* should never happen */
+		/* Should never happen */
 		pmd_obj_put(mp, *l1);
 		pmd_obj_put(mp, *l2);
 		*l1 = *l2 = NULL;
@@ -156,7 +156,7 @@ mpool_dev_sbwrite(
 	mpool_uuid_copy(&sb->osb_poolid, &mp->pds_poolid);
 	sb->osb_gen = 1;
 
-	/* set superblock values specific to this drive */
+	/* Set superblock values specific to this drive */
 	mpool_uuid_copy(&sb->osb_parm.odp_devid, &pd->pdi_devid);
 	sb->osb_parm.odp_devsz = pd->pdi_parm.dpr_devsz;
 	sb->osb_parm.odp_zonetot = pd->pdi_parm.dpr_zonetot;
@@ -575,8 +575,10 @@ mpool_create(
 
 	mutex_lock(&mpool_s_lock);
 
-	/* TODO: Make this per-driver */
-	/* Allocate the per-mpool workqueue. */
+	/*
+	 * Allocate the per-mpool workqueue.
+	 * TODO: Make this per-driver
+	 */
 	mp->pds_erase_wq = alloc_workqueue("mperasewq", WQ_HIGHPRI, 0);
 	if (!mp->pds_erase_wq) {
 		err = merr(ENOMEM);
@@ -1103,8 +1105,7 @@ mpool_activate(
 		goto errout;
 	}
 
-	/* Set mp.pdvcnt so dpaths will get closed in cleanup if activate fails.
-	 */
+	/* Set mp.pdvcnt so dpaths will get closed in cleanup if activate fails. */
 	mp->pds_pdvcnt = dcnt;
 
 	/* Init mpool descriptor from superblocks on drives */
@@ -1225,7 +1226,7 @@ mpool_activate(
 	 */
 	err = mpool_create_rmlogs(mp, mlog_cap);
 	if (ev(err)) {
-		/* root mlogs creation failure - non-functional mpool */
+		/* Root mlogs creation failure - non-functional mpool */
 		mp_pr_err("mpool %s, root mlogs creation failed", err, mp->pds_name);
 		goto errout;
 	}
@@ -1736,7 +1737,7 @@ mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8
 		mp_pr_err("mpool %s, setting spare %u mclass %d failed, could not record in MDC0",
 			  err, mp->pds_name, drive_spares, mclassp);
 	} else {
-		/* update spare zone accounting for media class */
+		/* Update spare zone accounting for media class */
 		down_write(&mp->pds_pdvlock);
 
 		err = mc_set_spzone(mp, mclassp, drive_spares);

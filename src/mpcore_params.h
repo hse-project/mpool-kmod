@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_PARAMS_H
-#define MPOOL_PARAMS_H
+#ifndef MPOOL_MPCORE_PARAMS_H
+#define MPOOL_MPCORE_PARAMS_H
 
 #include "merr.h"
 
@@ -99,4 +99,4 @@ struct mpcore_params {
  */
 void mpcore_params_defaults(struct mpcore_params *params);
 
-#endif /* MPOOL_PARAMS_H */
+#endif /* MPOOL_MPCORE_PARAMS_H */

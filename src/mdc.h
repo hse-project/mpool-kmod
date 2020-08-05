@@ -48,8 +48,7 @@ struct mp_mdc {
 	u8                          mdc_flags;
 };
 
-/* MDC (Metadata Container) APIs
- */
+/* MDC (Metadata Container) APIs */
 
 /**
  * mp_mdc_open() - Open MDC by OIDs

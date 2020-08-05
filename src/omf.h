@@ -24,16 +24,15 @@
 
 #include <asm/byteorder.h>
 
-/* The following two macros exist solely to enable the OMF_SETGET macros to
+/*
+ * The following two macros exist solely to enable the OMF_SETGET macros to
  * work on 8 bit members as well as 16, 32 and 64 bit members.
  */
 #define le8_to_cpu(x)  (x)
 #define cpu_to_le8(x)  (x)
 
 
-/* Helper macro to define set/get methods for 8, 16, 32 or 64 bit
- * scalar OMF struct members.
- */
+/* Helper macro to define set/get methods for 8, 16, 32 or 64 bit scalar OMF struct members. */
 #define OMF_SETGET(type, member, bits) \
 	OMF_SETGET2(type, member, bits, member)
 
@@ -48,9 +47,7 @@
 		s->member = cpu_to_le##bits(val);			\
 	}
 
-/* Helper macro to define set/get methods for character strings
- * embedded in OMF structures.
- */
+/* Helper macro to define set/get methods for character strings embedded in OMF structures. */
 #define OMF_SETGET_CHBUF(type, member) \
 	OMF_SETGET_CHBUF2(type, member, member)
 

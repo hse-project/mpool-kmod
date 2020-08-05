@@ -3,7 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-/* DOC: Module info.
+/*
+ * DOC: Module info.
  *
  * Pool metadata upgrade module.
  *

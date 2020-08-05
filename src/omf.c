@@ -725,13 +725,13 @@ merr_t omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf)
 	u8     cksum[4];
 
 	if (sb->osb_vers != OMF_SB_DESC_VER_LAST) {
-		/* not a valid header version */
+		/* Not a valid header version */
 		return merr(EINVAL);
 	}
 
 	sb_omf = (struct sb_descriptor_omf *)outbuf;
 
-	/* pack drive-specific info */
+	/* Pack drive-specific info */
 	omf_set_psb_magic(sb_omf, sb->osb_magic);
 	assert(OMF_MPOOL_NAME_LEN == MPOOL_NAMESZ_MAX);
 	omf_set_psb_name(sb_omf, sb->osb_name, MPOOL_NAMESZ_MAX);
@@ -792,7 +792,7 @@ merr_t omf_sb_unpack_letoh_v1(void *out, const char *inbuf)
 	sb_omf = (struct sb_descriptor_omf *)inbuf;
 	sb = (struct omf_sb_descriptor *)out;
 
-	/* verify CKSUM2 */
+	/* Verify CKSUM2 */
 	err = omf_cksum_crc32c_le((char *) &(sb_omf->psb_parm), sizeof(sb_omf->psb_parm), cksum);
 	omf_psb_cksum2(sb_omf, omf_cksum, 4);
 
@@ -851,7 +851,7 @@ merr_t omf_sb_unpack_letoh(struct omf_sb_descriptor *sb, const char *inbuf, u16 
 	if (magic != OMF_SB_MAGIC)
 		return merr(EBADF);
 
-	/* verify CKSUM1 */
+	/* Verify CKSUM1 */
 	err = omf_cksum_crc32c_le(inbuf, offsetof(struct sb_descriptor_omf, psb_cksum1), cksum);
 	omf_psb_cksum1(sb_omf, omf_cksum, 4);
 	if (err || memcmp(cksum, omf_cksum, 4))

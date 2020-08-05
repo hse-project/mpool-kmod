@@ -463,7 +463,8 @@ struct pd_prop {
  * IOCTL arguments.
  */
 
-/* Each mpool MPIOC_* parameter block must contain a struct mpioc_cmn
+/*
+ * Each mpool MPIOC_* parameter block must contain a struct mpioc_cmn
  * parameter block as the very first field (i.e., each derived parameter
  * block "is-a" struct mpioc_cmn).
  */
@@ -649,7 +650,8 @@ struct mpioc_test {
 	uint64_t            mpt_uval[3];
 };
 
-/* mpioc_union is used by mpc_ioctl() to reserve enough storage
+/*
+ * mpioc_union is used by mpc_ioctl() to reserve enough storage
  * on the stack to contain any mpioc_* object (so as to avoid
  * a call to kmalloc() on each call to mpc_ioctl()).  Be very
  * careful not to bloat these structures.

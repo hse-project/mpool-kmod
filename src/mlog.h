@@ -25,11 +25,11 @@
 struct mlog_fsetparms {
 	u32    mfp_totsec;
 	bool   mfp_secpga;
-	u16    mfp_lpgsz;
+	u32    mfp_lpgsz;
 	u16    mfp_nlpgmb;
 	u16    mfp_sectsz;
 	u16    mfp_nsecmb;
-	u8     mfp_nseclpg;
+	u16    mfp_nseclpg;
 };
 
 /*
@@ -49,7 +49,7 @@ struct mlog_read_iter {
 	u64                 lri_gen;
 	u16                 lri_roff;
 	u16                 lri_rbidx;
-	u8                  lri_sidx;
+	u16                 lri_sidx;
 	u8                  lri_valid;
 };
 

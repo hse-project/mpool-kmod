@@ -260,7 +260,8 @@ static void mpc_reap_tune(struct mpc_reap *reap)
 
 	hpages = wpages = cpages = 0;
 
-	/* Take a live snapshot of the current memory usage.  Disable
+	/*
+	 * Take a live snapshot of the current memory usage.  Disable
 	 * preemption so that the result is reasonably accurate.
 	 */
 	preempt_disable();
@@ -277,7 +278,8 @@ static void mpc_reap_tune(struct mpc_reap *reap)
 
 	total_pages = mfree + hpages + wpages + cpages;
 
-	/* Determine the current percentage of free memory relative to the
+	/*
+	 * Determine the current percentage of free memory relative to the
 	 * number of hot+warm+cold pages tracked by the reaper.  freepct,
 	 * lwm, and hwm are scaled to 10000 for finer resolution.
 	 */
@@ -335,7 +337,8 @@ static void mpc_reap_prune(struct work_struct *work)
 
 	reap = container_of(work, struct mpc_reap, reap_dwork.work);
 
-	/* First, assesss the current memory situation.  If free
+	/*
+	 * First, assesss the current memory situation.  If free
 	 * memory is below the low watermark then try to start a
 	 * reaper to evict some pages.
 	 */
@@ -349,9 +352,7 @@ static void mpc_reap_prune(struct work_struct *work)
 			queue_work(reap->reap_wq, &elem->reap_work);
 	}
 
-	/* Next, advance to the next elem and prune VMAs that have
-	 * been freed.
-	 */
+	/* Next, advance to the next elem and prune VMAs that have been freed. */
 	eidx = atomic_inc_return(&reap->reap_eidx) % REAP_ELEM_MAX;
 
 	elem = reap->reap_elem + eidx;
@@ -554,7 +555,8 @@ void mpc_reap_destroy(struct mpc_reap *reap)
 
 	cancel_delayed_work_sync(&reap->reap_dwork);
 
-	/* There shouldn't be any reapers running at this point,
+	/*
+	 * There shouldn't be any reapers running at this point,
 	 * but perform a flush/wait for good measure...
 	 */
 	atomic_set(&reap->reap_lwm, 0);
@@ -594,8 +596,7 @@ void mpc_reap_xvm_add(struct mpc_reap *reap, struct mpc_xvm *xvm)
 	else if (xvm->xvm_advice == MPC_VMA_HOT)
 		mult = 30;
 
-	/* Acquire a reference on xvm for the reaper...
-	 */
+	/* Acquire a reference on xvm for the reaper... */
 	atomic_inc(&xvm->xvm_reapref);
 	xvm->xvm_reap = reap;
 
@@ -631,8 +632,7 @@ void mpc_reap_xvm_evict(struct mpc_xvm *xvm)
 	if (bktsz < 1024)
 		bktsz = end - start;
 
-	/* Evict in chunks to improve mmap_sem interleaving...
-	 */
+	/* Evict in chunks to improve mmap_sem interleaving... */
 	for (; start < end; start += bktsz)
 		invalidate_inode_pages2_range(xvm->xvm_mapping, start, start + bktsz);
 
@@ -659,16 +659,15 @@ void mpc_reap_xvm_touch(struct mpc_xvm *xvm, int index)
 	atimep = &xvm->xvm_mbinfov[mbnum].mbatime;
 	now = local_clock();
 
-	/* Don't update atime too frequently.  If we set atime to
+	/*
+	 * Don't update atime too frequently.  If we set atime to
 	 * U64_MAX in mpc_reap_evict_vma() then the addition here
 	 * will roll over and atime will be updated.
 	 */
 	if (atomic64_read(atimep) + (10 * USEC_PER_SEC) < now)
 		atomic64_set(atimep, now);
 
-	/* Sleep a bit if the reaper is having trouble meeting
-	 * the free memory target.
-	 */
+	/* Sleep a bit if the reaper is having trouble meeting the free memory target. */
 	lwm = atomic_read(&reap->reap_lwm);
 	if (lwm < 3333)
 		return;

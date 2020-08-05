@@ -49,8 +49,7 @@ do {								\
 } while (0)
 
 
-/* Rate limited version of mp_pr_err().
- */
+/* Rate limited version of mp_pr_err(). */
 #define mp_pr_rl(_fmt, _err, ...)				\
 do {								\
 	static unsigned long state;				\

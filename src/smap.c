@@ -510,7 +510,7 @@ merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp,
 		return err;
 	}
 
-	/* allocate and init per channel space maps and associated locks */
+	/* Allocate and init per channel space maps and associated locks */
 	pd->pdi_rmbktv = kcalloc(rgnc, sizeof(*pd->pdi_rmbktv), GFP_KERNEL);
 	if (!pd->pdi_rmbktv) {
 		err = merr(ENOMEM);
@@ -518,7 +518,7 @@ merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp,
 		return err;
 	}
 
-	/* define all space on all channels as being free (drive empty) */
+	/* Define all space on all channels as being free (drive empty) */
 	for (rgn = 0; rgn < rgnc; rgn++) {
 		mutex_init(&pd->pdi_rmbktv[rgn].pdi_rmlock);
 
@@ -677,9 +677,7 @@ static merr_t smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr
 	fsoff = elem->smz_key;
 	fslen = elem->smz_value;
 
-	/* Bail out if we're past zoneaddr in space map w/o finding
-	 * the required chunk.
-	 */
+	/* Bail out if we're past zoneaddr in space map w/o finding the required chunk. */
 	if (zoneaddr < fsoff) {
 		elem = NULL;
 		msg = "requested range not free";
@@ -687,8 +685,7 @@ static merr_t smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr
 		goto errout;
 	}
 
-	/* The allocation must fit entirely within this chunk or it fails.
-	 */
+	/* The allocation must fit entirely within this chunk or it fails. */
 	if (zoneaddr + zonecnt > fsoff + fslen) {
 		elem = NULL;
 		msg = "requested range does not fit";
@@ -774,7 +771,7 @@ merr_t smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonec
 	zoneadded = 0;
 
 	for (rgn = rstart; rgn < rend + 1; rgn++) {
-		/* compute zone address and count for this rgn */
+		/* Compute zone address and count for this rgn */
 		if (rgn == rstart)
 			raddr = zoneaddr;
 		else
@@ -830,9 +827,7 @@ static merr_t smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, 
 
 	node = rmap->rb_node;
 
-	/* Use binary search to find chunks to the left and/or right
-	 * of the range being freed.
-	 */
+	/* Use binary search to find chunks to the left and/or right of the range being freed. */
 	while (node) {
 		struct smap_zone *this;
 
@@ -851,8 +846,7 @@ static merr_t smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, 
 		}
 	}
 
-	/* If the request abuts the chunk to the right then coalesce them.
-	 */
+	/* If the request abuts the chunk to the right then coalesce them. */
 	if (right) {
 		if (zoneaddr + zonecnt == right->smz_key) {
 			zonecnt += right->smz_value;
@@ -862,8 +856,7 @@ static merr_t smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, 
 		}
 	}
 
-	/* If the request abuts the chunk to the left then coalesce them.
-	 */
+	/* If the request abuts the chunk to the left then coalesce them. */
 	if (left) {
 		if (left->smz_key + left->smz_value == zoneaddr) {
 			zoneaddr = left->smz_key;
@@ -875,7 +868,8 @@ static merr_t smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, 
 		}
 	}
 
-	/* If the request did not abut either the current or the previous
+	/*
+	 * If the request did not abut either the current or the previous
 	 * chunk (i.e., new == NULL) then we must create a new chunk node
 	 * and insert it into the smap.  Otherwise, we'll re-use one of
 	 * the abutting chunk nodes (i.e., left or right).
@@ -903,8 +897,7 @@ static merr_t smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, 
 		goto unlock;
 	}
 
-	/* Freed space goes to spare first then usable.
-	 */
+	/* Freed space goes to spare first then usable. */
 	zonecnt = orig_zonecnt;
 
 	spin_lock(&pd->pdi_ds.sda_dalock);
@@ -970,7 +963,7 @@ merr_t smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt
 	rend = smap_addr2rgn(mp, pd, zoneaddr + zonecnt - 1);
 
 	for (rgn = rstart; rgn < rend + 1; rgn++) {
-		/* compute zone address and count for this rgn */
+		/* Compute zone address and count for this rgn */
 		if (rgn == rstart)
 			raddr = zoneaddr;
 		else

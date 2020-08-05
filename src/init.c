@@ -16,7 +16,7 @@
 
 struct crypto_shash *mpool_tfm;
 
-/* cleared out sb */
+/* Cleared out sb */
 struct omf_sb_descriptor SBCLEAR;
 
 /*
@@ -50,7 +50,7 @@ int mpcore_init(void)
 		return -merr_errno(err);
 	}
 
-	/* prepare the empty sb struct */
+	/* Prepare the empty sb struct */
 	sbutil_mdc0_clear(&SBCLEAR);
 
 	/* Initialize the slab caches. */
