@@ -13,7 +13,7 @@
 #ifndef MPOOL_MBLOCK_H
 #define MPOOL_MBLOCK_H
 
-#include <mpool/mpool_ioctl.h>
+#include "mpool_ioctl.h"
 /*
  * Opaque handles for clients
  */

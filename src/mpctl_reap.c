@@ -34,9 +34,9 @@
 #include <linux/sched/clock.h>
 #endif
 
-#include <mpcore/mpool_printk.h>
-#include <mpcore/assert.h>
-#include <mpcore/evc.h>
+#include "mpool_printk.h"
+#include "assert.h"
+#include "evc.h"
 
 #include "mpctl_sys.h"
 #include "mpctl.h"

@@ -6,19 +6,10 @@
 #ifndef MPOOL_MPOOL_H
 #define MPOOL_MPOOL_H
 
-/*
- * DOC: Module info
- *
- * Media pool (mpool) manager module.
- *
- * Defines functions to create and maintain mpools comprising multiple drives
- * in multiple media classes used for storing mblocks and mlogs.
- */
+#include "mpool_ioctl.h"
 
-#include <mpool/mpool_ioctl.h>
-
-#include <mpcore/uuid.h>
-#include <mpcore/mpool_params.h>
+#include "uuid.h"
+#include "mpcore_params.h"
 
 struct mpool_descriptor;
 
@@ -37,6 +28,7 @@ struct mpool_descriptor;
 
 #define MPOOL_DRIVES_MAX       MP_MED_NUMBER
 #define MP_MED_ALL             MP_MED_NUMBER
+
 
 /**
  * enum mpool_status -

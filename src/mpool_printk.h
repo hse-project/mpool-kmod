@@ -8,7 +8,7 @@
 
 #include <linux/printk.h>
 
-#include <mpcore/merr.h>
+#include "merr.h"
 
 /* TODO: Use dev_crit(), dev_err(), ... */
 

@@ -3,7 +3,7 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#include "mpcore_defs.h"
+#include "mpool_defs.h"
 
 /*
  * Refer to mpcore_params.h for description on these parameters.

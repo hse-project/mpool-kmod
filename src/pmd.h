@@ -6,7 +6,7 @@
 #ifndef MPOOL_PMD_PRIV_H
 #define MPOOL_PMD_PRIV_H
 
-#include <mpcore/mpool_params.h>
+#include "mpcore_params.h"
 
 #include "mlog.h"
 #include "mdc.h"

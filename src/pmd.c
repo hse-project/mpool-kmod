@@ -20,9 +20,7 @@
 #include <linux/sort.h>
 #include <linux/delay.h>
 
-#include "mpcore_defs.h"
-
-#include <mpool/mpool_ioctl.h>
+#include "mpool_defs.h"
 
 static merr_t pmd_write_meta_to_latest_version(struct mpool_descriptor *mp, bool permitted);
 

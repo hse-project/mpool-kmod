@@ -7,7 +7,7 @@
 #include <linux/uaccess.h>
 #include <linux/ctype.h>
 
-#include <mpcore/merr.h>
+#include "merr.h"
 
 DEFINE_MERR(merr_bug1, "mpool_merr_bug1k");
 DEFINE_MERR(merr_bug2, "mpool_merr_bug2k");

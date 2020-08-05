@@ -8,9 +8,7 @@
 
 #include <linux/mutex.h>
 
-#include <mpool/mpool_ioctl.h>
-
-#include <mpcore/merr.h>
+#include "merr.h"
 
 #define MPC_MDC_MAGIC           0xFEEDFEED
 #define MPC_NO_MAGIC            0xFADEFADE

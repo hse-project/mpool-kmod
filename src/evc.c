@@ -9,8 +9,8 @@
 #include <linux/slab.h>
 #include <linux/debugfs.h>
 
-#include <mpcore/evc.h>
-#include <mpcore/mpool_printk.h>
+#include "evc.h"
+#include "mpool_printk.h"
 
 static struct {
 	spinlock_t      lock;

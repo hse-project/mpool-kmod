@@ -9,7 +9,7 @@
 #include <linux/rbtree.h>
 #include <linux/kref.h>
 
-#include <mpcore/mblock.h>
+#include "mblock.h"
 
 struct mpc_unit;
 struct mpc_rgnmap;

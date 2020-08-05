@@ -5,7 +5,7 @@
 
 #include <linux/slab.h>
 
-#include <mpcore/evc.h>
+#include "evc.h"
 
 #include "mpctl_sys.h"
 

@@ -6,7 +6,7 @@
 #ifndef MPOOL_PARAMS_H
 #define MPOOL_PARAMS_H
 
-#include <mpcore/merr.h>
+#include "merr.h"
 
 #define MPOOL_MDC_SET_SZ                16
 

@@ -29,13 +29,13 @@
 #include <linux/ctype.h>
 #include <linux/uio.h>
 
-#include <mpool/mpool_ioctl.h>
+#include "mpool_ioctl.h"
 
-#include <mpcore/mpool.h>
-#include <mpcore/mpool_printk.h>
-#include <mpcore/assert.h>
-#include <mpcore/mlog.h>
-#include <mpcore/evc.h>
+#include "mpool.h"
+#include "mpool_printk.h"
+#include "assert.h"
+#include "mlog.h"
+#include "evc.h"
 
 #include "mpool_config.h"
 #include "mpctl.h"

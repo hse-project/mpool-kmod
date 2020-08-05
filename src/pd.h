@@ -6,8 +6,6 @@
 #ifndef MPOOL_PD_PRIV_H
 #define MPOOL_PD_PRIV_H
 
-#include <mpool/mpool_ioctl.h>
-
 struct mpool_dev_info;
 
 /**

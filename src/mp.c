@@ -13,9 +13,7 @@
 #include <linux/string.h>
 #include <linux/sort.h>
 
-#include <mpool/mpool_ioctl.h>
-
-#include "mpcore_defs.h"
+#include "mpool_defs.h"
 
 /*
  * lock for serializing certain mpool ops where required/desirable; could be per

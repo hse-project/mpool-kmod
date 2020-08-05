@@ -16,7 +16,7 @@
 #include <linux/blk_types.h>
 
 #include "mpool_config.h"
-#include "mpcore_defs.h"
+#include "mpool_defs.h"
 #include "mpctl.h"
 
 #ifndef SECTOR_SHIFT

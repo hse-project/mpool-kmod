@@ -9,7 +9,7 @@
 #include <linux/sort.h>
 #include <asm/barrier.h>
 
-#include "mpcore_defs.h"
+#include "mpool_defs.h"
 
 void mc_init_class(struct media_class *mc, struct mc_parms *mc_parms, struct mc_smap_parms *mcsp)
 {

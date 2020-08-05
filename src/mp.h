@@ -3,20 +3,12 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_MPOOL_PRIV_H
-#define MPOOL_MPOOL_PRIV_H
+#ifndef MPOOL_MP_H
+#define MPOOL_MP_H
 
-/**
- * DOC: Module info
- *
- * Media pool (mpool) manager module.
- *
- * Defines functions to create and maintain mpools comprising multiple drives
- * in multiple media classes used for storing mblocks and mlogs.
- *
- */
+#include <linux/rbtree.h>
 
-#include <mpcore/mpool.h>
+#include "mpool.h"
 
 /**
  * DOC: LOCKING
@@ -294,4 +286,4 @@ mpool_desc_pdmc_add(
 	struct omf_devparm_descriptor	*omf_devparm,
 	bool				 check_only);
 
-#endif /* MPOOL_MPOOL_PRIV_H */
+#endif /* MPOOL_MP_H */

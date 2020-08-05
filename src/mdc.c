@@ -6,11 +6,11 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 
-#include <mpcore/mpool_printk.h>
-#include <mpcore/assert.h>
-#include <mpcore/mpool.h>
-#include <mpcore/mlog.h>
-#include <mpcore/evc.h>
+#include "mpool_printk.h"
+#include "assert.h"
+#include "mpool.h"
+#include "mlog.h"
+#include "evc.h"
 
 #include "mdc.h"
 
