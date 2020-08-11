@@ -2617,7 +2617,7 @@ u64 pmd_layout_cap_get(struct mpool_descriptor *mp, struct pmd_layout *layout)
 	case OMF_OBJ_MBLOCK:
 	case OMF_OBJ_MLOG:
 		zonepg = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_parm.dpr_zonepg;
-		return (zonepg * layout->eld_ld.ol_zcnt) << PAGE_SHIFT;
+		return ((u64)zonepg * layout->eld_ld.ol_zcnt) << PAGE_SHIFT;
 
 	case OMF_OBJ_UNDEF:
 		break;
