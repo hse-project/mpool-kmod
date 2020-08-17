@@ -3,32 +3,12 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#include <linux/kernel.h>
 #include <linux/module.h>
-#include <linux/device.h>
-#include <linux/cdev.h>
-#include <linux/log2.h>
-#include <linux/idr.h>
-#include <linux/fs.h>
-#include <linux/mm.h>
-#include <linux/blkdev.h>
-#include <linux/vmalloc.h>
 #include <linux/memcontrol.h>
-#include <linux/pagemap.h>
-#include <linux/kobject.h>
-#include <linux/mm_inline.h>
-#include <linux/version.h>
 #include <linux/kref.h>
-
-#include <linux/backing-dev.h>
-#include <linux/spinlock.h>
-#include <linux/list.h>
-#include <linux/rbtree.h>
 #include <linux/migrate.h>
 #include <linux/delay.h>
-#include <linux/ctype.h>
 #include <linux/uio.h>
-#include <linux/prefetch.h>
 
 #include "mpool_ioctl.h"
 
@@ -39,9 +19,7 @@
 
 #include "mpool_config.h"
 #include "mpctl.h"
-#include "mpctl_sys.h"
 #include "mpctl_reap.h"
-#include "init.h"
 
 #if HAVE_MMAP_LOCK
 #include <linux/mmap_lock.h>
@@ -1063,20 +1041,20 @@ merr_t mcache_init(void)
 	if (!mpc_xvm_cache[1]) {
 		err = merr(ENOMEM);
 		mp_pr_err("mpc xvm cache 1 create failed", err);
-		return err;
+		goto errout;
 	}
 
 	mpc_wq_trunc = alloc_workqueue("mpc_wq_trunc", WQ_UNBOUND, 16);
 	if (!mpc_wq_trunc) {
 		err = merr(ENOMEM);
 		mp_pr_err("trunc workqueue alloc failed", err);
-		return err;
+		goto errout;
 	}
 
 	err = mpc_reap_create(&mpc_reap);
 	if (ev(err)) {
 		mp_pr_err("reap create failed", err);
-		return err;
+		goto errout;
 	}
 
 	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
@@ -1089,11 +1067,15 @@ merr_t mcache_init(void)
 		if (!mpc_wq_rav[i]) {
 			err = merr(ENOMEM);
 			mp_pr_err("mpctl ra workqueue alloc failed", err);
-			return err;
+			goto errout;
 		}
 	}
 
 	return 0;
+
+errout:
+	mcache_exit();
+	return err;
 }
 
 void mcache_exit(void)
@@ -1101,12 +1083,14 @@ void mcache_exit(void)
 	int    i;
 
 	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
-		destroy_workqueue(mpc_wq_rav[i]);
+		if (mpc_wq_rav[i])
+			destroy_workqueue(mpc_wq_rav[i]);
 		mpc_wq_rav[i] = NULL;
 	}
 
 	mpc_reap_destroy(mpc_reap);
-	destroy_workqueue(mpc_wq_trunc);
+	if (mpc_wq_trunc)
+		destroy_workqueue(mpc_wq_trunc);
 	kmem_cache_destroy(mpc_xvm_cache[1]);
 	kmem_cache_destroy(mpc_xvm_cache[0]);
 }

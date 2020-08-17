@@ -7,8 +7,25 @@
 #define MPOOL_MP_H
 
 #include <linux/rbtree.h>
+#include <linux/bio.h>
 
-#include "mpool.h"
+#include "pd.h"
+#include "smap.h"
+
+extern struct crypto_shash *mpool_tfm;
+
+extern struct kmem_cache *pmd_obj_erase_work_cache;
+extern struct kmem_cache *pmd_layout_priv_cache;
+extern struct kmem_cache *pmd_layout_cache;
+extern struct kmem_cache *smap_zone_cache;
+
+#if HAVE_BIOSET_INIT
+extern struct bio_set mpool_bioset;
+#else
+extern struct bio_set *mpool_bioset;
+#endif
+
+extern uint mpc_chunker_size;
 
 /**
  * DOC: LOCKING
@@ -282,5 +299,9 @@ mpool_desc_pdmc_add(
 	u16				 pdh,
 	struct omf_devparm_descriptor	*omf_devparm,
 	bool				 check_only);
+
+merr_t mpcore_init(void);
+
+void mpcore_exit(void);
 
 #endif /* MPOOL_MP_H */

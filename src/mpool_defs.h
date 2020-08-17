@@ -19,7 +19,6 @@
 #include "assert.h"
 #include "uuid.h"
 
-#include "init.h"
 #include "mpool.h"
 #include "omf.h"
 #include "omf_if.h"

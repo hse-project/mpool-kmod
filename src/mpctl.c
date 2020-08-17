@@ -42,7 +42,6 @@
 #include "mpctl.h"
 #include "mpctl_sys.h"
 #include "mpctl_reap.h"
-#include "init.h"
 
 #if HAVE_MMAP_LOCK
 #include <linux/mmap_lock.h>
@@ -63,7 +62,6 @@ struct mpc_softstate {
 	struct cdev         ss_cdev;
 	struct class       *ss_class;
 	bool                ss_inited;
-	bool                ss_mpcore_inited;
 };
 
 /* Unit-type specific information. */
@@ -135,13 +133,6 @@ MODULE_PARM_DESC(mpc_rwsz_max, " max mblock/mlog r/w size (mB)");
 static unsigned int mpc_rwconc_max __read_mostly = 8;
 module_param(mpc_rwconc_max, uint, 0444);
 MODULE_PARM_DESC(mpc_rwconc_max, " max mblock/mlog large r/w concurrency");
-
-module_param(mpc_rsvd_bios_max, uint, 0444);
-MODULE_PARM_DESC(mpc_rsvd_bios_max, "max reserved bios in mpool bioset");
-
-unsigned int mpc_chunker_size __read_mostly = 128;
-module_param(mpc_chunker_size, uint, 0644);
-MODULE_PARM_DESC(mpc_chunker_size, "Chunking size (in KiB) for device I/O");
 
 static struct mpc_softstate *mpc_cdev2ss(struct cdev *cdev)
 {
@@ -2893,10 +2884,9 @@ static int mpc_exit_unit(int minor, void *item, void *arg)
 }
 
 /**
- * mpc_exit_impl() - Tear down and unload the mpool control module.
- *
+ * mpctl_exit() - Tear down and unload the mpool control module.
  */
-static void mpc_exit_impl(void)
+void mpctl_exit(void)
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
 
@@ -2913,24 +2903,18 @@ static void mpc_exit_impl(void)
 			unregister_chrdev_region(ss->ss_devno, mpc_maxunits);
 		}
 
-		if (ss->ss_mpcore_inited)
-			mpcore_fini();
 		ss->ss_inited = false;
 	}
-
-	mcache_exit();
 
 	mpc_vcache_fini(&mpc_physio_vcache);
 
 	mpc_bdi_teardown();
-	evc_fini();
 }
 
 /**
- * mpc_init() - Load and initialize the mpool control module.
- *
+ * mpctl_init() - Load and initialize the mpool control module.
  */
-static __init int mpc_init(void)
+merr_t mpctl_init(void)
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpioc_cmn        cmn = { };
@@ -2942,18 +2926,14 @@ static __init int mpc_init(void)
 	int                     rc;
 
 	if (ss->ss_inited)
-		return -EBUSY;
+		return merr(EBUSY);
 
 	ctlunit = NULL;
-
-	evc_init();
 
 	mpc_maxunits = clamp_t(uint, mpc_maxunits, 8, 8192);
 
 	mpc_rwsz_max = clamp_t(ulong, mpc_rwsz_max, 1, 128);
 	mpc_rwconc_max = clamp_t(ulong, mpc_rwconc_max, 1, 32);
-
-	mpc_chunker_size = clamp_t(uint, mpc_chunker_size, 128, 1024);
 
 	/* Must be same as mpc_physio() pagesvsz calculation. */
 	sz = (mpc_rwsz_max << 20) / PAGE_SIZE;
@@ -2962,12 +2942,6 @@ static __init int mpc_init(void)
 	err = mpc_vcache_init(&mpc_physio_vcache, sz, mpc_rwconc_max);
 	if (err) {
 		errmsg = "vcache init failed";
-		goto errout;
-	}
-
-	err = mcache_init();
-	if (ev(err)) {
-		errmsg = "mcache init failed";
 		goto errout;
 	}
 
@@ -2980,15 +2954,6 @@ static __init int mpc_init(void)
 	ss->ss_devno = NODEV;
 	sema_init(&ss->ss_op_sema, 1);
 	ss->ss_inited = true;
-
-	rc = mpcore_init();
-	if (rc) {
-		errmsg = "mpcore_init() failed";
-		err = merr(rc);
-		goto errout;
-	}
-
-	ss->ss_mpcore_inited = true;
 
 	rc = alloc_chrdev_region(&ss->ss_devno, 0, mpc_maxunits, "mpool");
 	if (rc) {
@@ -3034,6 +2999,7 @@ static __init int mpc_init(void)
 		goto errout;
 	}
 
+	/* The reaper component has already been initialized before mpctl. */
 	ctlunit->un_ds_reap = mpc_reap;
 	err = mpc_params_register(ctlunit, MPC_REAP_PARAMS_CNT);
 	if (ev(err)) {
@@ -3052,15 +3018,10 @@ static __init int mpc_init(void)
 errout:
 	if (err) {
 		mp_pr_err("%s", err, errmsg);
-		mpc_exit_impl();
+		mpctl_exit();
 	}
 
-	return -merr_errno(err);
-}
-
-static __exit void mpc_exit(void)
-{
-	mpc_exit_impl();
+	return err;
 }
 
 static const struct file_operations mpc_fops_default = {
@@ -3070,11 +3031,3 @@ static const struct file_operations mpc_fops_default = {
 	.unlocked_ioctl	= mpc_ioctl,
 	.mmap           = mpc_mmap,
 };
-
-module_init(mpc_init);
-module_exit(mpc_exit);
-
-MODULE_DESCRIPTION("Object Storage Media Pool (mpool)");
-MODULE_AUTHOR("Micron Technology, Inc.");
-MODULE_LICENSE("GPL v2");
-MODULE_VERSION(MPOOL_VERSION);

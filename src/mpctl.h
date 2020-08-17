@@ -8,14 +8,13 @@
 
 #include <linux/rbtree.h>
 #include <linux/kref.h>
+#include <linux/device.h>
 
 #include "mblock.h"
 #include "mcache.h"
 
 #define ITERCB_NEXT     (0)
 #define ITERCB_DONE     (1)
-
-extern uint mpc_chunker_size;
 
 /* There is one unit object for each device object created by the driver. */
 struct mpc_unit {
@@ -50,5 +49,9 @@ static inline struct mpc_unit *dev_to_unit(struct device *dev)
 }
 
 struct mpc_reap *dev_to_reap(struct device *dev);
+
+merr_t mpctl_init(void);
+
+void mpctl_exit(void);
 
 #endif /* MPOOL_MPCTL_H */

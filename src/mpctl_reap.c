@@ -560,7 +560,9 @@ void mpc_reap_destroy(struct mpc_reap *reap)
 	 * but perform a flush/wait for good measure...
 	 */
 	atomic_set(&reap->reap_lwm, 0);
-	flush_workqueue(reap->reap_wq);
+
+	if (reap->reap_wq)
+		flush_workqueue(reap->reap_wq);
 
 	for (i = 0; i < REAP_ELEM_MAX; ++i) {
 		elem = &reap->reap_elem[i];
@@ -574,7 +576,8 @@ void mpc_reap_destroy(struct mpc_reap *reap)
 		mutex_destroy(&elem->reap_lock);
 	}
 
-	destroy_workqueue(reap->reap_wq);
+	if (reap->reap_wq)
+		destroy_workqueue(reap->reap_wq);
 	kfree(reap);
 }
 
