@@ -15,7 +15,7 @@
 
 #include <linux/vmalloc.h>
 
-#include "mpool_defs.h"
+#include "mpcore_defs.h"
 
 /**
  * mblock2layout() - convert opaque mblock handle to pmd_layout

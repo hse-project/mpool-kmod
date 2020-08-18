@@ -16,7 +16,7 @@
 #include <crypto/hash.h>
 
 #include "mpool_config.h"
-#include "mpool_defs.h"
+#include "mpcore_defs.h"
 
 #define _STR(x) #x
 #define STR(x)  _STR(x)

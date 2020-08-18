@@ -17,6 +17,14 @@ struct mc_smap_parms;
  */
 
 /**
+ * struct rmbkt - region map bucket
+ */
+struct rmbkt {
+	struct mutex    pdi_rmlock;
+	struct rb_root  pdi_rmroot;
+} ____cacheline_aligned;
+
+/**
  * struct smap_zone -
  * @smz_node:
  * @smz_key:

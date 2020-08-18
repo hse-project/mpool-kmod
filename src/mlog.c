@@ -8,7 +8,7 @@
 #include <linux/blk_types.h>
 #include <asm/page.h>
 
-#include "mpool_defs.h"
+#include "mpcore_defs.h"
 
 #define mlpriv2layout(_ptr) \
 	((struct pmd_layout *)((char *)(_ptr) - offsetof(struct pmd_layout, eld_priv)))

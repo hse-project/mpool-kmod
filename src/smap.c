@@ -11,7 +11,7 @@
 #include <linux/log2.h>
 #include <linux/delay.h>
 
-#include "mpool_defs.h"
+#include "mpcore_defs.h"
 
 static merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh);
 

@@ -12,7 +12,7 @@
  *
  */
 
-#include "mpool_defs.h"
+#include "mpcore_defs.h"
 
 /*
  * Latest mpool MDC content version understood by this binary.

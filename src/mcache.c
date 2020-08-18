@@ -12,7 +12,7 @@
 
 #include "mpool_ioctl.h"
 
-#include "mpool.h"
+#include "mp.h"
 #include "mpool_printk.h"
 #include "assert.h"
 #include "evc.h"

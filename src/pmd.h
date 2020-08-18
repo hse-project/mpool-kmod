@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_PMD_PRIV_H
-#define MPOOL_PMD_PRIV_H
+#ifndef MPOOL_PMD_H
+#define MPOOL_PMD_H
 
 #include "mpcore_params.h"
 
@@ -448,82 +448,6 @@ struct pmd_obj_load_work {
 	atomic64_t                 *olw_err;
 };
 
-/*
- * objid uniquifier checkpoint interval; used to avoid reissuing an outstanding
- * objid after a crash; supports pmd_{mblock|mlog}_realloc()
- */
-#define OBJID_UNIQ_POW2 8
-#define OBJID_UNIQ_DELTA (1 << OBJID_UNIQ_POW2)
-
-static inline bool objtype_user(enum obj_type_omf otype)
-{
-	return (otype == OMF_OBJ_MBLOCK || otype == OMF_OBJ_MLOG);
-}
-
-static inline u64 objid_make(u64 uniq, enum obj_type_omf otype, u8 cslot)
-{
-	return ((uniq << 12) | ((otype & 0xF) << 8) | (cslot & 0xFF));
-}
-
-static inline u64 objid_uniq(u64 objid)
-{
-	return (objid >> 12);
-}
-
-static inline u8 objid_slot(u64 objid)
-{
-	return (objid & 0xFF);
-}
-
-static inline u64 logid_make(u64 uniq, u8 cslot)
-{
-	return objid_make(uniq, OMF_OBJ_MLOG, cslot);
-}
-
-static inline bool objid_mdc0log(u64 objid)
-{
-	return ((objid == MDC0_OBJID_LOG1) || (objid == MDC0_OBJID_LOG2));
-}
-
-static inline bool objid_ckpt(u64 objid)
-{
-	return !(objid_uniq(objid) & (OBJID_UNIQ_DELTA - 1));
-}
-
-static inline enum obj_type_omf pmd_objid_type(u64 objid)
-{
-	enum obj_type_omf otype = objid_type(objid);
-
-	return objtype_valid(otype) ? otype : OMF_OBJ_UNDEF;
-}
-
-/* True if objid is an mpool user object (versus mpool metadata object). */
-static inline bool pmd_objid_isuser(u64 objid)
-{
-	return objtype_user(objid_type(objid)) && objid_slot(objid);
-}
-
-/**
- * pmd_mdc_lock() - wrapper to take a lock of an mpool MDC.
- * @lock:
- * @slot:
- *
- * Nesting levels for pmd_mdc_info mutex.
- */
-void pmd_mdc_lock(struct mutex *lock, u8 slot);
-
-/**
- * pmd_mdc_unlock() - wrapper to release a lock of an mpool MDC.
- * @lock:
- */
-void pmd_mdc_unlock(struct mutex *lock);
-
-#define PMD_MDC0_COMPACTLOCK(_mp) \
-	pmd_mdc_lock(&((_mp)->pds_mda.mdi_slotv[0].mmi_compactlock), 0)
-
-#define PMD_MDC0_COMPACTUNLOCK(_mp) \
-	pmd_mdc_unlock(&((_mp)->pds_mda.mdi_slotv[0].mmi_compactlock))
-
 /**
  * pmd_mpool_activate() - Load all metadata for mpool mp.
  * @mp:
@@ -669,41 +593,6 @@ merr_t pmd_obj_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, u64
  * Return: pointer to layout if successful, NULL otherwise
  */
 struct pmd_layout *pmd_obj_find_get(struct mpool_descriptor *mp, u64 objid, int which);
-
-/**
- * pmd_obj_put() - Put a reference for a layout for objid.
- * @mp:
- * @layout:
- *
- * Put a ref to a layout
- *
- * Return: pointer to layout if successful, NULL otherwise
- */
-void pmd_obj_put(struct mpool_descriptor *mp, struct pmd_layout *layout);
-
-/**
- * pmd_obj_rdlock() - Read-lock object layout with appropriate nesting level.
- * @layout:
- */
-void pmd_obj_rdlock(struct pmd_layout *layout);
-
-/**
- * pmd_obj_rdunlock() - Release read lock on object layout.
- * @layout:
- */
-void pmd_obj_rdunlock(struct pmd_layout *layout);
-
-/**
- * pmd_obj_wrlock() - Write-lock object layout with appropriate nesting level.
- * @layout:
- */
-void pmd_obj_wrlock(struct pmd_layout *layout);
-
-/**
- * pmd_obj_wrunlock() - Release write lock on object layout.
- * @layout:
- */
-void pmd_obj_wrunlock(struct pmd_layout *layout);
 
 /**
  * pmd_init_credit() - udpates available credit and setup mdc selector table
@@ -869,10 +758,130 @@ pmd_layout_rw(
 	int                         flags,
 	u8                          rw);
 
-merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout);
+struct mpool_dev_info *pmd_layout_pd_get(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 u64 pmd_layout_cap_get(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
-struct mpool_dev_info *pmd_layout_pd_get(struct mpool_descriptor *mp, struct pmd_layout *layout);
+merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
-#endif /* MPOOL_PMD_PRIV_H */
+/*
+ * objid uniquifier checkpoint interval; used to avoid reissuing an outstanding
+ * objid after a crash; supports pmd_{mblock|mlog}_realloc()
+ */
+#define OBJID_UNIQ_POW2 8
+#define OBJID_UNIQ_DELTA (1 << OBJID_UNIQ_POW2)
+
+static inline bool objtype_user(enum obj_type_omf otype)
+{
+	return (otype == OMF_OBJ_MBLOCK || otype == OMF_OBJ_MLOG);
+}
+
+static inline u64 objid_make(u64 uniq, enum obj_type_omf otype, u8 cslot)
+{
+	return ((uniq << 12) | ((otype & 0xF) << 8) | (cslot & 0xFF));
+}
+
+static inline u64 objid_uniq(u64 objid)
+{
+	return (objid >> 12);
+}
+
+static inline u8 objid_slot(u64 objid)
+{
+	return (objid & 0xFF);
+}
+
+static inline u64 logid_make(u64 uniq, u8 cslot)
+{
+	return objid_make(uniq, OMF_OBJ_MLOG, cslot);
+}
+
+static inline bool objid_mdc0log(u64 objid)
+{
+	return ((objid == MDC0_OBJID_LOG1) || (objid == MDC0_OBJID_LOG2));
+}
+
+static inline bool objid_ckpt(u64 objid)
+{
+	return !(objid_uniq(objid) & (OBJID_UNIQ_DELTA - 1));
+}
+
+static inline enum obj_type_omf pmd_objid_type(u64 objid)
+{
+	enum obj_type_omf otype = objid_type(objid);
+
+	return objtype_valid(otype) ? otype : OMF_OBJ_UNDEF;
+}
+
+/* True if objid is an mpool user object (versus mpool metadata object). */
+static inline bool pmd_objid_isuser(u64 objid)
+{
+	return objtype_user(objid_type(objid)) && objid_slot(objid);
+}
+
+static inline void pmd_obj_put(struct mpool_descriptor *mp, struct pmd_layout *layout)
+{
+	kref_put(&layout->eld_ref, pmd_layout_release);
+}
+
+/*
+ * General object operations for both internal and external callers...
+ *
+ * See pmd.h for the various nesting levels for a locking class.
+ */
+static inline void pmd_obj_rdlock(struct pmd_layout *layout)
+{
+	enum pmd_lock_class lc __maybe_unused = PMD_MDC_NORMAL;
+
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	if (objid_slot(layout->eld_objid))
+		lc = PMD_OBJ_CLIENT;
+	else if (objid_mdc0log(layout->eld_objid))
+		lc = PMD_MDC_ZERO;
+#endif
+
+	down_read_nested(&layout->eld_rwlock, lc);
+}
+
+static inline void pmd_obj_rdunlock(struct pmd_layout *layout)
+{
+	up_read(&layout->eld_rwlock);
+}
+
+static inline void pmd_obj_wrlock(struct pmd_layout *layout)
+{
+	enum pmd_lock_class lc __maybe_unused = PMD_MDC_NORMAL;
+
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	if (objid_slot(layout->eld_objid))
+		lc = PMD_OBJ_CLIENT;
+	else if (objid_mdc0log(layout->eld_objid))
+		lc = PMD_MDC_ZERO;
+#endif
+
+	down_write_nested(&layout->eld_rwlock, lc);
+}
+
+static inline void pmd_obj_wrunlock(struct pmd_layout *layout)
+{
+	up_write(&layout->eld_rwlock);
+}
+
+/* General mdc locking (has external callers...) */
+static inline void pmd_mdc_lock(struct mutex *lock, u8 slot)
+{
+	mutex_lock_nested(lock, slot > 0 ? PMD_MDC_NORMAL : PMD_MDC_ZERO);
+}
+
+static inline void pmd_mdc_unlock(struct mutex *lock)
+{
+	mutex_unlock(lock);
+}
+
+#define PMD_MDC0_COMPACTLOCK(_mp) \
+	pmd_mdc_lock(&((_mp)->pds_mda.mdi_slotv[0].mmi_compactlock), 0)
+
+#define PMD_MDC0_COMPACTUNLOCK(_mp) \
+	pmd_mdc_unlock(&((_mp)->pds_mda.mdi_slotv[0].mmi_compactlock))
+
+#endif /* MPOOL_PMD_H */

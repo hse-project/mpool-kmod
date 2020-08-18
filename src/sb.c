@@ -9,7 +9,7 @@
  *
  */
 
-#include "mpool_defs.h"
+#include "mpcore_defs.h"
 
 /*
  * Drives have 4 superblocks.
