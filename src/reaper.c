@@ -38,9 +38,9 @@
 #include "assert.h"
 #include "evc.h"
 
-#include "mpctl_sys.h"
+#include "sysfs.h"
 #include "mpctl.h"
-#include "mpctl_reap.h"
+#include "reaper.h"
 
 #define REAP_ELEM_MAX       3
 

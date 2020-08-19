@@ -5,7 +5,7 @@
 
 #include <linux/module.h>
 
-#include "mpcore_defs.h"
+#include "mpool_defs.h"
 #include "mcache.h"
 #include "mpctl.h"
 

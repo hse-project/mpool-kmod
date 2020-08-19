@@ -32,6 +32,6 @@
 #include "mdc.h"
 #include "sb.h"
 #include "upgrade.h"
-#include "mpcore_params.h"
+#include "params.h"
 
 #endif /* MPOOL_DEFS_H */

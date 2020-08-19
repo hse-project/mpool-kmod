@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_MPCTL_SYS_H
-#define MPOOL_MPCTL_SYS_H
+#ifndef MPOOL_SYSFS_H
+#define MPOOL_SYSFS_H
 
 #include <linux/device.h>
 #include <linux/sysfs.h>
@@ -45,4 +45,4 @@ int mpc_attr_group_create(struct mpc_attr *attr);
 
 void mpc_attr_group_destroy(struct mpc_attr *attr);
 
-#endif /* MPOOL_MPCTL_SYS_H */
+#endif /* MPOOL_SYSFS_H */

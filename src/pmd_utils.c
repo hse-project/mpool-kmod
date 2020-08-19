@@ -12,7 +12,7 @@
  *
  */
 
-#include "mpcore_defs.h"
+#include "mpool_defs.h"
 #include "pmd_utils.h"
 
 /*

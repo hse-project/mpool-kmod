@@ -7,7 +7,7 @@
 
 #include "evc.h"
 
-#include "mpctl_sys.h"
+#include "sysfs.h"
 
 struct mpc_attr *mpc_attr_create(struct device *dev, const char *name, int acnt)
 {

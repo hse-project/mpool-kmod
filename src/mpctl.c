@@ -40,8 +40,8 @@
 
 #include "mpool_config.h"
 #include "mpctl.h"
-#include "mpctl_sys.h"
-#include "mpctl_reap.h"
+#include "sysfs.h"
+#include "reaper.h"
 
 #if HAVE_MMAP_LOCK
 #include <linux/mmap_lock.h>

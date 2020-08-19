@@ -21,7 +21,7 @@
 #include <linux/sort.h>
 #include <linux/delay.h>
 
-#include "mpcore_defs.h"
+#include "mpool_defs.h"
 #include "pmd_utils.h"
 
 DEFINE_MUTEX(pmd_s_lock);

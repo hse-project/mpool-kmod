@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_MPCTL_REAP_H
-#define MPOOL_MPCTL_REAP_H
+#ifndef MPOOL_REAPER_H
+#define MPOOL_REAPER_H
 
 #define MPC_REAP_PARAMS_CNT    3
 
@@ -72,4 +72,4 @@ bool mpc_reap_xvm_duress(struct mpc_xvm *xvm);
  */
 void mpc_reap_params_add(struct device_attribute *dattr);
 
-#endif /* MPOOL_MPCTL_REAP_H */
+#endif /* MPOOL_REAPER_H */

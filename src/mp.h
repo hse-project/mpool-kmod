@@ -9,7 +9,7 @@
 #include "mpool_ioctl.h"
 
 #include "uuid.h"
-#include "mpcore_params.h"
+#include "params.h"
 
 struct mpool_descriptor;
 

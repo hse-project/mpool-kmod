@@ -13,7 +13,7 @@
 #include <linux/string.h>
 #include <crypto/hash.h>
 
-#include "mpcore_defs.h"
+#include "mpool_defs.h"
 
 struct crypto_shash *mpool_tfm;
 

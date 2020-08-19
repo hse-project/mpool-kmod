@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_MPCORE_PARAMS_H
-#define MPOOL_MPCORE_PARAMS_H
+#ifndef MPOOL_PARAMS_H
+#define MPOOL_PARAMS_H
 
 #include "merr.h"
 
@@ -116,4 +116,4 @@ static inline void mpcore_params_defaults(struct mpcore_params *params)
 	params->mp_objloadjobs     = MPOOL_OBJ_LOAD_JOBS_DEFAULT;
 }
 
-#endif /* MPOOL_MPCORE_PARAMS_H */
+#endif /* MPOOL_PARAMS_H */
