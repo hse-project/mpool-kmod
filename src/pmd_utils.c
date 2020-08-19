@@ -497,6 +497,62 @@ bool pmd_mdc_needed(struct mpool_descriptor *mp)
 	return false;
 }
 
+void pmd_mdc_cap(struct mpool_descriptor *mp, u64 *mdcmax, u64 *mdccap, u64 *mdc0cap)
+{
+	struct pmd_mdc_info    *cinfo = NULL;
+	struct pmd_layout      *layout = NULL;
+	struct rb_node         *node = NULL;
+	u64                     mlogsz;
+	u32                     zonepg = 0;
+	u16                     mdcn = 0;
+
+	if (!mdcmax || !mdccap || !mdc0cap)
+		return;
+
+	/* Serialize to prevent race with pmd_mdc_alloc() */
+	mutex_lock(&pmd_s_lock);
+
+	/*
+	 * exclude mdc0 from stats because not used for mpool user
+	 * object metadata
+	 */
+	cinfo = &mp->pds_mda.mdi_slotv[0];
+
+	pmd_mdc_lock(&cinfo->mmi_uqlock, 0);
+	*mdcmax = cinfo->mmi_luniq;
+	pmd_mdc_unlock(&cinfo->mmi_uqlock);
+
+	/*  Taking compactlock to freeze all object layout metadata in mdc0 */
+	pmd_mdc_lock(&cinfo->mmi_compactlock, 0);
+	pmd_co_rlock(cinfo, 0);
+
+	pmd_co_foreach(cinfo, node) {
+		layout = rb_entry(node, typeof(*layout), eld_nodemdc);
+
+		mdcn = objid_uniq(layout->eld_objid) >> 1;
+
+		if (mdcn > *mdcmax)
+			/* Ignore detritus from failed pmd_mdc_alloc() */
+			continue;
+
+		zonepg = mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_parm.dpr_zonepg;
+		mlogsz = (layout->eld_ld.ol_zcnt * zonepg) << PAGE_SHIFT;
+
+		if (!mdcn)
+			*mdc0cap = *mdc0cap + mlogsz;
+		else
+			*mdccap = *mdccap + mlogsz;
+	}
+
+	pmd_co_runlock(cinfo);
+	pmd_mdc_unlock(&cinfo->mmi_compactlock);
+	mutex_unlock(&pmd_s_lock);
+
+	/* Only count capacity of one mlog in each mdc mlog pair */
+	*mdccap  = *mdccap >> 1;
+	*mdc0cap = *mdc0cap >> 1;
+}
+
 /**
  * pmd_alloc_argcheck() -
  * @mp:      Mpool descriptor
@@ -924,3 +980,563 @@ bool pmd_need_compact(struct mpool_descriptor *mp, u8 cslot, char *msgbuf, size_
 
 	return true;
 }
+
+void pmd_mda_init(struct mpool_descriptor *mp)
+{
+	int i;
+
+	spin_lock_init(&mp->pds_mda.mdi_slotvlock);
+	mp->pds_mda.mdi_slotvcnt = 0;
+
+	for (i = 0; i < MDC_SLOTS; ++i) {
+		struct pmd_mdc_info *pmi = mp->pds_mda.mdi_slotv + i;
+
+		mutex_init(&pmi->mmi_compactlock);
+		mutex_init(&pmi->mmi_uc_lock);
+		pmi->mmi_uc_root = RB_ROOT;
+		init_rwsem(&pmi->mmi_co_lock);
+		pmi->mmi_co_root = RB_ROOT;
+		mutex_init(&pmi->mmi_uqlock);
+		pmi->mmi_luniq = 0;
+		pmi->mmi_recbuf = NULL;
+		pmi->mmi_lckpt = objid_make(0, OMF_OBJ_UNDEF, i);
+		memset(&pmi->mmi_stats, 0, sizeof(pmi->mmi_stats));
+
+		/*
+		 * Initial mpool metadata content version.
+		 */
+		pmi->mmi_mdcver.mdcv_major = 1;
+		pmi->mmi_mdcver.mdcv_minor = 0;
+		pmi->mmi_mdcver.mdcv_patch = 0;
+		pmi->mmi_mdcver.mdcv_dev   = 0;
+
+		pmi->mmi_credit.ci_slot = i;
+
+		mutex_init(&pmi->mmi_stats_lock);
+	}
+
+	mp->pds_mda.mdi_slotv[1].mmi_luniq = UROOT_OBJID_MAX;
+	mp->pds_mda.mdi_sel.mds_tbl_idx.counter = 0;
+}
+
+void pmd_mda_free(struct mpool_descriptor *mp)
+{
+	int sidx;
+
+	/*
+	 * close mdc0 last because closing other mdc logs can result in
+	 * mdc0 updates
+	 */
+	for (sidx = mp->pds_mda.mdi_slotvcnt - 1; sidx > -1; sidx--) {
+		struct pmd_layout      *layout, *tmp;
+		struct pmd_mdc_info    *cinfo;
+
+		cinfo = &mp->pds_mda.mdi_slotv[sidx];
+
+		mp_mdc_close(cinfo->mmi_mdc);
+		kfree(cinfo->mmi_recbuf);
+		cinfo->mmi_recbuf = NULL;
+
+		/* Release committed objects... */
+		rbtree_postorder_for_each_entry_safe(
+			layout, tmp, &cinfo->mmi_co_root, eld_nodemdc) {
+
+			pmd_obj_put(mp, layout);
+		}
+
+		/* Release uncommitted objects... */
+		rbtree_postorder_for_each_entry_safe(
+			layout, tmp, &cinfo->mmi_uc_root, eld_nodemdc) {
+
+			pmd_obj_put(mp, layout);
+		}
+	}
+}
+
+merr_t
+pmd_mdc0_init(struct mpool_descriptor *mp, struct pmd_layout *mdc01, struct pmd_layout *mdc02)
+{
+	struct pmd_mdc_info    *cinfo = &mp->pds_mda.mdi_slotv[0];
+	merr_t                  err;
+
+	cinfo->mmi_recbuf = kzalloc(OMF_MDCREC_PACKLEN_MAX, GFP_KERNEL);
+	if (!cinfo->mmi_recbuf) {
+		err = merr(ENOMEM);
+		mp_pr_err("mpool %s, log rec buffer alloc %zu failed",
+			  err, mp->pds_name, OMF_MDCREC_PACKLEN_MAX);
+		return err;
+	}
+
+	/*
+	 * we put the mdc0 mlog layouts in mdc 0 because mdc0 mlog objids have a
+	 * slot # of 0 so the rest of the code expects to find the layout there.
+	 * this allows the majority of the code to treat mdc0 mlog metadata
+	 * exactly the same as for mdcN (and user mlogs), even though mdc0
+	 * metadata is actually stored in superblocks.  however there are a few
+	 * places that need to recognize mdc0 mlogs are special, including
+	 * pmd_mdc_compact() and pmd_obj_erase().
+	 */
+
+	mp->pds_mda.mdi_slotvcnt = 1;
+	pmd_co_insert(cinfo, mdc01);
+	pmd_co_insert(cinfo, mdc02);
+
+	err = mp_mdc_open(mp, mdc01->eld_objid, mdc02->eld_objid, MDC_OF_SKIP_SER, &cinfo->mmi_mdc);
+	if (err) {
+		mp_pr_err("mpool %s, MDC0 open failed", err, mp->pds_name);
+
+		pmd_co_remove(cinfo, mdc01);
+		pmd_co_remove(cinfo, mdc02);
+
+		kfree(cinfo->mmi_recbuf);
+		cinfo->mmi_recbuf = NULL;
+
+		mp->pds_mda.mdi_slotvcnt = 0;
+	}
+
+	return err;
+}
+
+/**
+ * pmd_cmp_drv_mdc0() - compare the drive info read from the MDC0 drive list
+ *	to what is obtained from the drive itself or from the configuration.
+ *
+ *	The drive is in list passed to mpool open or an UNAVAIL mdc0 drive.
+ *
+ * @mp:
+ * @pdh:
+ * @omd:
+ */
+merr_t pmd_cmp_drv_mdc0(struct mpool_descriptor *mp, u8 pdh, struct omf_devparm_descriptor *omd)
+{
+	const char            *msg __maybe_unused;
+	struct mpool_dev_info *pd;
+	struct mc_parms        mcp_pd;
+	struct mc_parms        mcp_mdc0list;
+
+	pd = &mp->pds_pdv[pdh];
+
+	mc_pd_prop2mc_parms(&(pd->pdi_parm.dpr_prop), &mcp_pd);
+	mc_omf_devparm2mc_parms(omd, &mcp_mdc0list);
+
+	if (!memcmp(&mcp_pd, &mcp_mdc0list, sizeof(mcp_pd)))
+		return 0;
+
+	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
+		msg = "UNAVAIL mdc0 drive parms don't match those in drive list record";
+	else
+		msg = "mismatch between MDC0 drive list record and drive parms";
+
+	mp_pr_warn("mpool %s, %s for %s, mclassp %d %d zonepg %u %u sectorsz %u %u devtype %u %u features %lu %lu",
+		   mp->pds_name, msg, pd->pdi_name, mcp_pd.mcp_classp, mcp_mdc0list.mcp_classp,
+		   mcp_pd.mcp_zonepg, mcp_mdc0list.mcp_zonepg, mcp_pd.mcp_sectorsz,
+		   mcp_mdc0list.mcp_sectorsz, mcp_pd.mcp_devtype, mcp_mdc0list.mcp_devtype,
+		   (ulong)mcp_pd.mcp_features, (ulong)mcp_mdc0list.mcp_features);
+
+	return merr(EINVAL);
+}
+
+/**
+ * pmd_mdc0_meta_update_update() - update on media the MDC0 metadata.
+ * @mp:
+ * @layout: Used to know on which drives to write the MDC0 metadata.
+ *
+ * For now write the whole super block, but only the MDC0 metadata needs
+ * to be updated, the rest of the superblock doesn't change.
+ *
+ * In 1.0 the MDC0 metadata is replicated on the 4 superblocks of the drive.
+ * In case of failure, the SBs of a same drive may end up having different
+ * values for the MDC0 metadata.
+ * To adress this situation voting could be used along with the SB gen number
+ * psb_gen. But for 1.0 a simpler approach is taken: SB gen number is not used
+ * and SB0 is the authoritative replica. The other 3 replicas of MDC0 metadata
+ * are not used when the mpool activates.
+ */
+merr_t pmd_mdc0_meta_update(struct mpool_descriptor *mp, struct pmd_layout *layout)
+{
+	struct omf_sb_descriptor   *sb;
+	struct mpool_dev_info      *pd;
+	struct mc_parms             mc_parms;
+	merr_t                      err;
+
+	pd = &(mp->pds_pdv[layout->eld_ld.ol_pdh]);
+
+	sb = kzalloc(sizeof(*sb), GFP_KERNEL);
+	if (!sb)
+		return merr(ENOMEM);
+
+	/*
+	 * set superblock values common to all new drives in pool
+	 * (new or extant)
+	 */
+	sb->osb_magic = OMF_SB_MAGIC;
+	strlcpy((char *) sb->osb_name, mp->pds_name, sizeof(sb->osb_name));
+	sb->osb_vers = OMF_SB_DESC_VER_LAST;
+	mpool_uuid_copy(&sb->osb_poolid, &mp->pds_poolid);
+	sb->osb_gen = 1;
+
+	/* Set superblock values specific to this drive */
+	mpool_uuid_copy(&sb->osb_parm.odp_devid, &pd->pdi_devid);
+	sb->osb_parm.odp_devsz = pd->pdi_parm.dpr_devsz;
+	sb->osb_parm.odp_zonetot = pd->pdi_parm.dpr_zonetot;
+	mc_pd_prop2mc_parms(&pd->pdi_parm.dpr_prop, &mc_parms);
+	mc_parms2omf_devparm(&mc_parms, &sb->osb_parm);
+
+	sbutil_mdc0_copy(sb, &mp->pds_sbmdc0);
+
+	err = 0;
+	mp_pr_debug("MDC0 compaction gen1 %lu gen2 %lu",
+		    err, (ulong)sb->osb_mdc01gen, (ulong)sb->osb_mdc02gen);
+
+	/*
+	 * sb_write_update() succeeds if at least SB0 is written. It is
+	 * not a problem to have SB1 not written because the authoritative
+	 * MDC0 metadata replica is the one in SB0.
+	 */
+	err = sb_write_update(pd, sb);
+	if (ev(err)) {
+		mp_pr_err("compacting %s MDC0, writing superblock on drive %s failed",
+			  err, mp->pds_name, pd->pdi_name);
+	}
+
+	kfree(sb);
+	return err;
+}
+
+/**
+ * pmd_log_all_mdc_cobjs() - write in the new active mlog the object records.
+ * @mp:
+ * @cslot:
+ * @compacted: output
+ * @total: output
+ */
+static merr_t
+pmd_log_all_mdc_cobjs(struct mpool_descriptor *mp, u8 cslot, u32 *compacted, u32 *total)
+{
+	struct pmd_mdc_info    *cinfo;
+	struct pmd_layout      *layout;
+	struct rb_node         *node;
+	merr_t                  err;
+
+	cinfo = &mp->pds_mda.mdi_slotv[cslot];
+	err = 0;
+
+	pmd_co_foreach(cinfo, node) {
+		layout = rb_entry(node, typeof(*layout), eld_nodemdc);
+
+		if (!objid_mdc0log(layout->eld_objid)) {
+			struct omf_mdcrec_data cdr;
+
+			cdr.omd_rtype = OMF_MDR_OCREATE;
+			cdr.u.obj.omd_layout = layout;
+			err = pmd_mdc_append(mp, cslot, &cdr, 0);
+			if (err) {
+				mp_pr_err("mpool %s, MDC%u log committed obj failed, objid 0x%lx",
+					  err, mp->pds_name, cslot, (ulong)layout->eld_objid);
+				break;
+			}
+
+			++(*compacted);
+		}
+		++(*total);
+	}
+
+	for (; node; node = rb_next(node))
+		++(*total);
+
+	return err;
+}
+
+/**
+ * pmd_log_mdc0_cobjs() - write in the new active mlog (of MDC0) the MDC0
+ *	records that are particular to MDC0.
+ * @mp:
+ */
+static merr_t pmd_log_mdc0_cobjs(struct mpool_descriptor *mp)
+{
+	struct mpool_dev_info    *pd;
+	merr_t                    err = 0;
+	int                       i;
+	/*
+	 * Log a drive record (OMF_MDR_MCCONFIG) for every drive in pds_pdv[]
+	 * that is not defunct.
+	 */
+	for (i = 0; i < mp->pds_pdvcnt; i++) {
+		pd = &(mp->pds_pdv[i]);
+		err = pmd_prop_mcconfig(mp, pd, true);
+		if (ev(err))
+			return err;
+	}
+
+	/*
+	 * Log a media class spare record (OMF_MDR_MCSPARE) for every media
+	 * class.
+	 * mc count can't change now. Because the MDC0 compact lock is held
+	 * and that blocks the addition of PDs in the  mpool.
+	 */
+	for (i = 0; i < MP_MED_NUMBER; i++) {
+		struct media_class *mc;
+
+		mc = &mp->pds_mc[i];
+		if (mc->mc_pdmc >= 0) {
+			err = pmd_prop_mcspare(mp, mc->mc_parms.mcp_classp,
+					       mc->mc_sparms.mcsp_spzone, true);
+			if (ev(err))
+				return err;
+		}
+	}
+
+	err = pmd_prop_mpconfig(mp, &mp->pds_cfg, true);
+	if (ev(err))
+		return err;
+
+	return 0;
+}
+
+/**
+ * pmd_log_non_mdc0_cobjs() - write in the new active mlog (of MDCi i>0) the
+ *	MDCi records that are particular to MDCi (not used by MDC0).
+ * @mp:
+ * @cslot:
+ */
+static merr_t pmd_log_non_mdc0_cobjs(struct mpool_descriptor *mp, u8 cslot)
+{
+	struct omf_mdcrec_data  cdr;
+	struct pmd_mdc_info    *cinfo;
+	merr_t err;
+
+	cinfo = &mp->pds_mda.mdi_slotv[cslot];
+	/*
+	 * if not mdc0 log last objid checkpoint to support realloc of
+	 * uncommitted objects after a crash and to guarantee objids are
+	 * never reused.
+	 */
+	cdr.omd_rtype = OMF_MDR_OIDCKPT;
+	cdr.u.obj.omd_objid = cinfo->mmi_lckpt;
+	err = pmd_mdc_append(mp, cslot, &cdr, 0);
+
+	return ev(err);
+}
+
+/**
+ * pmd_pre_compact_reset() - called on MDCi i>0
+ * @cinfo:
+ * @compacted: object create records appended in the new active mlog.
+ *
+ * Locking:
+ *	MDCi compact lock is held by the caller.
+ */
+static void pmd_pre_compact_reset(struct pmd_mdc_info *cinfo, u32 compacted)
+{
+	struct pre_compact_ctrs    *pco_cnt;
+
+	pco_cnt = &cinfo->mmi_pco_cnt;
+	assert(pco_cnt->pcc_cobj.counter == compacted);
+	atomic_set(&pco_cnt->pcc_cr, compacted);
+	atomic_set(&pco_cnt->pcc_cobj, compacted);
+	atomic_set(&pco_cnt->pcc_up, 0);
+	atomic_set(&pco_cnt->pcc_del, 0);
+	atomic_set(&pco_cnt->pcc_er, 0);
+}
+
+/**
+ * pmd_mdc_compact() - compact an mpool MDCi with i >= 0.
+ * @mp:
+ * @cslot: the "i" of MDCi
+ *
+ * Locking:
+ * 1) caller must hold MDCi compact lock
+ * 2) MDC compaction freezes the state of all MDCs objects [and for MDC0
+ *    also freezes all mpool properties] by simply holding MDC
+ *    mmi_compactlock mutex. Hence, MDC compaction does not need to
+ *    read-lock individual object layouts or mpool property data
+ *    structures to read them. It is why this function and its callees don't
+ *    take any lock.
+ *
+ * Note: this function or its callees must call pmd_mdc_append() with no sync
+ *	instead of pmd_mdc_addrec() to avoid trigerring nested compaction of
+ *	a same MDCi.
+ *	The sync/flush is done by append of cend, no need to sync before that.
+ */
+merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
+{
+	u64                     logid1 = logid_make(2 * cslot, 0);
+	u64                     logid2 = logid_make(2 * cslot + 1, 0);
+	struct pmd_mdc_info    *cinfo = &mp->pds_mda.mdi_slotv[cslot];
+	int                     retry = 0;
+	merr_t                  err = 0;
+
+	for (retry = 0; retry < MPOOL_MDC_COMPACT_RETRY_DEFAULT; retry++) {
+		u32 compacted = 0;
+		u32 total = 0;
+
+		if (err) {
+			err = mp_mdc_open(mp, logid1, logid2, MDC_OF_SKIP_SER, &cinfo->mmi_mdc);
+			if (ev(err))
+				continue;
+		}
+
+		mp_pr_debug("mpool %s, MDC%u start: mlog1 gen %lu mlog2 gen %lu",
+			    err, mp->pds_name, cslot,
+			    (ulong)((struct pmd_layout *)cinfo->mmi_mdc->mdc_logh1)->eld_gen,
+			    (ulong)((struct pmd_layout *)cinfo->mmi_mdc->mdc_logh2)->eld_gen);
+
+		err = mp_mdc_cstart(cinfo->mmi_mdc);
+		if (ev(err))
+			continue;
+
+		if (omfu_mdcver_cmp2(omfu_mdcver_cur(), ">=", 1, 0, 0, 1)) {
+			err = pmd_mdc_addrec_version(mp, cslot);
+			if (ev(err)) {
+				mp_mdc_close(cinfo->mmi_mdc);
+				continue;
+			}
+		}
+
+		if (cslot)
+			err = pmd_log_non_mdc0_cobjs(mp, cslot);
+		else
+			err = pmd_log_mdc0_cobjs(mp);
+		if (ev(err))
+			continue;
+
+		err = pmd_log_all_mdc_cobjs(mp, cslot, &compacted, &total);
+
+		mp_pr_debug("mpool %s, MDC%u compacted %u of %u objects: retry=%d",
+			    err, mp->pds_name, cslot, compacted, total, retry);
+
+		if (!ev(err))
+			/*
+			 * Append the compaction end record in the new active
+			 * mlog, and flush/sync all the previous records
+			 * appended in the new active log by the compaction
+			 * above.
+			 */
+			err = mp_mdc_cend(cinfo->mmi_mdc);
+		if (!ev(err)) {
+			if (cslot) {
+				/*
+				 * MDCi i>0 compacted successfully
+				 * MDCi compact lock is held.
+				 */
+				pmd_pre_compact_reset(cinfo, compacted);
+			}
+
+			mp_pr_debug("mpool %s, MDC%u end: mlog1 gen %lu mlog2 gen %lu",
+				  err, mp->pds_name, cslot,
+				  (ulong)((struct pmd_layout *)cinfo->mmi_mdc->mdc_logh1)->eld_gen,
+				  (ulong)((struct pmd_layout *)cinfo->mmi_mdc->mdc_logh2)->eld_gen);
+			break;
+		}
+	}
+
+	if (err)
+		mp_pr_crit("mpool %s, MDC%u compaction failed", err, mp->pds_name, cslot);
+
+	return err;
+}
+
+merr_t pmd_mdc_addrec(struct mpool_descriptor *mp, u8 cslot, struct omf_mdcrec_data *cdr)
+{
+	merr_t err;
+
+	err = pmd_mdc_append(mp, cslot, cdr, 1);
+
+	if (merr_errno(err) == EFBIG) {
+		err = pmd_mdc_compact(mp, cslot);
+		if (!ev(err))
+			err = pmd_mdc_append(mp, cslot, cdr, 1);
+	}
+
+	if (err)
+		mp_pr_rl("mpool %s, MDC%u append failed%s", err, mp->pds_name, cslot,
+			 (merr_errno(err) == EFBIG) ? " post compaction" : "");
+
+	return err;
+}
+
+merr_t pmd_mdc_addrec_version(struct mpool_descriptor *mp, u8 cslot)
+{
+	struct omf_mdcrec_data  cdr;
+	struct omf_mdcver      *ver;
+
+	cdr.omd_rtype = OMF_MDR_VERSION;
+
+	ver = omfu_mdcver_cur();
+	cdr.u.omd_version = *ver;
+
+	return pmd_mdc_addrec(mp, cslot, &cdr);
+}
+
+merr_t pmd_prop_mcconfig(struct mpool_descriptor *mp, struct mpool_dev_info *pd, bool compacting)
+{
+	merr_t                  err;
+	struct omf_mdcrec_data  cdr;
+	struct mc_parms		mc_parms;
+
+	cdr.omd_rtype = OMF_MDR_MCCONFIG;
+	mpool_uuid_copy(&cdr.u.dev.omd_parm.odp_devid, &pd->pdi_devid);
+	mc_pd_prop2mc_parms(&pd->pdi_parm.dpr_prop, &mc_parms);
+	mc_parms2omf_devparm(&mc_parms, &cdr.u.dev.omd_parm);
+	cdr.u.dev.omd_parm.odp_zonetot = pd->pdi_parm.dpr_zonetot;
+	cdr.u.dev.omd_parm.odp_devsz = pd->pdi_parm.dpr_devsz;
+
+	if (compacting)
+		/* No sync needed and don't trigger another compaction. */
+		err = pmd_mdc_append(mp, 0, &cdr, 0);
+	else
+		err = pmd_mdc_addrec(mp, 0, &cdr);
+
+	return ev(err);
+}
+
+merr_t
+pmd_prop_mcspare(
+	struct mpool_descriptor    *mp,
+	enum mp_media_classp        mclassp,
+	u8                          spzone,
+	bool			    compacting)
+{
+	merr_t                  err = 0;
+	struct omf_mdcrec_data  cdr;
+
+	if (!mclass_isvalid(mclassp) || spzone > 100) {
+		err = merr(EINVAL);
+		mp_pr_err("persisting %s spare zone info, invalid arguments %d %u",
+			  err, mp->pds_name, mclassp, spzone);
+		return err;
+	}
+
+	cdr.omd_rtype = OMF_MDR_MCSPARE;
+	cdr.u.mcs.omd_mclassp = mclassp;
+	cdr.u.mcs.omd_spzone = spzone;
+
+	if (compacting) {
+		/* No sync needed and don't trigger another compaction. */
+		err = pmd_mdc_append(mp, 0, &cdr, 0);
+		ev(err);
+	} else {
+		err = pmd_mdc_addrec(mp, 0, &cdr);
+		ev(err);
+	}
+
+	return err;
+}
+
+merr_t
+pmd_prop_mpconfig(struct mpool_descriptor *mp, const struct mpool_config *cfg, bool compacting)
+{
+	struct omf_mdcrec_data  cdr = { };
+	merr_t                  err;
+
+	cdr.omd_rtype = OMF_MDR_MPCONFIG;
+	cdr.u.omd_cfg = *cfg;
+
+	if (compacting)
+		err = pmd_mdc_append(mp, 0, &cdr, 0);
+	else
+		err = pmd_mdc_addrec(mp, 0, &cdr);
+
+	return ev(err);
+}
+

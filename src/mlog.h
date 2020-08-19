@@ -11,27 +11,6 @@
 
 #define MB       (1024 * 1024)
 
-/**
- * struct mlog_fsetparms -
- *
- * @mfp_totsec: Total number of log blocks in mlog
- * @mfp_secpga: Is sector size page-aligned?
- * @mfp_lpgsz:  Size of each page in read/append buffer
- * @mfp_npgmb:  No. of pages in 1 MiB buffer
- * @mfp_sectsz: Sector size obtained from PD prop
- * @mfp_nsecmb: No. of sectors/log blocks in 1 MiB buffer
- * @mfp_nsecpg: No. of sectors/log blocks per page
- */
-struct mlog_fsetparms {
-	u32    mfp_totsec;
-	bool   mfp_secpga;
-	u32    mfp_lpgsz;
-	u16    mfp_nlpgmb;
-	u16    mfp_sectsz;
-	u16    mfp_nsecmb;
-	u16    mfp_nseclpg;
-};
-
 /*
  * struct mlog_read_iter -
  *
@@ -51,6 +30,27 @@ struct mlog_read_iter {
 	u16                 lri_rbidx;
 	u16                 lri_sidx;
 	u8                  lri_valid;
+};
+
+/**
+ * struct mlog_fsetparms -
+ *
+ * @mfp_totsec: Total number of log blocks in mlog
+ * @mfp_secpga: Is sector size page-aligned?
+ * @mfp_lpgsz:  Size of each page in read/append buffer
+ * @mfp_npgmb:  No. of pages in 1 MiB buffer
+ * @mfp_sectsz: Sector size obtained from PD prop
+ * @mfp_nsecmb: No. of sectors/log blocks in 1 MiB buffer
+ * @mfp_nsecpg: No. of sectors/log blocks per page
+ */
+struct mlog_fsetparms {
+	u32    mfp_totsec;
+	bool   mfp_secpga;
+	u32    mfp_lpgsz;
+	u16    mfp_nlpgmb;
+	u16    mfp_sectsz;
+	u16    mfp_nsecmb;
+	u16    mfp_nseclpg;
 };
 
 /**
@@ -162,7 +162,6 @@ merr_t mlog_abort(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
 merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-
 /**
  * mlog_open()
  *
@@ -241,8 +240,12 @@ mlog_rw_raw(
 	u64                         boff,
 	u8                          rw);
 
+void mlogutil_closeall(struct mpool_descriptor *mp);
+
 bool mlog_objid(u64 objid);
 
-void mlogutil_closeall(struct mpool_descriptor *mp);
+struct pmd_layout *mlog2layout(struct mlog_descriptor *mlh);
+
+struct mlog_descriptor *layout2mlog(struct pmd_layout *layout);
 
 #endif /* MPOOL_MLOG_H */

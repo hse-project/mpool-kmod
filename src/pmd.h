@@ -6,9 +6,7 @@
 #ifndef MPOOL_PMD_H
 #define MPOOL_PMD_H
 
-#include "params.h"
 #include "mlog.h"
-#include "mdc.h"
 
 /**
  * DOC: Module info.
@@ -22,6 +20,8 @@
 enum obj_type_omf;
 struct mpool_descriptor;
 struct pmd_layout;
+
+extern struct mutex pmd_s_lock;
 
 /**
  * DOC: Object lifecycle
@@ -260,28 +260,6 @@ struct credit_info  {
 	u64                 ci_credit;
 	u64                 ci_free;
 	u8                  ci_slot;
-};
-
-/**
- * struct mdc_csm_info - mdc credit set member info
- * @m_slot:      mdc slot number
- * @ci_credit:   available credit
- */
-struct mdc_csm_info {
-	u8   m_slot;
-	u16  m_credit;
-};
-
-/**
- * struct mdc_credit_set - mdc credit set
- * @cs_idx:      index of current credit set member
- * @cs_num_csm:  number of credit set members in this credit set
- * @cs_csm:      array of credit set members
- */
-struct mdc_credit_set {
-	u8                    cs_idx;
-	u8                    cs_num_csm;
-	struct mdc_csm_info   csm[MPOOL_MDC_SET_SZ];
 };
 
 /**
