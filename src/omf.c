@@ -22,6 +22,8 @@
 #define STR(x)  _STR(x)
 static const char mpool_sbver[] = "MPOOL_SBVER_" STR(OMF_SB_DESC_VER_LAST);
 
+static struct crypto_shash *mpool_tfm;
+
 enum unpack_only {
 	UNPACKONLY    = 0,
 	UNPACKCONVERT = 1,
@@ -1413,4 +1415,24 @@ void omf_logrec_desc_unpack_letoh(struct omf_logrec_descriptor *lrd, const char 
 	lrd->olr_tlen  = omf_polr_tlen(lrd_omf);
 	lrd->olr_rlen  = omf_polr_rlen(lrd_omf);
 	lrd->olr_rtype = omf_polr_rtype(lrd_omf);
+}
+
+merr_t omf_init(void)
+{
+	const char *algo = "crc32c";
+	merr_t      err = 0;
+
+	mpool_tfm = crypto_alloc_shash(algo, 0, 0);
+	if (!mpool_tfm) {
+		err = merr(ENOMEM);
+		mp_pr_err("crypto_alloc_shash(%s) failed", err, algo);
+	}
+
+	return err;
+}
+
+void omf_exit(void)
+{
+	if (mpool_tfm)
+		crypto_free_shash(mpool_tfm);
 }

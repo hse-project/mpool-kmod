@@ -119,21 +119,6 @@ static unsigned int mpc_default_uid __read_mostly;
 static unsigned int mpc_default_gid __read_mostly = 6;
 static unsigned int mpc_default_mode __read_mostly = 0660;
 
-/*
- * Module params...
- */
-static unsigned int mpc_maxunits __read_mostly = 1024;
-module_param(mpc_maxunits, uint, 0444);
-MODULE_PARM_DESC(mpc_maxunits, " max mpools");
-
-static unsigned int mpc_rwsz_max __read_mostly = 32;
-module_param(mpc_rwsz_max, uint, 0444);
-MODULE_PARM_DESC(mpc_rwsz_max, " max mblock/mlog r/w size (mB)");
-
-static unsigned int mpc_rwconc_max __read_mostly = 8;
-module_param(mpc_rwconc_max, uint, 0444);
-MODULE_PARM_DESC(mpc_rwconc_max, " max mblock/mlog large r/w concurrency");
-
 static struct mpc_softstate *mpc_cdev2ss(struct cdev *cdev)
 {
 	if (ev(!cdev || cdev->owner != THIS_MODULE)) {

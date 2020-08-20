@@ -11,6 +11,9 @@
 
 #include "mpool_defs.h"
 
+/* Cleared out sb */
+struct omf_sb_descriptor SBCLEAR;
+
 /*
  * Drives have 4 superblocks.
  * + sb0 at byte offset 0
@@ -635,4 +638,15 @@ int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb)
 		return 0;
 
 	return 1;
+}
+
+merr_t sb_init(void)
+{
+	sbutil_mdc0_clear(&SBCLEAR);
+
+	return 0;
+}
+
+void sb_exit(void)
+{
 }

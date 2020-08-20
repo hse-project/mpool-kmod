@@ -153,4 +153,8 @@ int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb);
  */
 extern struct omf_sb_descriptor SBCLEAR;
 
+merr_t sb_init(void);
+
+void sb_exit(void);
+
 #endif /* MPOOL_SB_PRIV_H */

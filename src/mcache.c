@@ -84,17 +84,6 @@ struct mpc_reap *mpc_reap __read_mostly;
 static size_t mpc_xvm_cachesz[2] __read_mostly;
 static struct kmem_cache *mpc_xvm_cache[2] __read_mostly;
 
-/*
- * Module params...
- */
-static unsigned int mpc_xvm_max __read_mostly = 1048576 * 128;
-module_param(mpc_xvm_max, uint, 0444);
-MODULE_PARM_DESC(mpc_xvm_max, " max extended VMA regions");
-
-unsigned int mpc_xvm_size_max __read_mostly = 30;
-module_param(mpc_xvm_size_max, uint, 0444);
-MODULE_PARM_DESC(mpc_xvm_size_max, " max extended VMA size log2");
-
 static struct workqueue_struct *mpc_rgn2wq(uint rgn)
 {
 	return mpc_wq_rav[rgn % ARRAY_SIZE(mpc_wq_rav)];

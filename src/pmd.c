@@ -26,6 +26,10 @@
 
 DEFINE_MUTEX(pmd_s_lock);
 
+static struct kmem_cache *pmd_obj_erase_work_cache __read_mostly;
+struct kmem_cache *pmd_layout_priv_cache __read_mostly;
+struct kmem_cache *pmd_layout_cache __read_mostly;
+
 static merr_t
 pmd_obj_alloc_cmn(
 	struct mpool_descriptor    *mp,
@@ -1939,3 +1943,54 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 	return err;
 }
 
+merr_t pmd_init(void)
+{
+	merr_t err = 0;
+
+	/* Initialize the slab caches. */
+	pmd_layout_cache = kmem_cache_create("mpool_pmd_layout", sizeof(struct pmd_layout),
+					     0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
+	if (!pmd_layout_cache) {
+		err = merr(ENOMEM);
+		mp_pr_err("kmem_cache_create(pmd_layout, %zu) failed",
+			  err, sizeof(struct pmd_layout));
+		goto errout;
+	}
+
+	pmd_layout_priv_cache = kmem_cache_create("mpool_pmd_layout_priv",
+				sizeof(struct pmd_layout) + sizeof(union pmd_layout_priv),
+				0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
+	if (!pmd_layout_priv_cache) {
+		err = merr(ENOMEM);
+		mp_pr_err("kmem_cache_create(pmd priv, %zu) failed",
+			  err, sizeof(union pmd_layout_priv));
+		goto errout;
+	}
+
+	pmd_obj_erase_work_cache = kmem_cache_create("mpool_pmd_obj_erase_work",
+						     sizeof(struct pmd_obj_erase_work),
+						     0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
+	if (!pmd_obj_erase_work_cache) {
+		err = merr(ENOMEM);
+		mp_pr_err("kmem_cache_create(pmd_obj_erase, %zu) failed",
+			  err, sizeof(struct pmd_obj_erase_work));
+		goto errout;
+	}
+
+errout:
+	if (err)
+		pmd_exit();
+
+	return err;
+}
+
+void pmd_exit(void)
+{
+	kmem_cache_destroy(pmd_obj_erase_work_cache);
+	kmem_cache_destroy(pmd_layout_priv_cache);
+	kmem_cache_destroy(pmd_layout_cache);
+
+	pmd_obj_erase_work_cache = NULL;
+	pmd_layout_priv_cache = NULL;
+	pmd_layout_cache = NULL;
+}

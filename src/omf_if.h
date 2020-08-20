@@ -6,6 +6,13 @@
 #ifndef MPOOL_OMF_IF_PRIV_H
 #define MPOOL_OMF_IF_PRIV_H
 
+#include "uuid.h"
+#include "mpool_ioctl.h"
+#include "mp.h"
+#include "omf.h"
+
+struct mpool_descriptor;
+
 /*
  * Common defs: versioned via version number field of enclosing structs
  */
@@ -397,5 +404,9 @@ bool logrec_type_datarec(enum logrec_type_omf rtype);
  * @sbver: superblock version
  */
 struct omf_mdcver *omf_sbver_to_mdcver(enum sb_descriptor_ver_omf sbver);
+
+merr_t omf_init(void);
+
+void omf_exit(void);
 
 #endif /* MPOOL_OMF_IF_PRIV_H */

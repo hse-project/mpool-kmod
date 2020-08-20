@@ -335,4 +335,8 @@ void smap_log_mpool_usage(struct work_struct *ws);
  */
 void smap_wait_usage_done(struct mpool_descriptor *mp);
 
+merr_t smap_init(void);
+
+void smap_exit(void);
+
 #endif /* MPOOL_SMAP_PRIV_H */

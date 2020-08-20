@@ -13,6 +13,8 @@
 
 #include "mpool_defs.h"
 
+static struct kmem_cache  *smap_zone_cache __read_mostly;
+
 static merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh);
 
 /*
@@ -1042,4 +1044,25 @@ void smap_log_mpool_usage(struct work_struct *ws)
 	/* Schedule the next run of smap_log_mpool_usage() */
 	queue_delayed_work(mp->pds_workq, &smapu->smapu_wstruct,
 			   msecs_to_jiffies(mp->pds_params.mp_mpusageperiod));
+}
+
+merr_t smap_init(void)
+{
+	merr_t err = 0;
+
+	smap_zone_cache = kmem_cache_create("mpool_smap_zone", sizeof(struct smap_zone),
+					    0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
+	if (!smap_zone_cache) {
+		err = merr(ENOMEM);
+		mp_pr_err("kmem_cache_create(smap_zone, %zu) failed",
+			  err, sizeof(struct smap_zone));
+	}
+
+	return err;
+}
+
+void smap_exit(void)
+{
+	kmem_cache_destroy(smap_zone_cache);
+	smap_zone_cache = NULL;
 }

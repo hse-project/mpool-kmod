@@ -22,6 +22,8 @@ struct mpool_descriptor;
 struct pmd_layout;
 
 extern struct mutex pmd_s_lock;
+extern struct kmem_cache *pmd_layout_priv_cache;
+extern struct kmem_cache *pmd_layout_cache;
 
 /**
  * DOC: Object lifecycle
@@ -740,6 +742,10 @@ struct mpool_dev_info *pmd_layout_pd_get(struct mpool_descriptor *mp, struct pmd
 u64 pmd_layout_cap_get(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout);
+
+merr_t pmd_init(void);
+
+void pmd_exit(void);
 
 /*
  * objid uniquifier checkpoint interval; used to avoid reissuing an outstanding

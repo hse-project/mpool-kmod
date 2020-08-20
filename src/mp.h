@@ -29,21 +29,6 @@ struct mpool_descriptor;
 #define MPOOL_DRIVES_MAX       MP_MED_NUMBER
 #define MP_MED_ALL             MP_MED_NUMBER
 
-extern struct crypto_shash *mpool_tfm;
-
-extern struct kmem_cache *pmd_obj_erase_work_cache;
-extern struct kmem_cache *pmd_layout_priv_cache;
-extern struct kmem_cache *pmd_layout_cache;
-extern struct kmem_cache *smap_zone_cache;
-
-#if HAVE_BIOSET_INIT
-extern struct bio_set mpool_bioset;
-#else
-extern struct bio_set *mpool_bioset;
-#endif
-
-extern uint mpc_chunker_size;
-
 /* Object types */
 enum mp_obj_type {
 	MP_OBJ_UNDEF  = 0,
@@ -287,15 +272,5 @@ merr_t mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config
  * @cfg:
  */
 merr_t mpool_config_fetch(struct mpool_descriptor *mp, struct mpool_config *cfg);
-
-/**
- * mpcore_init() - mpool core initialization routine
- */
-merr_t mpcore_init(void);
-
-/**
- * mpcore_exit() - mpool core exit routine
- */
-void mpcore_exit(void);
 
 #endif /* MPOOL_MP_H */

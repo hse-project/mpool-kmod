@@ -8,6 +8,7 @@
 
 #include <linux/kref.h>
 
+#include "init.h"
 #include "mblock.h"
 
 struct mpc_unit;
@@ -68,7 +69,6 @@ struct mpc_xvm {
 	struct mpc_mbinfo           xvm_mbinfov[];
 };
 
-extern unsigned int mpc_xvm_size_max;
 extern struct mpc_reap *mpc_reap;
 extern const struct address_space_operations mpc_aops_default;
 

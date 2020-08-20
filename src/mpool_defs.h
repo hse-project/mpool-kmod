@@ -19,6 +19,7 @@
 #include "assert.h"
 #include "uuid.h"
 
+#include "init.h"
 #include "mp.h"
 #include "omf.h"
 #include "omf_if.h"

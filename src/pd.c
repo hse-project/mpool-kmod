@@ -23,6 +23,12 @@
 #define SECTOR_SHIFT   9
 #endif
 
+#if HAVE_BIOSET_INIT
+static struct bio_set mpool_bioset;
+#else
+static struct bio_set *mpool_bioset;
+#endif
+
 static const fmode_t    pd_bio_fmode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
 static char            *pd_bio_holder = "mpool";
 
@@ -480,4 +486,46 @@ void pd_dev_set_unavail(struct pd_dev_parm *dparm, struct omf_devparm_descriptor
 	pd_prop->pdp_phys_if  = 0;
 	pd_prop->pdp_sectorsz = omf_devparm->odp_sectorsz;
 	pd_prop->pdp_devsz    = omf_devparm->odp_devsz;
+}
+
+
+merr_t pd_init(void)
+{
+	merr_t err = 0;
+
+	mpc_rsvd_bios_max = clamp_t(uint, mpc_rsvd_bios_max, 1, 1024);
+
+	mpc_chunker_size = clamp_t(uint, mpc_chunker_size, 128, 1024);
+
+#if HAVE_BIOSET_INIT
+	do {
+		int rc;
+
+		rc = bioset_init(&mpool_bioset, mpc_rsvd_bios_max, 0, BIOSET_NEED_BVECS);
+		if (rc)
+			err = merr(rc);
+	} while(0);
+#elif HAVE_BIOSET_CREATE_3
+	mpool_bioset = bioset_create(mpc_rsvd_bios_max, 0, BIOSET_NEED_BVECS);
+	if (!mpool_bioset)
+		err = merr(ENOMEM);
+#else
+	mpool_bioset = bioset_create(mpc_rsvd_bios_max, 0);
+	if (!mpool_bioset)
+		err = merr(ENOMEM);
+#endif
+	if (err)
+		mp_pr_err("mpool bioset init failed", err);
+
+	return err;
+}
+
+void pd_exit(void)
+{
+#if HAVE_BIOSET_INIT
+	bioset_exit(&mpool_bioset);
+#else
+	if (mpool_bioset)
+		bioset_free(mpool_bioset);
+#endif
 }

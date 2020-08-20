@@ -141,4 +141,8 @@ pd_zone_preadv(
  */
 void pd_dev_set_unavail(struct pd_dev_parm *dparm, struct omf_devparm_descriptor *omf_devparm);
 
+merr_t pd_init(void);
+
+void pd_exit(void);
+
 #endif /* MPOOL_PD_PRIV_H */

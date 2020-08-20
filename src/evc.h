@@ -35,6 +35,6 @@ struct evc {
 
 void evc_count(struct evc *evc);
 void evc_init(void);
-void evc_fini(void);
+void evc_exit(void);
 
 #endif /* MPOOL_EVC_H */

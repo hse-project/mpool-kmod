@@ -128,7 +128,7 @@ void evc_init(void)
 	}
 }
 
-void evc_fini(void)
+void evc_exit(void)
 {
 	const char *modname = "mpool";
 	const char *file;
