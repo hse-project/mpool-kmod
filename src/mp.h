@@ -9,6 +9,7 @@
 #include "mpool_ioctl.h"
 
 #include "uuid.h"
+
 #include "params.h"
 
 struct mpool_descriptor;
@@ -16,15 +17,6 @@ struct mpool_descriptor;
 #define MPOOL_OP_READ  0
 #define MPOOL_OP_WRITE 1
 #define PD_DEV_ID_PDUNAVAILABLE "DID_PDUNAVAILABLE"
-
-/* Returns PD length in bytes. */
-#define PD_LEN(_pd_prop) ((_pd_prop)->pdp_devsz)
-
-/* Returns PD sector size (exponent, power of 2) */
-#define PD_SECTORSZ(_pd_prop) ((_pd_prop)->pdp_sectorsz)
-
-/* Return PD sector size mask */
-#define PD_SECTORMASK(_pd_prop) ((uint64_t)(1 << PD_SECTORSZ(&pd->pdi_prop)) - 1)
 
 #define MPOOL_DRIVES_MAX       MP_MED_NUMBER
 #define MP_MED_ALL             MP_MED_NUMBER

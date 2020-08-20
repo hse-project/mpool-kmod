@@ -13,6 +13,10 @@
 #ifndef MPOOL_MBLOCK_H
 #define MPOOL_MBLOCK_H
 
+#include <linux/uio.h>
+
+#include "merr.h"
+
 #include "mpool_ioctl.h"
 /*
  * Opaque handles for clients
@@ -68,7 +72,7 @@ merr_t
 mblock_realloc(
 	struct mpool_descriptor     *mp,
 	u64                          objid,
-	enum   mp_media_classp       mclassp,
+	enum mp_media_classp         mclassp,
 	bool                         spare,
 	struct mblock_descriptor   **mbh,
 	struct mblock_props         *prop);

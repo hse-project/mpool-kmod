@@ -8,10 +8,12 @@
 
 #include "uuid.h"
 #include "mpool_ioctl.h"
+
 #include "mp.h"
 #include "omf.h"
 
 struct mpool_descriptor;
+struct pmd_layout;
 
 /*
  * Common defs: versioned via version number field of enclosing structs

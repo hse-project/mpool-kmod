@@ -14,8 +14,17 @@
  */
 
 #include <linux/vmalloc.h>
+#include <linux/blk_types.h>
+#include <linux/mm.h>
 
-#include "mpool_defs.h"
+#include "mpool_printk.h"
+#include "assert.h"
+#include "evc.h"
+
+#include "pd.h"
+#include "pmd_obj.h"
+#include "mpcore.h"
+#include "mblock.h"
 
 /**
  * mblock2layout() - convert opaque mblock handle to pmd_layout
@@ -223,7 +232,7 @@ merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 
 	pd = pmd_layout_pd_get(mp, layout);
 	if (!pd->pdi_fua) {
-		err = pd_dev_flush(pd);
+		err = pd_dev_flush(&pd->pdi_parm);
 		if (ev(err))
 			return err;
 	}

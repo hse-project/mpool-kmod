@@ -11,9 +11,18 @@
  */
 
 #include <linux/string.h>
+#include <linux/mutex.h>
 #include <crypto/hash.h>
 
-#include "mpool_defs.h"
+#include "evc.h"
+#include "assert.h"
+#include "merr.h"
+#include "mpool_printk.h"
+
+#include "sb.h"
+#include "upgrade.h"
+#include "mpcore.h"
+#include "mp.h"
 
 /*
  * lock for serializing certain mpool ops where required/desirable; could be per
@@ -223,10 +232,16 @@ errout:
 
 		/* Erase super blocks on the drives */
 		pd = &mp->pds_pdv[0];
-		err1 = sb_erase(pd);
-		if (err1)
-			mp_pr_info("%s: cleanup, sb erase failed on device %s",
-				   mp->pds_name, pd->pdi_name);
+		if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
+			err1 = merr(EIO);
+			mp_pr_err("%s:%s unavailable or offline, status %d",
+				  err1, mp->pds_name, pd->pdi_name, mpool_pd_status_get(pd));
+		} else {
+			err1 = sb_erase(&pd->pdi_parm);
+			if (err1)
+				mp_pr_info("%s: cleanup, sb erase failed on device %s",
+					   mp->pds_name, pd->pdi_name);
+		}
 	}
 
 	mpool_desc_free(mp);
@@ -576,11 +591,21 @@ merr_t mpool_destroy(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags
 
 	/* Erase super blocks on the drives */
 	for (i = 0; i < mp->pds_pdvcnt; i++) {
-		err = sb_erase(&mp->pds_pdv[i]);
-		if (err) {
-			mp_pr_err("pd %s, sb erase failed", err, mp->pds_pdv[i].pdi_name);
-			break;
+		struct mpool_dev_info *pd;
+
+		pd = &mp->pds_pdv[i];
+		if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
+			err = merr(EIO);
+			mp_pr_err("pd %s unavailable or offline, status %d",
+				  err, pd->pdi_name, mpool_pd_status_get(pd));
+		} else {
+			err = sb_erase(&pd->pdi_parm);
+			if (err)
+				mp_pr_err("pd %s, sb erase failed", err, pd->pdi_name);
 		}
+
+		if (err)
+			break;
 	}
 
 errout:
@@ -668,11 +693,18 @@ mpool_rename(
 	for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
 		pd = &mp->pds_pdv[pdh];
 
+		if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
+			err = merr(EIO);
+			mp_pr_err("pd %s unavailable or offline, status %d",
+				  err, pd->pdi_name, mpool_pd_status_get(pd));
+			goto errout;
+		}
+
 		/*
 		 * Read superblock; init and validate pool drive info
 		 * from device parameters stored in the super block.
 		 */
-		err = sb_read(pd, sb, &omf_ver, force);
+		err = sb_read(&pd->pdi_parm, sb, &omf_ver, force);
 		if (ev(err)) {
 			mp_pr_err("pd %s, sb read failed", err, pd->pdi_name);
 			goto errout;
@@ -691,7 +723,7 @@ mpool_rename(
 
 		strlcpy(sb->osb_name, mp_newname, sizeof(sb->osb_name));
 
-		err = sb_write_update(pd, sb);
+		err = sb_write_update(&pd->pdi_parm, sb);
 		if (err) {
 			mp_pr_err("Failed to rename mpool %s on device %s",
 				  err, mp->pds_name, pd->pdi_name);
@@ -784,7 +816,7 @@ merr_t mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop 
 
 	/* Get percent spare */
 	down_read(&mp->pds_pdvlock);
-	err = mc_smap_parms_get(mp, pd->pdi_mclass, &mcsp);
+	err = mc_smap_parms_get(&mp->pds_mc[pd->pdi_mclass], &mp->pds_params, &mcsp);
 	up_read(&mp->pds_pdvlock);
 	if (ev(err))
 		goto errout;
@@ -844,7 +876,7 @@ errout:
 		 * belong to this mpool or another one.
 		 */
 		if (erase)
-			sb_erase(pd);
+			sb_erase(&pd->pdi_parm);
 
 		pd_dev_close(&pd->pdi_parm);
 	}
@@ -956,7 +988,7 @@ mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8
 		/* Update spare zone accounting for media class */
 		down_write(&mp->pds_pdvlock);
 
-		err = mc_set_spzone(mp, mclassp, drive_spares);
+		err = mc_set_spzone(&mp->pds_mc[mclassp], drive_spares);
 		if (ev(err))
 			mp_pr_err("mpool %s, setting spare %u mclass %d failed",
 				  err, mp->pds_name, drive_spares, mclassp);

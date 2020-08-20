@@ -9,8 +9,8 @@
 #include <linux/rbtree.h>
 #include <linux/kref.h>
 #include <linux/device.h>
+#include <linux/semaphore.h>
 
-#include "mblock.h"
 #include "mcache.h"
 
 #define ITERCB_NEXT     (0)
@@ -48,7 +48,10 @@ static inline struct mpc_unit *dev_to_unit(struct device *dev)
 	return dev_get_drvdata(dev);
 }
 
-struct mpc_reap *dev_to_reap(struct device *dev);
+static inline struct mpc_reap *dev_to_reap(struct device *dev)
+{
+	return dev_to_unit(dev)->un_ds_reap;
+}
 
 merr_t mpctl_init(void);
 

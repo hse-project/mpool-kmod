@@ -22,6 +22,7 @@
 #ifndef MPOOL_OMF_PRIV_H
 #define MPOOL_OMF_PRIV_H
 
+#include <linux/bug.h>
 #include <asm/byteorder.h>
 
 /*

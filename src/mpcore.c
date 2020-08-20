@@ -30,7 +30,7 @@
 #include "pd.h"
 #include "smap.h"
 #include "mclass.h"
-#include "pmd.h"
+#include "pmd_obj.h"
 #include "mpcore.h"
 #include "sb.h"
 #include "upgrade.h"
@@ -97,6 +97,12 @@ mpool_dev_sbwrite(
 	struct omf_sb_descriptor   *sb = NULL;
 	struct mc_parms		    mc_parms;
 
+	if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
+		err = merr(EIO);
+		mp_pr_err("%s:%s unavailable or offline, status %d",
+			  err, mp->pds_name, pd->pdi_name, mpool_pd_status_get(pd));
+		return err;
+	}
 
 	sb = kzalloc(sizeof(struct omf_sb_descriptor), GFP_KERNEL);
 	if (!sb) {
@@ -128,7 +134,7 @@ mpool_dev_sbwrite(
 	else
 		sbutil_mdc0_clear(sb);
 
-	err = sb_write_new(pd, sb);
+	err = sb_write_new(&pd->pdi_parm, sb);
 	if (err) {
 		mp_pr_err("mpool %s, writing superblock on drive %s, write failed",
 			  err, mp->pds_name, pd->pdi_name);
@@ -194,7 +200,7 @@ static merr_t mpool_mdc0_alloc(struct mpool_descriptor *mp, struct omf_sb_descri
 	/*
 	 * mdc0 log1/2 alloced on first 2 * zcnt zone's
 	 */
-	err = pd_zone_erase(pd, cnt, zcnt * 2, true);
+	err = pd_zone_erase(&pd->pdi_parm, cnt, zcnt * 2, true);
 	if (err) {
 		mp_pr_err("%s: sb MDC0, erase failed on %s %u %lu",
 			  err, mp->pds_name, pd->pdi_name, cnt, (ulong)zcnt);
@@ -354,11 +360,18 @@ mpool_mdc0_sb2obj(
 merr_t mpool_dev_check_new(struct mpool_descriptor *mp, struct mpool_dev_info *pd)
 {
 	int     rval;
+	merr_t  err;
+
+	if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
+		err = merr(EIO);
+		mp_pr_err("%s:%s unavailable or offline, status %d",
+			  err, mp->pds_name, pd->pdi_name, mpool_pd_status_get(pd));
+		return err;
+	}
 
 	/* Confirm drive does not contain mpool magic value */
-	rval = sb_magic_check(pd);
+	rval = sb_magic_check(&pd->pdi_parm);
 	if (rval) {
-		merr_t err;
 		if (rval < 0) {
 			err = merr(rval);
 			mp_pr_err("%s:%s read sb magic failed", err, mp->pds_name, pd->pdi_name);
@@ -418,7 +431,7 @@ mpool_desc_pdmc_add(
 		/*
 		 * No media class corresponding to the PD class yet, create one.
 		 */
-		err = mc_smap_parms_get(mp, mc_parms.mcp_classp, &mcsp);
+		err = mc_smap_parms_get(&mp->pds_mc[mc_parms.mcp_classp], &mp->pds_params, &mcsp);
 		if (ev(err))
 			return err;
 
@@ -577,12 +590,19 @@ mpool_desc_init_sb(
 		int    i;
 
 		pd = &mp->pds_pdv[pdh];
+		if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
+			err = merr(EIO);
+			mp_pr_err("pd %s unavailable or offline, status %d",
+				  err, pd->pdi_name, mpool_pd_status_get(pd));
+			kfree(sb);
+			return err;
+		}
 
 		/*
 		 * Read superblock; init and validate pool drive info
 		 * from device parameters stored in the super block.
 		 */
-		err = sb_read(pd, sb, &omf_ver, force);
+		err = sb_read(&pd->pdi_parm, sb, &omf_ver, force);
 		if (ev(err)) {
 			mp_pr_err("sb read from %s failed", err, pd->pdi_name);
 			kfree(sb);
@@ -712,7 +732,7 @@ mpool_desc_init_sb(
 			}
 
 			/* We need to overwrite the old version superblock on the device */
-			err = sb_write_update(pd, sb);
+			err = sb_write_update(&pd->pdi_parm, sb);
 			if (err) {
 				mp_pr_err("%s: pd %s, failed to convert or overwrite mpool sb",
 					  err, mp->pds_name, pd->pdi_name);
@@ -932,25 +952,6 @@ merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 	return err;
 }
 
-enum pd_status mpool_pd_status_get(struct mpool_dev_info *pd)
-{
-	enum pd_status  val;
-
-	/* Acquire semantics used so that no reads will be re-ordered from
-	 * before to after this read.
-	 */
-	val = atomic_read_acquire(&pd->pdi_status);
-
-	return val;
-}
-
-void mpool_pd_status_set(struct mpool_dev_info *pd, enum pd_status status)
-{
-	/* All prior writes must be visible prior to the status change */
-	smp_wmb();
-	atomic_set(&pd->pdi_status, status);
-}
-
 struct mpool_descriptor *mpool_desc_alloc(void)
 {
 	struct mpool_descriptor    *mp;
@@ -1002,3 +1003,21 @@ void mpool_desc_free(struct mpool_descriptor *mp)
 	kfree(mp);
 }
 
+enum pd_status mpool_pd_status_get(struct mpool_dev_info *pd)
+{
+	enum pd_status  val;
+
+	/* Acquire semantics used so that no reads will be re-ordered from
+	 * before to after this read.
+	 */
+	val = atomic_read_acquire(&pd->pdi_status);
+
+	return val;
+}
+
+void mpool_pd_status_set(struct mpool_dev_info *pd, enum pd_status status)
+{
+	/* All prior writes must be visible prior to the status change */
+	smp_wmb();
+	atomic_set(&pd->pdi_status, status);
+}

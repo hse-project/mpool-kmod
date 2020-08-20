@@ -8,8 +8,6 @@
 
 #include <linux/mutex.h>
 
-#include "merr.h"
-
 #define MPC_MDC_MAGIC           0xFEEDFEED
 #define MPC_NO_MAGIC            0xFADEFADE
 

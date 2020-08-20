@@ -9,6 +9,7 @@
 #define MPOOL_UUID_SIZE        16
 #define MPOOL_UUID_STRING_LEN  36
 
+#include <linux/kernel.h>
 #include <linux/uuid.h>
 
 #include "mpool_config.h"

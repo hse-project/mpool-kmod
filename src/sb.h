@@ -6,7 +6,11 @@
 #ifndef MPOOL_SB_PRIV_H
 #define MPOOL_SB_PRIV_H
 
-struct mpool_dev_info;
+#include "merr.h"
+
+struct pd_dev_parm;
+struct omf_sb_descriptor;
+struct pd_prop;
 
 /*
  * Drives have 2 superblocks.
@@ -37,7 +41,7 @@ struct mpool_dev_info;
 
 /**
  * sb_magic_check() - check for sb magic value
- * @pd: struct mpool_dev_info *
+ * @dparm: struct pd_dev_parm *
  *
  * Determine if the mpool magic value exists in at least one place where
  * expected on drive pd.  Does NOT imply drive has a valid superblock.
@@ -46,11 +50,11 @@ struct mpool_dev_info;
  *
  * Return: 1 if found, 0 if not found, -(errno) if error reading
  */
-int sb_magic_check(struct mpool_dev_info *pd);
+int sb_magic_check(struct pd_dev_parm *dparm);
 
 /**
  * sb_write_new() - write superblock to new drive
- * @pd: struct mpool_dev_info *
+ * @dparm: struct pd_dev_parm *
  * @sb: struct omf_sb_descriptor *
  *
  * Write superblock sb to new (non-pool) drive
@@ -59,13 +63,12 @@ int sb_magic_check(struct mpool_dev_info *pd);
  *
  * Return: 0 if successful; merr_t otherwise
  */
-merr_t sb_write_new(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb);
+merr_t sb_write_new(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb);
 
 /**
  * sb_write_update() - update superblock
- * @pd: struct mpool_dev_info *
- *	"pd" info is not used to fill up the super block, only "sb" content
- *	is used.
+ * @dparm: struct pd_dev_parm *
+ *	   "dparm" info is not used to fill up the super block, only "sb" content is used.
  * @sb: struct omf_sb_descriptor *
  *	"sb" content is written in the super block.
  *
@@ -75,11 +78,11 @@ merr_t sb_write_new(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb);
  *
  * Return: 0 if successful; merr_t otherwise
  */
-merr_t sb_write_update(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb);
+merr_t sb_write_update(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb);
 
 /**
  * sb_erase() - erase superblock
- * @pd: struct mpool_dev_info *
+ * @dparm: struct pd_dev_parm *
  *
  * Erase superblock on drive pd.
  *
@@ -87,11 +90,11 @@ merr_t sb_write_update(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb);
  *
  * Return: 0 if successful; merr_t otherwise
  */
-merr_t sb_erase(struct mpool_dev_info *pd);
+merr_t sb_erase(struct pd_dev_parm *dparm);
 
 /**
  * sb_read() - read superblock
- * @pd: struct mpool_dev_info *
+ * @dparm: struct pd_dev_parm *
  * @sb: struct omf_sb_descriptor *
  * @omf_ver: omf sb version
  * @force:
@@ -101,7 +104,7 @@ merr_t sb_erase(struct mpool_dev_info *pd);
  *
  * Return: 0 if successful; merr_t otherwise
  */
-merr_t sb_read(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb, u16 *omf_ver, bool force);
+merr_t sb_read(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb, u16 *omf_ver, bool force);
 
 /**
  * sb_zones_for_sbs() - compute how many zones are needed to contain the

@@ -7,9 +7,21 @@
 #define MPOOL_MPCORE_H
 
 #include <linux/rbtree.h>
-#include <linux/bio.h>
+#include <linux/workqueue.h>
+#include <linux/mutex.h>
+
+#include "uuid.h"
+
+#include "mp.h"
+#include "pd.h"
+#include "smap.h"
+#include "mclass.h"
+#include "pmd.h"
+#include "params.h"
 
 extern struct rb_root mpool_pools;
+
+struct pmd_layout;
 
 /**
  * DOC: LOCKING
@@ -43,6 +55,21 @@ extern struct rb_root mpool_pools;
  */
 
 /**
+ * enum mpool_status -
+ * @MPOOL_STAT_UNDEF:
+ * @MPOOL_STAT_OPTIMAL:
+ * @MPOOL_STAT_FAULTED:
+ */
+enum mpool_status {
+	MPOOL_STAT_UNDEF    = 0,
+	MPOOL_STAT_OPTIMAL  = 1,
+	MPOOL_STAT_FAULTED  = 2,
+	MPOOL_STAT_LAST = MPOOL_STAT_FAULTED,
+};
+
+_Static_assert((MPOOL_STAT_LAST < 256), "enum mpool_status must fit in u8");
+
+/**
  * struct mpool_dev_info - Pool drive state, status, and params
  * @pdi_devid:    UUID for this drive
  * @pdi_parm:     drive parms
@@ -73,7 +100,6 @@ struct mpool_dev_info {
 	struct smap_dev_alloc   pdi_ds;
 	struct rmbkt           *pdi_rmbktv;
 	struct mpool_uuid       pdi_devid;
-	char                    pdi_name[PD_NAMESZ_MAX];
 };
 
 /* Shortcuts */
@@ -88,111 +114,7 @@ struct mpool_dev_info {
 #define pdi_optiosz   pdi_parm.dpr_prop.pdp_optiosz
 #define pdi_fua       pdi_parm.dpr_prop.pdp_fua
 #define pdi_prop      pdi_parm.dpr_prop
-
-/**
- * enum mpool_status -
- * @MPOOL_STAT_UNDEF:
- * @MPOOL_STAT_OPTIMAL:
- * @MPOOL_STAT_FAULTED:
- */
-enum mpool_status {
-	MPOOL_STAT_UNDEF    = 0,
-	MPOOL_STAT_OPTIMAL  = 1,
-	MPOOL_STAT_FAULTED  = 2,
-	MPOOL_STAT_LAST = MPOOL_STAT_FAULTED,
-};
-
-_Static_assert((MPOOL_STAT_LAST < 256), "enum mpool_status must fit in u8");
-
-/**
- * enum pd_status - Transient drive status.
- * @PD_STAT_UNDEF:       undefined; should never occur
- * @PD_STAT_ONLINE:      drive is responding to I/O requests
- * @PD_STAT_SUSPECT:     drive is failing some I/O requests
- * @PD_STAT_OFFLINE:     drive declared non-responsive to I/O requests
- * @PD_STAT_UNAVAIL:     drive path not provided or open failed when
- *                        mpool was opened
- *
- * Transient drive status, these are stored as atomic_t variable
- * values
- */
-enum pd_status {
-	PD_STAT_UNDEF      = 0,
-	PD_STAT_ONLINE     = 1,
-	PD_STAT_SUSPECT    = 2,
-	PD_STAT_OFFLINE    = 3,
-	PD_STAT_UNAVAIL    = 4
-};
-
-_Static_assert((PD_STAT_UNAVAIL < 256), "enum pd_status must fit in uint8_t");
-
-/**
- * enum pd_cmd_opt - drive command options
- * @PD_CMD_DISCARD:	     the device has TRIM/UNMAP command.
- * @PD_CMD_SECTOR_UPDATABLE: the device can be read/written with sector
- *	granularity.
- * @PD_CMD_DIF_ENABLED:      T10 DIF is used on this device.
- * @PD_CMD_SED_ENABLED:      Self encrypting enabled
- * @PD_CMD_DISCARD_ZERO:     the device supports discard_zero
- * @PD_CMD_RDONLY:           activate mpool with PDs in RDONLY mode,
- *                           write/discard commands are No-OPs.
- * Defined as a bit vector so can combine.
- * Fields holding such a vector should uint64_t.
- *
- * TODO: we need to find a way to detect if SED is enabled on a device
- */
-enum pd_cmd_opt {
-	PD_CMD_NONE             = 0,
-	PD_CMD_DISCARD          = 0x1,
-	PD_CMD_SECTOR_UPDATABLE = 0x2,
-	PD_CMD_DIF_ENABLED      = 0x4,
-	PD_CMD_SED_ENABLED      = 0x8,
-	PD_CMD_DISCARD_ZERO     = 0x10,
-	PD_CMD_RDONLY           = 0x20,
-};
-
-/**
- * Device types.
- * @PD_DEV_TYPE_BLOCK_STREAM: Block device implementing streams.
- * @PD_DEV_TYPE_BLOCK_STD:    Standard (non-streams) device (SSD, HDD).
- * @PD_DEV_TYPE_FILE:	      File in user space for UT.
- * @PD_DEV_TYPE_MEM:	      Memory semantic device. Such as NVDIMM
- *			      direct access (raw or dax mode).
- * @PD_DEV_TYPE_ZONE:	      zone-like device, such as open channel SSD
- *			      and SMR HDD (using ZBC/ZAC).
- * @PD_DEV_TYPE_BLOCK_NVDIMM: Standard (non-streams) NVDIMM in sector mode.
- */
-enum pd_devtype {
-	PD_DEV_TYPE_BLOCK_STREAM = 1,
-	PD_DEV_TYPE_BLOCK_STD,
-	PD_DEV_TYPE_FILE,
-	PD_DEV_TYPE_MEM,
-	PD_DEV_TYPE_ZONE,
-	PD_DEV_TYPE_BLOCK_NVDIMM,
-	PD_DEV_TYPE_LAST = PD_DEV_TYPE_BLOCK_NVDIMM,
-};
-
-
-_Static_assert((PD_DEV_TYPE_LAST < 256), "enum pd_devtype must fit in uint8_t");
-
-/**
- * Device states.
- * @PD_DEV_STATE_AVAIL:       Device is available
- * @PD_DEV_STATE_UNAVAIL:     Device is unavailable
- */
-enum pd_state {
-	PD_DEV_STATE_UNDEFINED = 0,
-	PD_DEV_STATE_AVAIL = 1,
-	PD_DEV_STATE_UNAVAIL = 2,
-	PD_DEV_STATE_LAST = PD_DEV_STATE_UNAVAIL,
-};
-
-_Static_assert((PD_DEV_STATE_LAST < 256), "enum pd_state must fit in uint8_t");
-
-
-enum pd_status mpool_pd_status_get(struct mpool_dev_info *pd);
-
-void mpool_pd_status_set(struct mpool_dev_info *pd, enum pd_status status);
+#define pdi_name      pdi_parm.dpr_name
 
 /**
  * struct uuid_to_mpdesc_rb -
@@ -202,7 +124,7 @@ void mpool_pd_status_set(struct mpool_dev_info *pd, enum pd_status status);
  */
 struct uuid_to_mpdesc_rb {
 	struct rb_node              utm_node;
-	struct mpool_uuid             utm_uuid_le;
+	struct mpool_uuid           utm_uuid_le;
 	struct mpool_descriptor    *utm_md;
 };
 
@@ -423,5 +345,9 @@ struct mpool_descriptor *mpool_desc_alloc(void);
 void mpool_desc_free(struct mpool_descriptor *mp);
 
 merr_t mpool_dev_check_new(struct mpool_descriptor *mp, struct mpool_dev_info *pd);
+
+enum pd_status mpool_pd_status_get(struct mpool_dev_info *pd);
+
+void mpool_pd_status_set(struct mpool_dev_info *pd, enum pd_status status);
 
 #endif /* MPOOL_MPCORE_H */

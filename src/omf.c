@@ -13,10 +13,18 @@
  * All mpool metadata is versioned and stored on media in little-endian format.
  */
 
+#include <linux/slab.h>
 #include <crypto/hash.h>
 
+#include "merr.h"
+#include "evc.h"
+#include "assert.h"
+#include "mpool_printk.h"
+
 #include "mpool_config.h"
-#include "mpool_defs.h"
+#include "upgrade.h"
+#include "pmd_obj.h"
+#include "mpcore.h"
 
 #define _STR(x) #x
 #define STR(x)  _STR(x)

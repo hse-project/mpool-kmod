@@ -6,6 +6,14 @@
 #ifndef MPOOL_MCLASS_PRIV_H
 #define MPOOL_MCLASS_PRIV_H
 
+#include "merr.h"
+
+#include "mpool_ioctl.h"
+
+struct omf_devparm_descriptor;
+struct mpool_descriptor;
+struct mpcore_params;
+
 /*
  * This file contains the media class structures definitions and prototypes
  * private to mpool core.
@@ -104,13 +112,12 @@ void mc_init_class(struct media_class *mc, struct mc_parms *mc_parms, struct mc_
 
 /**
  * mc_set_spzone() - set the percent spare on the media class mclass.
- * @mp:
- * @mclass:
+ * @mc:
  * @spzone:
  *
  * Return: 0, or merr(ENOENT) if the specified mclass doesn't exist.
  */
-merr_t mc_set_spzone(struct mpool_descriptor *mp, enum mp_media_classp mclass, u8 spzone);
+merr_t mc_set_spzone(struct media_class *mc, u8 spzone);
 
 /**
  * mclass_isvalid() - Return true if the media class is valid.
@@ -129,8 +136,8 @@ static inline bool mclass_isvalid(enum mp_media_classp mclass)
  */
 merr_t
 mc_smap_parms_get(
-	struct mpool_descriptor    *mp,
-	enum mp_media_classp        mclass,
-	struct mc_smap_parms       *mcsp);
+	struct media_class     *mc,
+	struct mpcore_params   *params,
+	struct mc_smap_parms   *mcsp);
 
 #endif /* MPOOL_MCLASS_PRIV_H */

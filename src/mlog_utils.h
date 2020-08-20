@@ -9,6 +9,19 @@
 #ifndef MPOOL_MLOG_UTILS_H
 #define MPOOL_MLOG_UTILS_H
 
+#include <linux/uio.h>
+#include <linux/mutex.h>
+
+#include "merr.h"
+
+struct pmd_layout;
+struct pmd_layout_mlpriv;
+struct mpool_descriptor;
+struct mlog_descriptor;
+struct mlog_read_iter;
+struct mlog_stat;
+struct mlog_props;
+
 /* "open mlog" rbtree operations... */
 #define oml_layout_lock(_mp)        mutex_lock(&(_mp)->pds_oml_lock)
 #define oml_layout_unlock(_mp)      mutex_unlock(&(_mp)->pds_oml_lock)

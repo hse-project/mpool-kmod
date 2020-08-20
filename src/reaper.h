@@ -6,6 +6,8 @@
 #ifndef MPOOL_REAPER_H
 #define MPOOL_REAPER_H
 
+#include "merr.h"
+
 #define MPC_REAP_PARAMS_CNT    3
 
 struct mpc_reap;

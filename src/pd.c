@@ -15,9 +15,14 @@
 #include <linux/blkdev.h>
 #include <linux/blk_types.h>
 
+#include "mpool_printk.h"
+#include "evc.h"
+#include "assert.h"
+
+#include "init.h"
 #include "mpool_config.h"
-#include "mpool_defs.h"
-#include "mpctl.h"
+#include "omf_if.h"
+#include "pd.h"
 
 #ifndef SECTOR_SHIFT
 #define SECTOR_SHIFT   9
@@ -68,16 +73,16 @@ merr_t pd_dev_close(struct pd_dev_parm *dparm)
 	return bdev ? 0 : ev(EINVAL);
 }
 
-merr_t pd_dev_flush(struct mpool_dev_info *pd)
+merr_t pd_dev_flush(struct pd_dev_parm *dparm)
 {
 	struct block_device    *bdev;
 	merr_t                  err = 0;
 	int                     rc;
 
-	bdev = pd->pdi_parm.dpr_dev_private;
+	bdev = dparm->dpr_dev_private;
 	if (!bdev) {
 		err = merr(EINVAL);
-		mp_pr_err("bdev %s not registered", err, pd->pdi_name);
+		mp_pr_err("bdev %s not registered", err, dparm->dpr_name);
 		return err;
 	}
 #if HAVE_BLKDEV_FLUSH_3
@@ -87,7 +92,7 @@ merr_t pd_dev_flush(struct mpool_dev_info *pd)
 #endif
 	if (rc) {
 		err = merr(rc);
-		mp_pr_err("bdev %s, flush failed", err, pd->pdi_name);
+		mp_pr_err("bdev %s, flush failed", err, dparm->dpr_name);
 	}
 
 	return err;
@@ -95,35 +100,35 @@ merr_t pd_dev_flush(struct mpool_dev_info *pd)
 
 /**
  * pd_bio_discard_() - issue discard command to erase a byte-aligned region
- * @pd:
+ * @dparm:
  * @off:
  * @len:
  */
-static merr_t pd_bio_discard(struct mpool_dev_info *pd, u64 off, size_t len)
+static merr_t pd_bio_discard(struct pd_dev_parm *dparm, u64 off, size_t len)
 {
 	struct block_device    *bdev;
 	merr_t                  err = 0;
 	int                     rc;
 
-	bdev = pd->pdi_parm.dpr_dev_private;
+	bdev = dparm->dpr_dev_private;
 	if (!bdev) {
 		err = merr(EINVAL);
-		mp_pr_err("bdev %s not registered", err, pd->pdi_name);
+		mp_pr_err("bdev %s not registered", err, dparm->dpr_name);
 		return err;
 	}
 
 	/* Validate I/O offset is sector-aligned */
-	if (off & PD_SECTORMASK(&pd->pdi_prop)) {
+	if (off & PD_SECTORMASK(&dparm->dpr_prop)) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s, offset 0x%lx not multiple of sec size %u",
-			  err, pd->pdi_name, (ulong)off, (1 << PD_SECTORSZ(&pd->pdi_prop)));
+			  err, dparm->dpr_name, (ulong)off, (1 << PD_SECTORSZ(&dparm->dpr_prop)));
 		return err;
 	}
 
-	if (off > PD_LEN(&(pd->pdi_prop))) {
+	if (off > PD_LEN(&dparm->dpr_prop)) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s, offset 0x%lx past end 0x%lx",
-			  err, pd->pdi_name, (ulong)off, (ulong)PD_LEN(&pd->pdi_prop));
+			  err, dparm->dpr_name, (ulong)off, (ulong)PD_LEN(&dparm->dpr_prop));
 		return err;
 	}
 
@@ -131,7 +136,7 @@ static merr_t pd_bio_discard(struct mpool_dev_info *pd, u64 off, size_t len)
 	if (rc) {
 		err = merr(rc);
 		mp_pr_err("bdev %s, offset 0x%lx len 0x%lx, discard faiure",
-			  err, pd->pdi_name, (ulong)off, (ulong)len);
+			  err, dparm->dpr_name, (ulong)off, (ulong)len);
 	}
 
 	return err;
@@ -139,25 +144,25 @@ static merr_t pd_bio_discard(struct mpool_dev_info *pd, u64 off, size_t len)
 
 /**
  * pd_zone_erase() - issue write-zeros or discard commands to erase PD
- * @pd
+ * @dparm:
  * @zaddr:
  * @zonecnt:
  * @flag:
  * @afp:
  */
-merr_t pd_zone_erase(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt, bool reads_erased)
+merr_t pd_zone_erase(struct pd_dev_parm *dparm, u64 zaddr, u32 zonecnt, bool reads_erased)
 {
 	merr_t err = 0;
 	u64    cmdopt;
 
 	/* Validate args against zone param */
-	if (zaddr >= pd->pdi_parm.dpr_zonetot)
+	if (zaddr >= dparm->dpr_zonetot)
 		return merr(EINVAL);
 
 	if (zonecnt == 0)
-		zonecnt = pd->pdi_parm.dpr_zonetot - zaddr;
+		zonecnt = dparm->dpr_zonetot - zaddr;
 
-	if (zonecnt > (pd->pdi_parm.dpr_zonetot - zaddr))
+	if (zonecnt > (dparm->dpr_zonetot - zaddr))
 		return merr(EINVAL);
 
 	if (zonecnt == 0)
@@ -168,13 +173,13 @@ merr_t pd_zone_erase(struct mpool_dev_info *pd, u64 zaddr, u32 zonecnt, bool rea
 	 * would fail, so we can't discard blocks if both DIF and SED are
 	 * enabled AND we need to read blocks after erase.
 	 */
-	cmdopt = pd->pdi_cmdopt;
+	cmdopt = dparm->dpr_cmdopt;
 	if ((cmdopt & PD_CMD_DISCARD) &&
 	    !(reads_erased && (cmdopt & PD_CMD_DIF_ENABLED) && (cmdopt & PD_CMD_SED_ENABLED))) {
 		size_t zlen;
 
-		zlen = pd->pdi_parm.dpr_zonepg << PAGE_SHIFT;
-		err = pd_bio_discard(pd, zaddr * zlen, zonecnt * zlen);
+		zlen = dparm->dpr_zonepg << PAGE_SHIFT;
+		err = pd_bio_discard(dparm, zaddr * zlen, zonecnt * zlen);
 	}
 
 	return ev(err);
@@ -240,7 +245,7 @@ pd_bio_chain(struct bio *target, int op, unsigned int nr_pages, gfp_t gfp)
  * If the IO is bigger than 1MiB (BIO_MAX_PAGES pages),
  * it is split in several IOs smaller that BIO_MAX_PAGES.
  *
- * @pd:
+ * @dparm:
  * @iov:
  * @iovcnt:
  * @off: offset in bytes on disk
@@ -259,7 +264,7 @@ pd_bio_chain(struct bio *target, int op, unsigned int nr_pages, gfp_t gfp)
  */
 static merr_t
 pd_bio_rw(
-	struct mpool_dev_info  *pd,
+	struct pd_dev_parm     *dparm,
 	const struct kvec      *iov,
 	int                     iovcnt,
 	loff_t                  off,
@@ -279,27 +284,27 @@ pd_bio_rw(
 	if (iovcnt < 1)
 		return 0;
 
-	bdev = pd->pdi_parm.dpr_dev_private;
+	bdev = dparm->dpr_dev_private;
 	if (!bdev) {
 		err = merr(EINVAL);
-		mp_pr_err("bdev %s not registered", err, pd->pdi_name);
+		mp_pr_err("bdev %s not registered", err, dparm->dpr_name);
 		return err;
 	}
 
-	sector_mask = PD_SECTORMASK(&pd->pdi_prop);
+	sector_mask = PD_SECTORMASK(&dparm->dpr_prop);
 	if (ev(off & sector_mask)) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s, %s offset 0x%lx not multiple of sector size %u",
-			  err, pd->pdi_name, (rw == REQ_OP_READ) ? "read" : "write",
-			  (ulong)off, (1 << PD_SECTORSZ(&pd->pdi_prop)));
+			  err, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
+			  (ulong)off, (1 << PD_SECTORSZ(&dparm->dpr_prop)));
 		return err;
 	}
 
-	if (ev(off > PD_LEN(&(pd->pdi_prop)))) {
+	if (ev(off > PD_LEN(&dparm->dpr_prop))) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s, %s offset 0x%lx past device end 0x%lx",
-			  err, pd->pdi_name, (rw == REQ_OP_READ) ? "read" : "write",
-			  (ulong)off, (ulong)PD_LEN(&pd->pdi_prop));
+			  err, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
+			  (ulong)off, (ulong)PD_LEN(&dparm->dpr_prop));
 		return err;
 	}
 
@@ -309,7 +314,7 @@ pd_bio_rw(
 		if (!PAGE_ALIGNED((uintptr_t)iov[i].iov_base) || (iov[i].iov_len & sector_mask)) {
 			err = merr(ev(EINVAL));
 			mp_pr_err("bdev %s, %s off 0x%lx, misaligned kvec, base 0x%lx, len 0x%lx",
-				  err, pd->pdi_name, (rw == REQ_OP_READ) ? "read" : "write",
+				  err, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
 				  (ulong)off, (ulong)iov[i].iov_base, (ulong)iov[i].iov_len);
 			return err;
 		}
@@ -323,11 +328,11 @@ pd_bio_rw(
 		}
 	}
 
-	if (off + tot_len > PD_LEN(&(pd->pdi_prop))) {
+	if (off + tot_len > PD_LEN(&dparm->dpr_prop)) {
 		err = merr(ev(EINVAL));
 		mp_pr_err("bdev %s, %s I/O end past device end 0x%lx, 0x%lx:0x%x",
-			  err, pd->pdi_name, (rw == REQ_OP_READ) ? "read" : "write",
-			  (ulong)PD_LEN(&(pd->pdi_prop)), (ulong)off, tot_len);
+			  err, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
+			  (ulong)PD_LEN(&dparm->dpr_prop), (ulong)off, tot_len);
 		return err;
 	}
 
@@ -343,7 +348,7 @@ pd_bio_rw(
 	 * we can remove this DIF workaround, once we move to 4.12 or beyond.
 	 */
 	q = bdev_get_queue(bdev);
-	if (q && (pd->pdi_cmdopt & PD_CMD_DIF_ENABLED))
+	if (q && (dparm->dpr_cmdopt & PD_CMD_DIF_ENABLED))
 		iolimit = min_t(u32, iolimit, (q->limits.max_sectors << 9) >> PAGE_SHIFT);
 
 	left = 0;
@@ -404,7 +409,7 @@ pd_bio_rw(
 
 merr_t
 pd_zone_pwritev(
-	struct mpool_dev_info  *pd,
+	struct pd_dev_parm     *dparm,
 	const struct kvec      *iov,
 	int                     iovcnt,
 	u64                     zaddr,
@@ -413,17 +418,14 @@ pd_zone_pwritev(
 {
 	loff_t woff;
 
-	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
-		return merr(ev(EIO));
+	woff = ((u64)dparm->dpr_zonepg << PAGE_SHIFT) * zaddr + boff;
 
-	woff = ((u64)pd->pdi_zonepg << PAGE_SHIFT) * zaddr + boff;
-
-	return pd_bio_rw(pd, iov, iovcnt, woff, REQ_OP_WRITE, opflags);
+	return pd_bio_rw(dparm, iov, iovcnt, woff, REQ_OP_WRITE, opflags);
 }
 
 merr_t
 pd_zone_pwritev_sync(
-	struct mpool_dev_info  *pd,
+	struct pd_dev_parm     *dparm,
 	const struct kvec      *iov,
 	int                     iovcnt,
 	u64                     zaddr,
@@ -432,7 +434,7 @@ pd_zone_pwritev_sync(
 	merr_t		        err;
 	struct block_device    *bdev;
 
-	err = pd_zone_pwritev(pd, iov, iovcnt, zaddr, boff, REQ_FUA);
+	err = pd_zone_pwritev(dparm, iov, iovcnt, zaddr, boff, REQ_FUA);
 	if (ev(err))
 		return err;
 
@@ -440,7 +442,7 @@ pd_zone_pwritev_sync(
 	 * This sync & invalidate bdev ensures that the data written from the
 	 * kernel is immediately visible to the user-space.
 	 */
-	bdev = pd->pdi_parm.dpr_dev_private;
+	bdev = dparm->dpr_dev_private;
 	if (bdev) {
 		sync_blockdev(bdev);
 		invalidate_bdev(bdev);
@@ -451,7 +453,7 @@ pd_zone_pwritev_sync(
 
 merr_t
 pd_zone_preadv(
-	struct mpool_dev_info  *pd,
+	struct pd_dev_parm     *dparm,
 	const struct kvec      *iov,
 	int                     iovcnt,
 	u64                     zaddr,
@@ -459,12 +461,9 @@ pd_zone_preadv(
 {
 	loff_t roff;
 
-	if (mpool_pd_status_get(pd) == PD_STAT_UNAVAIL)
-		return merr(ev(EIO));
+	roff = ((u64)dparm->dpr_zonepg << PAGE_SHIFT) * zaddr + boff;
 
-	roff = ((u64)pd->pdi_zonepg << PAGE_SHIFT) * zaddr + boff;
-
-	return pd_bio_rw(pd, iov, iovcnt, roff, REQ_OP_READ, 0);
+	return pd_bio_rw(dparm, iov, iovcnt, roff, REQ_OP_READ, 0);
 }
 
 void pd_dev_set_unavail(struct pd_dev_parm *dparm, struct omf_devparm_descriptor *omf_devparm)

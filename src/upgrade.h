@@ -10,7 +10,6 @@
 #ifndef MPOOL_UPGRADE_PRIV_H
 #define MPOOL_UPGRADE_PRIV_H
 
-#include "omf.h"
 #include "omf_if.h"
 
 /*

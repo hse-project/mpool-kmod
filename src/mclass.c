@@ -6,10 +6,15 @@
 /*
  * This file contains the media class accessor functions.
  */
-#include <linux/sort.h>
-#include <asm/barrier.h>
 
-#include "mpool_defs.h"
+#include <linux/errno.h>
+
+#include "evc.h"
+
+#include "omf_if.h"
+#include "pd.h"
+#include "params.h"
+#include "mclass.h"
 
 void mc_init_class(struct media_class *mc, struct mc_parms *mc_parms, struct mc_smap_parms *mcsp)
 {
@@ -65,11 +70,11 @@ void mc_pd_prop2mc_parms(struct pd_prop *pd_prop, struct mc_parms *mc_parms)
 		mc_parms->mcp_features |= OMF_MC_FEAT_CHECKSUM;
 }
 
-merr_t mc_set_spzone(struct mpool_descriptor *mp, enum mp_media_classp mclass, u8 spzone)
+merr_t mc_set_spzone(struct media_class *mc, u8 spzone)
 {
-	struct media_class *mc;
+	if (ev(!mc))
+		return merr(EINVAL);
 
-	mc = &mp->pds_mc[mclass];
 	if (mc->mc_pdmc < 0)
 		return merr(ENOENT);
 
@@ -78,29 +83,26 @@ merr_t mc_set_spzone(struct mpool_descriptor *mp, enum mp_media_classp mclass, u
 	return 0;
 }
 
-static void mc_smap_parms_get_internal(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp)
+static void mc_smap_parms_get_internal(struct mpcore_params *params, struct mc_smap_parms *mcsp)
 {
-	mcsp->mcsp_spzone = mp->pds_params.mp_spare;
-	mcsp->mcsp_rgnc = mp->pds_params.mp_smaprgnc;
-	mcsp->mcsp_align = mp->pds_params.mp_smapalign;
+	mcsp->mcsp_spzone = params->mp_spare;
+	mcsp->mcsp_rgnc = params->mp_smaprgnc;
+	mcsp->mcsp_align = params->mp_smapalign;
 }
 
 merr_t
 mc_smap_parms_get(
-	struct mpool_descriptor    *mp,
-	enum mp_media_classp        mclass,
-	struct mc_smap_parms       *mcsp)
+	struct media_class     *mc,
+	struct mpcore_params   *params,
+	struct mc_smap_parms   *mcsp)
 {
-	struct media_class *mc;
-
-	if (ev(!mp || !mcsp))
+	if (ev(!mc || !mcsp))
 		return merr(EINVAL);
 
-	mc = &mp->pds_mc[mclass];
 	if (mc->mc_pdmc >= 0)
 		*mcsp = mc->mc_sparms;
 	else
-		mc_smap_parms_get_internal(mp, mcsp);
+		mc_smap_parms_get_internal(params, mcsp);
 
 	return 0;
 }

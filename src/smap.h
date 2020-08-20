@@ -6,11 +6,19 @@
 #ifndef MPOOL_SMAP_PRIV_H
 #define MPOOL_SMAP_PRIV_H
 
+#include <linux/mutex.h>
+#include <linux/spinlock.h>
+#include <linux/rbtree.h>
+#include <linux/workqueue.h>
+
+#include "merr.h"
+#include "mpool_ioctl.h"
+
 /* Forward Decls */
 struct mpool_usage;
 struct mpool_devprops;
-struct mpool_dev_info;
 struct mc_smap_parms;
+struct mpool_descriptor;
 
 /*
  * Common defs

@@ -12,7 +12,7 @@
 #include "omf_if.h"
 #include "pd.h"
 #include "smap.h"
-#include "pmd.h"
+#include "pmd_obj.h"
 #include "sb.h"
 #include "mcache.h"
 #include "mpctl.h"

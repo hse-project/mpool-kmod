@@ -6,9 +6,17 @@
 #include <linux/mm.h>
 #include <linux/log2.h>
 #include <linux/blk_types.h>
+#include <linux/rbtree.h>
+#include <linux/slab.h>
 #include <asm/page.h>
 
-#include "mpool_defs.h"
+#include "evc.h"
+#include "assert.h"
+#include "mpool_printk.h"
+
+#include "pmd_obj.h"
+#include "mpcore.h"
+#include "mlog.h"
 #include "mlog_utils.h"
 
 #define mlpriv2layout(_ptr) \

@@ -12,7 +12,8 @@
  *
  */
 
-#include "mpool_defs.h"
+#include "omf_if.h"
+#include "upgrade.h"
 
 /*
  * Latest mpool MDC content version understood by this binary.

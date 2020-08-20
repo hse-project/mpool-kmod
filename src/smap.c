@@ -10,8 +10,17 @@
 
 #include <linux/log2.h>
 #include <linux/delay.h>
+#include <linux/slab.h>
 
-#include "mpool_defs.h"
+#include "evc.h"
+#include "assert.h"
+#include "mpool_printk.h"
+
+#include "pd.h"
+#include "sb.h"
+#include "mclass.h"
+#include "smap.h"
+#include "mpcore.h"
 
 static struct kmem_cache  *smap_zone_cache __read_mostly;
 
@@ -80,7 +89,8 @@ merr_t smap_mpool_init(struct mpool_descriptor *mp)
 
 		pd = &mp->pds_pdv[pdh];
 		mc = &mp->pds_mc[pd->pdi_mclass];
-		err = mc_smap_parms_get(mp, mc->mc_parms.mcp_classp, &mcsp);
+		err = mc_smap_parms_get(&mp->pds_mc[mc->mc_parms.mcp_classp],
+					&mp->pds_params, &mcsp);
 		if (ev(err))
 			break;
 
@@ -251,7 +261,8 @@ void smap_drive_free(struct mpool_descriptor *mp, u16 pdh)
 		struct mc_smap_parms    mcsp;
 
 		mc = &mp->pds_mc[pd->pdi_mclass];
-		(void)mc_smap_parms_get(mp, mc->mc_parms.mcp_classp, &mcsp);
+		(void)mc_smap_parms_get(&mp->pds_mc[mc->mc_parms.mcp_classp],
+					&mp->pds_params, &mcsp);
 
 		for (rgn = 0; rgn < mcsp.mcsp_rgnc; rgn++) {
 			struct smap_zone   *zone, *tmp;
@@ -380,7 +391,7 @@ smap_alloc(
 
 	ds = &pd->pdi_ds;
 	mc = &mp->pds_mc[pd->pdi_mclass];
-	err = mc_smap_parms_get(mp, mc->mc_parms.mcp_classp, &mcsp);
+	err = mc_smap_parms_get(&mp->pds_mc[mc->mc_parms.mcp_classp], &mp->pds_params, &mcsp);
 	if (ev(err))
 		return err;
 	rgnc = mcsp.mcsp_rgnc;
@@ -625,7 +636,7 @@ static u32 smap_addr2rgn(struct mpool_descriptor *mp, struct mpool_dev_info *pd,
 {
 	struct mc_smap_parms   mcsp;
 
-	mc_smap_parms_get(mp, pd->pdi_mclass, &mcsp);
+	mc_smap_parms_get(&mp->pds_mc[pd->pdi_mclass], &mp->pds_params, &mcsp);
 
 	if (zoneaddr >= pd->pdi_ds.sda_rgnladdr)
 		return mcsp.mcsp_rgnc - 1;

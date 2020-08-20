@@ -1,6 +1,6 @@
 obj-m = mpool.o
 
-mpool-objs = evc.o init.o mblock.o mclass.o merr.o mlog_utils.o mlog.o mdc.o omf.o pd.o pmd_utils.o pmd.o sb.o smap.o upgrade.o mpcore.o mp.o mpctl.o mcache.o sysfs.o reaper.o
+mpool-objs = evc.o init.o mblock.o mclass.o merr.o mlog_utils.o mlog.o mdc.o omf.o pd.o pmd_obj.o pmd.o sb.o smap.o upgrade.o mpcore.o mp.o mpctl.o mcache.o sysfs.o reaper.o
 
 ccflags-y += -Wall
 ccflags-y += -Werror

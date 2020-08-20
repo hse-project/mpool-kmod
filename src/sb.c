@@ -9,7 +9,18 @@
  *
  */
 
-#include "mpool_defs.h"
+#include <linux/slab.h>
+#include <linux/uio.h>
+
+#include "mpool_printk.h"
+#include "assert.h"
+#include "evc.h"
+
+#include "mpool_ioctl.h"
+#include "pd.h"
+#include "omf_if.h"
+#include "sb.h"
+#include "mclass.h"
 
 /* Cleared out sb */
 struct omf_sb_descriptor SBCLEAR;
@@ -35,16 +46,16 @@ struct omf_sb_descriptor SBCLEAR;
  *
  * Returns: true if we have enough to read the superblocks.
  */
-static bool sb_prop_valid(struct mpool_dev_info *pd)
+static bool sb_prop_valid(struct pd_dev_parm *dparm)
 {
-	struct pd_prop *pd_prop = &(pd->pdi_parm.dpr_prop);
+	struct pd_prop *pd_prop = &dparm->dpr_prop;
 
 	if (SB_AREA_SZ < OMF_SB_DESC_PACKLEN) {
 		merr_t err = merr(EINVAL);
 
 		/* Guarantee that the SB area is large enough to hold an SB */
 		mp_pr_err("sb(%s): structure too big %lu %lu",
-			  err, pd->pdi_name, (ulong)SB_AREA_SZ, OMF_SB_DESC_PACKLEN);
+			  err, dparm->dpr_name, (ulong)SB_AREA_SZ, OMF_SB_DESC_PACKLEN);
 		return false;
 	}
 
@@ -54,32 +65,31 @@ static bool sb_prop_valid(struct mpool_dev_info *pd)
 		merr_t err = merr(EINVAL);
 
 		mp_pr_err("sb(%s): unknown device type %d",
-			  err, pd->pdi_name, pd_prop->pdp_devtype);
+			  err, dparm->dpr_name, pd_prop->pdp_devtype);
 		return false;
 	}
 
 	if (PD_LEN(pd_prop) == 0) {
 		merr_t err = merr(EINVAL);
 
-		mp_pr_err("sb(%s): unknown device size", err, pd->pdi_name);
+		mp_pr_err("sb(%s): unknown device size", err, dparm->dpr_name);
 		return false;
 	}
 
 	return true;
 };
 
-static u64 sb_idx2woff(struct mpool_dev_info *pd, u32 idx)
+static u64 sb_idx2woff(u32 idx)
 {
 	return (u64)idx * (SB_AREA_SZ + MDC0MD_AREA_SZ);
 }
 
 /**
  * sb_parm_valid() - Validate parameters passed to an SB API function
- * @pd: struct mpool_dev_info *
+ * @dparm: struct pd_dev_parm
  *
  * When this function is called it is assumed that the zone parameters of the
  * PD are already known.
- * Validates mpool_dev_info structure before a superblock is written.
  *
  * Part of the validation is enforcing the rule from the comment above that
  * there needs to be at least one more zone than those consumed by the
@@ -87,9 +97,9 @@ static u64 sb_idx2woff(struct mpool_dev_info *pd, u32 idx)
  *
  * Returns: true if drive pd meets criteria for sb, false otherwise.
  */
-static bool sb_parm_valid(struct mpool_dev_info *pd)
+static bool sb_parm_valid(struct pd_dev_parm *dparm)
 {
-	struct pd_prop *pd_prop = &(pd->pdi_parm.dpr_prop);
+	struct pd_prop *pd_prop = &dparm->dpr_prop;
 
 	u32    cnt;
 
@@ -103,13 +113,13 @@ static bool sb_parm_valid(struct mpool_dev_info *pd)
 		return false;
 	}
 
-	cnt = sb_zones_for_sbs(&(pd->pdi_parm.dpr_prop));
+	cnt = sb_zones_for_sbs(pd_prop);
 	if (cnt < 1) {
 		/* At least one zone is needed to hold SB0 and SB1. */
 		return false;
 	}
 
-	if (pd->pdi_zonetot < (cnt + 1)) {
+	if (dparm->dpr_zonetot < (cnt + 1)) {
 		/* Guarantee that there is at least one zone not consumed by SBs. */
 		return false;
 	}
@@ -121,21 +131,21 @@ static bool sb_parm_valid(struct mpool_dev_info *pd)
  * Write packed superblock in outbuf to sb copy number idx on drive pd.
  * Returns: 0 if successful; merr_t otherwise
  */
-static merr_t sb_write_sbx(struct mpool_dev_info *pd, char *outbuf, u32 idx)
+static merr_t sb_write_sbx(struct pd_dev_parm *dparm, char *outbuf, u32 idx)
 {
 	const struct kvec  iov = { outbuf, SB_AREA_SZ };
 	merr_t             err;
 	u64                woff;
 
-	woff = sb_idx2woff(pd, idx);
+	woff = sb_idx2woff(idx);
 
-	err = pd_zone_pwritev_sync(pd, &iov, 1, 0, woff);
+	err = pd_zone_pwritev_sync(dparm, &iov, 1, 0, woff);
 	/* Reset the rval as per api */
 	if (err >= 0)
 		err = 0;
 	else
 		mp_pr_err("sb(%s, %d): write failed, woff %lu",
-			  err, pd->pdi_name, idx, (ulong)woff);
+			  err, dparm->dpr_name, idx, (ulong)woff);
 
 	return err;
 }
@@ -145,20 +155,21 @@ static merr_t sb_write_sbx(struct mpool_dev_info *pd, char *outbuf, u32 idx)
  * Returns: 0 if successful; merr_t otherwise
  *
  */
-static merr_t sb_read_sbx(struct mpool_dev_info *pd, char *inbuf, u32 idx)
+static merr_t sb_read_sbx(struct pd_dev_parm *dparm, char *inbuf, u32 idx)
 {
 	const struct kvec  iov = { inbuf, SB_AREA_SZ };
 	u64                woff;
 	merr_t             err;
 
-	woff = sb_idx2woff(pd, idx);
+	woff = sb_idx2woff(idx);
 
-	err = pd_zone_preadv(pd, &iov, 1, 0, woff);
+	err = pd_zone_preadv(dparm, &iov, 1, 0, woff);
 	/* Reset rval as per api */
 	if (err >= 0)
 		err = 0;
 	else
-		mp_pr_err("sb(%s, %d): read failed, woff %lu", err, pd->pdi_name, idx, (ulong)woff);
+		mp_pr_err("sb(%s, %d): read failed, woff %lu",
+			  err, dparm->dpr_name, idx, (ulong)woff);
 
 	return err;
 }
@@ -176,16 +187,16 @@ static merr_t sb_read_sbx(struct mpool_dev_info *pd, char *inbuf, u32 idx)
  * Returns: 1 if found, 0 if not found, -(errno) if error reading
  *
  */
-int sb_magic_check(struct mpool_dev_info *pd)
+int sb_magic_check(struct pd_dev_parm *dparm)
 {
 	int     rval = 0, i;
 	char   *inbuf;
 	merr_t  err;
 
-	if (!sb_prop_valid(pd)) {
+	if (!sb_prop_valid(dparm)) {
 		err = merr(EINVAL);
 		mp_pr_err("sb(%s): invalid param, zonepg %u zonetot %u",
-			  err, pd->pdi_name, pd->pdi_parm.dpr_zonepg, pd->pdi_parm.dpr_zonetot);
+			  err, dparm->dpr_name, dparm->dpr_zonepg, dparm->dpr_zonetot);
 		return -merr_errno(err);
 	}
 
@@ -194,21 +205,21 @@ int sb_magic_check(struct mpool_dev_info *pd)
 	inbuf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!inbuf) {
 		err = merr(ENOMEM);
-		mp_pr_err("sb(%s) magic check: buffer alloc failed", err, pd->pdi_name);
+		mp_pr_err("sb(%s) magic check: buffer alloc failed", err, dparm->dpr_name);
 		return -merr_errno(err);
 	}
 
 	for (i = 0; i < SB_SB_COUNT; i++) {
 		const struct kvec iov = { inbuf, SB_AREA_SZ };
-		u64 woff = sb_idx2woff(pd, i);
+		u64 woff = sb_idx2woff(i);
 
 		memset(inbuf, 0, SB_AREA_SZ);
 
-		err = pd_zone_preadv(pd, &iov, 1, 0, woff);
+		err = pd_zone_preadv(dparm, &iov, 1, 0, woff);
 		if (err) {
 			rval = merr_errno(err);
 			mp_pr_err("sb(%s, %d) magic: read failed, woff %lu",
-				  err, pd->pdi_name, i, (ulong)woff);
+				  err, dparm->dpr_name, i, (ulong)woff);
 		} else if (omf_sb_has_magic_le(inbuf)) {
 			kfree(inbuf);
 			return 1;
@@ -227,7 +238,7 @@ int sb_magic_check(struct mpool_dev_info *pd)
  * Returns: 0 if successful; merr_t otherwise
  *
  */
-merr_t sb_write_new(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
+merr_t sb_write_new(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb)
 {
 	merr_t  err;
 	char   *outbuf;
@@ -235,10 +246,10 @@ merr_t sb_write_new(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 
 	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
-	if (!sb_parm_valid(pd)) {
+	if (!sb_parm_valid(dparm)) {
 		err = merr(EINVAL);
 		mp_pr_err("sb(%s) invalid param, zonepg %u zonetot %u",
-			  err, pd->pdi_name, pd->pdi_parm.dpr_zonepg, pd->pdi_parm.dpr_zonetot);
+			  err, dparm->dpr_name, dparm->dpr_zonepg, dparm->dpr_zonetot);
 		return err;
 	}
 
@@ -250,7 +261,7 @@ merr_t sb_write_new(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 
 	err = omf_sb_pack_htole(sb, outbuf);
 	if (err) {
-		mp_pr_err("sb(%s) packing failed", err, pd->pdi_name);
+		mp_pr_err("sb(%s) packing failed", err, dparm->dpr_name);
 		kfree(outbuf);
 		return err;
 	}
@@ -260,9 +271,9 @@ merr_t sb_write_new(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 	 * copies.
 	 */
 	for (i = 0; i < SB_SB_COUNT; i++) {
-		err = sb_write_sbx(pd, outbuf, i);
+		err = sb_write_sbx(dparm, outbuf, i);
 		if (err) {
-			mp_pr_err("sb(%s, %d): write sbx failed", err, pd->pdi_name, i);
+			mp_pr_err("sb(%s, %d): write sbx failed", err, dparm->dpr_name, i);
 			break;
 		}
 	}
@@ -279,7 +290,7 @@ merr_t sb_write_new(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
  * Returns: 0 if successful; merr_t otherwise
  *
  */
-merr_t sb_write_update(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
+merr_t sb_write_update(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb)
 {
 	merr_t  err;
 	char   *outbuf;
@@ -287,11 +298,11 @@ merr_t sb_write_update(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 
 	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
-	if (!sb_parm_valid(pd)) {
+	if (!sb_parm_valid(dparm)) {
 		err = merr(EINVAL);
 		mp_pr_err("sb(%s) invalid param, zonepg %u zonetot %u partlen %lu",
-			  err, pd->pdi_name, pd->pdi_parm.dpr_zonepg, pd->pdi_parm.dpr_zonetot,
-			  (ulong)PD_LEN(&pd->pdi_prop));
+			  err, dparm->dpr_name, dparm->dpr_zonepg, dparm->dpr_zonetot,
+			  (ulong)PD_LEN(&dparm->dpr_prop));
 		return err;
 	}
 
@@ -303,16 +314,16 @@ merr_t sb_write_update(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
 
 	err = omf_sb_pack_htole(sb, outbuf);
 	if (ev(err)) {
-		mp_pr_err("sb(%s) packing failed", err, pd->pdi_name);
+		mp_pr_err("sb(%s) packing failed", err, dparm->dpr_name);
 		kfree(outbuf);
 		return err;
 	}
 
 	/* Update sb0 first and then sb1 if that is successful */
 	for (i = 0; i < SB_SB_COUNT; i++) {
-		err = sb_write_sbx(pd, outbuf, i);
+		err = sb_write_sbx(dparm, outbuf, i);
 		if (ev(err)) {
-			mp_pr_err("sb(%s, %d) sbx write failed", err, pd->pdi_name, i);
+			mp_pr_err("sb(%s, %d) sbx write failed", err, dparm->dpr_name, i);
 			if (i == 0)
 				break;
 			err = 0;
@@ -332,16 +343,16 @@ merr_t sb_write_update(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb)
  * Returns: 0 if successful; merr_t otherwise
  *
  */
-merr_t sb_erase(struct mpool_dev_info *pd)
+merr_t sb_erase(struct pd_dev_parm *dparm)
 {
 	merr_t  err = 0;
 	char   *buf;
 	int     i;
 
-	if (!sb_prop_valid(pd)) {
+	if (!sb_prop_valid(dparm)) {
 		err = merr(EINVAL);
-		mp_pr_err("sb(%s) invalid param, zonepg %u zonetot %u", err, pd->pdi_name,
-			  pd->pdi_parm.dpr_zonepg, pd->pdi_parm.dpr_zonetot);
+		mp_pr_err("sb(%s) invalid param, zonepg %u zonetot %u", err, dparm->dpr_name,
+			  dparm->dpr_zonepg, dparm->dpr_zonetot);
 		return err;
 	}
 
@@ -355,11 +366,11 @@ merr_t sb_erase(struct mpool_dev_info *pd)
 
 	for (i = 0; i < SB_SB_COUNT; i++) {
 		const struct kvec iov = { buf, SB_AREA_SZ };
-		u64 woff = sb_idx2woff(pd, i);
+		u64 woff = sb_idx2woff(i);
 
-		err = pd_zone_pwritev_sync(pd, &iov, 1, 0, woff);
+		err = pd_zone_pwritev_sync(dparm, &iov, 1, 0, woff);
 		if (err)
-			mp_pr_err("sb(%s, %d): erase failed", err, pd->pdi_name, i);
+			mp_pr_err("sb(%s, %d): erase failed", err, dparm->dpr_name, i);
 	}
 
 	kfree(buf);
@@ -367,9 +378,9 @@ merr_t sb_erase(struct mpool_dev_info *pd)
 	return err;
 }
 
-static merr_t sb_reconcile(struct omf_sb_descriptor *sb, struct mpool_dev_info *pd, bool force)
+static merr_t sb_reconcile(struct omf_sb_descriptor *sb, struct pd_dev_parm *dparm, bool force)
 {
-	struct pd_prop                 *pd_prop = &(pd->pdi_parm.dpr_prop);
+	struct pd_prop                 *pd_prop = &dparm->dpr_prop;
 	struct omf_devparm_descriptor  *sb_parm = &(sb->osb_parm);
 	struct mc_parms		        mc_parms;
 	merr_t                          err;
@@ -385,7 +396,8 @@ static merr_t sb_reconcile(struct omf_sb_descriptor *sb, struct mpool_dev_info *
 		err = merr(EINVAL);
 
 		mp_pr_err("sb(%s): devsz(%lu) > discovered (%lu)",
-			  err, pd->pdi_name, (ulong)sb_parm->odp_devsz, (ulong)pd_prop->pdp_devsz);
+			  err, dparm->dpr_name, (ulong)sb_parm->odp_devsz,
+			  (ulong)pd_prop->pdp_devsz);
 		return err;
 	}
 
@@ -393,7 +405,7 @@ static merr_t sb_reconcile(struct omf_sb_descriptor *sb, struct mpool_dev_info *
 		err = merr(EINVAL);
 
 		mp_pr_err("sb(%s) sector size(%u) mismatches discovered(%u)",
-			  err, pd->pdi_name, sb_parm->odp_sectorsz, PD_SECTORSZ(pd_prop));
+			  err, dparm->dpr_name, sb_parm->odp_sectorsz, PD_SECTORSZ(pd_prop));
 		return err;
 	}
 
@@ -401,7 +413,7 @@ static merr_t sb_reconcile(struct omf_sb_descriptor *sb, struct mpool_dev_info *
 		err = merr(EINVAL);
 
 		mp_pr_err("sb(%s), pd type(%u) mismatches discovered(%u)",
-			  err, pd->pdi_name, sb_parm->odp_devtype, pd_prop->pdp_devtype);
+			  err, dparm->dpr_name, sb_parm->odp_devtype, pd_prop->pdp_devtype);
 		return err;
 	}
 
@@ -410,7 +422,7 @@ static merr_t sb_reconcile(struct omf_sb_descriptor *sb, struct mpool_dev_info *
 		err = merr(EINVAL);
 
 		mp_pr_err("sb(%s), pd features(%lu) mismatches discovered(%lu)",
-			  err, pd->pdi_name, (ulong)sb_parm->odp_features,
+			  err, dparm->dpr_name, (ulong)sb_parm->odp_features,
 			  (ulong)mc_parms.mcp_features);
 		return err;
 	}
@@ -426,7 +438,7 @@ static merr_t sb_reconcile(struct omf_sb_descriptor *sb, struct mpool_dev_info *
  * Returns: 0 if successful; merr_t otherwise
  *
  */
-merr_t sb_read(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb, u16 *omf_ver, bool force)
+merr_t sb_read(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb, u16 *omf_ver, bool force)
 {
 	struct omf_sb_descriptor *sbtmp;
 
@@ -434,10 +446,10 @@ merr_t sb_read(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb, u16 *omf
 	char   *buf;
 	int     i;
 
-	if (!sb_prop_valid(pd)) {
+	if (!sb_prop_valid(dparm)) {
 		err = merr(EINVAL);
 		mp_pr_err("sb(%s) invalid parameter, zonepg %u zonetot %u",
-			  err, pd->pdi_name, pd->pdi_parm.dpr_zonepg, pd->pdi_parm.dpr_zonetot);
+			  err, dparm->dpr_name, dparm->dpr_zonepg, dparm->dpr_zonetot);
 		return err;
 	}
 
@@ -461,14 +473,14 @@ merr_t sb_read(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb, u16 *omf
 	for (i = 0; i < SB_SB_COUNT; i++) {
 		memset(buf, 0, SB_AREA_SZ);
 
-		err = sb_read_sbx(pd, buf, i);
+		err = sb_read_sbx(dparm, buf, i);
 		if (err)
-			mp_pr_err("sb(%s, %d) read sbx failed", err, pd->pdi_name, i);
+			mp_pr_err("sb(%s, %d) read sbx failed", err, dparm->dpr_name, i);
 		else {
 			err = omf_sb_unpack_letoh(sbtmp, buf, omf_ver);
 			if (err)
 				mp_pr_err("sb(%s, %d) bad magic/version/cksum",
-					  err, pd->pdi_name, i);
+					  err, dparm->dpr_name, i);
 			else if (i == 0)
 				/* Deep copy to main struct  */
 				*sb = *sbtmp;
@@ -487,7 +499,7 @@ merr_t sb_read(struct mpool_dev_info *pd, struct omf_sb_descriptor *sb, u16 *omf
 	 * Check that superblock SB0 is consistent and
 	 * update the PD properties from it.
 	 */
-	err = sb_reconcile(sb, pd, force);
+	err = sb_reconcile(sb, dparm, force);
 	if (ev(err))
 		rval = err;
 

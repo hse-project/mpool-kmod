@@ -8,7 +8,12 @@
 #include <linux/blk_types.h>
 #include <asm/page.h>
 
-#include "mpool_defs.h"
+#include "assert.h"
+#include "evc.h"
+#include "mpool_printk.h"
+
+#include "omf_if.h"
+#include "mpcore.h"
 #include "mlog_utils.h"
 
 bool mlog_objid(u64 objid)

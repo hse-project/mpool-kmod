@@ -9,7 +9,17 @@
 #ifndef MPOOL_MLOG_H
 #define MPOOL_MLOG_H
 
+#include <linux/uio.h>
+
+#include "merr.h"
+
+#include "mpool_ioctl.h"
+
 #define MB       (1024 * 1024)
+struct pmd_layout;
+struct mpool_descriptor;
+struct mlog_descriptor;
+
 
 /*
  * struct mlog_read_iter -
@@ -103,13 +113,6 @@ struct mlog_stat {
 #define MLOG_NSECLPG(lstat) ((lstat)->lst_mfp.mfp_nseclpg)
 
 #define IS_SECPGA(lstat)    ((lstat)->lst_mfp.mfp_secpga)
-
-/*
- * Opaque handles for clients
- */
-struct mpool_descriptor;
-struct mlog_descriptor;
-struct mpool_obj_layout;
 
 /*
  * mlog API functions
