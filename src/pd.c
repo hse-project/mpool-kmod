@@ -503,7 +503,7 @@ merr_t pd_init(void)
 		rc = bioset_init(&mpool_bioset, mpc_rsvd_bios_max, 0, BIOSET_NEED_BVECS);
 		if (rc)
 			err = merr(rc);
-	} while(0);
+	} while (0);
 #elif HAVE_BIOSET_CREATE_3
 	mpool_bioset = bioset_create(mpc_rsvd_bios_max, 0, BIOSET_NEED_BVECS);
 	if (!mpool_bioset)

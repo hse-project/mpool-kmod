@@ -200,7 +200,7 @@ void smap_mpool_free(struct mpool_descriptor *mp);
  * report on all media classes; caller must hold mp.pdvlock.
  *
  * Locking: the caller should hold the pds_pdvlock at least in read to
- *	to be protected against media classes updates.
+ *	    be protected against media classes updates.
  *
  * Return: 0 if successful, merr_t otherwise...
  */
@@ -216,7 +216,7 @@ void smap_mpool_usage(struct mpool_descriptor *mp, u8 mclass, struct mpool_usage
  * caller must hold mp.pdvlock.
  *
  * Locking: the caller should hold the pds_pdvlock at least in read to
- *	to be protected against media classes updates.
+ *	    be protected against media classes updates.
  *
  * Return: 0 if successful; merr_t otherwise
  */
@@ -325,7 +325,7 @@ merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp,
  * @usage: output
  *
  * Locking: the caller should hold the pds_pdvlock at least in read to
- *	to be protected against media classes updates.
+ *	    be protected against media classes updates.
  */
 void smap_mclass_usage(struct mpool_descriptor *mp, u8 mclass, struct mpool_usage *usage);
 

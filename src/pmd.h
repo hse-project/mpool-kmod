@@ -106,7 +106,7 @@ struct pre_compact_ctrs {
  * @ci_slot:        MDC slot number
  *
  * Contains information about available credit and a balance. Available
- * credit is based on an rate at which records can can be written to
+ * credit is based on an rate at which records can be written to
  * mdc such that all MDC will fill at the same time.
  */
 struct credit_info  {

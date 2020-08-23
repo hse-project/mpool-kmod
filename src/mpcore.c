@@ -556,7 +556,7 @@ void mpool_mdc_cap_init(struct mpool_descriptor *mp, struct mpool_dev_info *pd)
  * Read the super blocks of the PDs.
  * Adjust the discovered PD properties stored in pd->pdi_parm.dpr_prop with
  * PD parameters from the super block. Some of discovered PD properties are
- * default (like zone size) and need to to be adjusted to what the PD actually
+ * default (like zone size) and need to be adjusted to what the PD actually
  * use.
  */
 merr_t

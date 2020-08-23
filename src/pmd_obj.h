@@ -336,27 +336,27 @@ merr_t pmd_obj_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, u64
 struct pmd_layout *pmd_obj_find_get(struct mpool_descriptor *mp, u64 objid, int which);
 
 /**
- *  * pmd_obj_rdlock() - Read-lock object layout with appropriate nesting level.
- *   * @layout:
- *    */
+ * pmd_obj_rdlock() - Read-lock object layout with appropriate nesting level.
+ * @layout:
+ */
 void pmd_obj_rdlock(struct pmd_layout *layout);
 
 /**
- *  * pmd_obj_rdunlock() - Release read lock on object layout.
- *   * @layout:
- *    */
+ * pmd_obj_rdunlock() - Release read lock on object layout.
+ * @layout:
+ */
 void pmd_obj_rdunlock(struct pmd_layout *layout);
 
 /**
- *  * pmd_obj_wrlock() - Write-lock object layout with appropriate nesting level.
- *   * @layout:
- *    */
+ * pmd_obj_wrlock() - Write-lock object layout with appropriate nesting level.
+ * @layout:
+ */
 void pmd_obj_wrlock(struct pmd_layout *layout);
 
 /**
- *  * pmd_obj_wrunlock() - Release write lock on object layout.
- *   * @layout:
- *    */
+ * pmd_obj_wrunlock() - Release write lock on object layout.
+ * @layout:
+ */
 void pmd_obj_wrunlock(struct pmd_layout *layout);
 
 /**

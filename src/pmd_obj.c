@@ -1479,7 +1479,7 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 	 *
 	 * MDC that is in pre-compacting state and two MDCs that follows
 	 * are excluded from allocation. This is done to prevent stall/
-	 * delays for a sync that follows an allocation as both take
+	 * delays for a sync that follows an allocation as both
 	 * take a compaction lock.
 	 */
 	if (mp->pds_mda.mdi_slotvcnt < (nbnoalloc + 2)) {

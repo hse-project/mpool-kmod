@@ -2297,7 +2297,7 @@ mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi, void *stkbuf, siz
 
 	/*
 	 * For small iovec counts we simply copyin the array of iovecs
-	 * to the the stack (kiov_buf). Otherwise, we must kmalloc a
+	 * to the stack (kiov_buf). Otherwise, we must kmalloc a
 	 * buffer into which to perform the copyin.
 	 */
 	if (mi->mi_iovc > MPIOC_KIOV_MAX)

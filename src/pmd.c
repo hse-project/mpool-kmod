@@ -31,7 +31,7 @@
 #include "mpcore.h"
 #include "pmd.h"
 
-DEFINE_MUTEX(pmd_s_lock);
+static DEFINE_MUTEX(pmd_s_lock);
 
 #define pmd_co_foreach(_cinfo, _node) \
 	for ((_node) = rb_first(&(_cinfo)->mmi_co_root); (_node); (_node) = rb_next((_node)))
