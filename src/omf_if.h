@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_OMF_IF_PRIV_H
-#define MPOOL_OMF_IF_PRIV_H
+#ifndef MPOOL_OMF_IF_H
+#define MPOOL_OMF_IF_H
 
 #include "uuid.h"
 #include "mpool_ioctl.h"
@@ -411,4 +411,4 @@ merr_t omf_init(void);
 
 void omf_exit(void);
 
-#endif /* MPOOL_OMF_IF_PRIV_H */
+#endif /* MPOOL_OMF_IF_H */

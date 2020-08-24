@@ -7,8 +7,8 @@
  * Defines structures for upgrading MPOOL meta data
  */
 
-#ifndef MPOOL_UPGRADE_PRIV_H
-#define MPOOL_UPGRADE_PRIV_H
+#ifndef MPOOL_UPGRADE_H
+#define MPOOL_UPGRADE_H
 
 #include "omf_if.h"
 
@@ -131,4 +131,4 @@ bool omfu_mdcver_cmp(struct omf_mdcver *a, char *op, struct omf_mdcver *b);
  */
 bool omfu_mdcver_cmp2(struct omf_mdcver *a, char *op, u16 major, u16 minor, u16 patch, u16 dev);
 
-#endif /* MPOOL_UPGRADE_PRIV_H */
+#endif /* MPOOL_UPGRADE_H */

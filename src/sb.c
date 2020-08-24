@@ -509,16 +509,6 @@ exit:
 	return rval;
 }
 
-u32 sb_zones_for_sbs(struct pd_prop *pd_prop)
-{
-	u32    zonebyte;
-
-	zonebyte = pd_prop->pdp_zparam.dvb_zonepg << PAGE_SHIFT;
-
-	return (2 * (SB_AREA_SZ + MDC0MD_AREA_SZ) + (zonebyte - 1)) /
-		zonebyte;
-}
-
 /*
  * Clear (set to zeros) mdc0 portion of sb.
  */

@@ -16,38 +16,6 @@
 #include "mpcore.h"
 #include "mlog_utils.h"
 
-bool mlog_objid(u64 objid)
-{
-	return objid && pmd_objid_type(objid) == OMF_OBJ_MLOG;
-}
-
-/**
- * mlog2layout() - convert opaque mlog handle to pmd_layout
- *
- * This function converts the opaque handle (mlog_descriptor) used by
- * clients to the internal representation (pmd_layout).  The
- * conversion is a simple cast, followed by a sanity check to verify the
- * layout object is an mlog object.  If the validation fails, a NULL
- * pointer is returned.
- */
-struct pmd_layout *mlog2layout(struct mlog_descriptor *mlh)
-{
-	struct pmd_layout *layout = (void *)mlh;
-
-	return mlog_objid(layout->eld_objid) ? layout : NULL;
-}
-
-/**
- * layout2mlog() - convert pmd_layout to opaque mlog_descriptor
- *
- * This function converts the internally used pmd_layout to
- * the externally used opaque mlog_descriptor.
- */
-struct mlog_descriptor *layout2mlog(struct pmd_layout *layout)
-{
-	return (struct mlog_descriptor *)layout;
-}
-
 /**
  * mlog_alloc_cmn() -
  *

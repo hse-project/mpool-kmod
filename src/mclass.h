@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_MCLASS_PRIV_H
-#define MPOOL_MCLASS_PRIV_H
+#ifndef MPOOL_MCLASS_H
+#define MPOOL_MCLASS_H
 
 #include "merr.h"
 
@@ -140,4 +140,4 @@ mc_smap_parms_get(
 	struct mpcore_params   *params,
 	struct mc_smap_parms   *mcsp);
 
-#endif /* MPOOL_MCLASS_PRIV_H */
+#endif /* MPOOL_MCLASS_H */

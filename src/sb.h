@@ -7,10 +7,13 @@
 #define MPOOL_SB_PRIV_H
 
 #include "merr.h"
+#include "mpool_ioctl.h"
 
 struct pd_dev_parm;
 struct omf_sb_descriptor;
 struct pd_prop;
+
+extern struct omf_sb_descriptor SBCLEAR;
 
 /*
  * Drives have 2 superblocks.
@@ -107,13 +110,6 @@ merr_t sb_erase(struct pd_dev_parm *dparm);
 merr_t sb_read(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb, u16 *omf_ver, bool force);
 
 /**
- * sb_zones_for_sbs() - compute how many zones are needed to contain the
- *	               superblocks.
- * @pd_prop:
- */
-u32 sb_zones_for_sbs(struct pd_prop *pd_prop);
-
-/**
  * sbutil_mdc0_clear() - clear mdc0 of superblock
  * @sb: struct omf_sb_descriptor *)
  *
@@ -151,13 +147,21 @@ void sbutil_mdc0_copy(struct omf_sb_descriptor *tgtsb, struct omf_sb_descriptor 
  */
 int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb);
 
-/*
- * sb internal functions
- */
-extern struct omf_sb_descriptor SBCLEAR;
-
 merr_t sb_init(void);
 
 void sb_exit(void);
+
+/**
+ * sb_zones_for_sbs() - compute how many zones are needed to contain the superblocks.
+ * @pd_prop:
+ */
+static inline u32 sb_zones_for_sbs(struct pd_prop *pd_prop)
+{
+	u32    zonebyte;
+
+	zonebyte = pd_prop->pdp_zparam.dvb_zonepg << PAGE_SHIFT;
+
+	return (2 * (SB_AREA_SZ + MDC0MD_AREA_SZ) + (zonebyte - 1)) / zonebyte;
+}
 
 #endif /* MPOOL_SB_PRIV_H */

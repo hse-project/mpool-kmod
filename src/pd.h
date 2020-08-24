@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_PD_PRIV_H
-#define MPOOL_PD_PRIV_H
+#ifndef MPOOL_PD_H
+#define MPOOL_PD_H
 
 #include <linux/uio.h>
 
@@ -246,4 +246,4 @@ merr_t pd_init(void);
 
 void pd_exit(void);
 
-#endif /* MPOOL_PD_PRIV_H */
+#endif /* MPOOL_PD_H */

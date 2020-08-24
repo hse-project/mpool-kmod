@@ -625,7 +625,7 @@ omf_pmd_layout_unpack_letoh(
 	struct omf_mdcrec_data     *cdr,
 	const char                 *inbuf)
 {
-	struct pmd_layout *ecl;
+	struct pmd_layout *ecl = NULL;
 
 	merr_t err;
 	int    i;

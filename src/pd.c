@@ -492,9 +492,9 @@ merr_t pd_init(void)
 {
 	merr_t err = 0;
 
-	mpc_rsvd_bios_max = clamp_t(uint, mpc_rsvd_bios_max, 1, 1024);
-
 	mpc_chunker_size = clamp_t(uint, mpc_chunker_size, 128, 1024);
+
+	mpc_rsvd_bios_max = clamp_t(uint, mpc_rsvd_bios_max, 1, 1024);
 
 #if HAVE_BIOSET_INIT
 	do {

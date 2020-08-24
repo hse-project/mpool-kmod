@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_PMD_UTILS_H
-#define MPOOL_PMD_UTILS_H
+#ifndef MPOOL_PMD_OBJ_H
+#define MPOOL_PMD_OBJ_H
 
 #include <linux/sort.h>
 #include <linux/rbtree.h>
@@ -378,6 +378,18 @@ void pmd_update_credit(struct mpool_descriptor *mp);
  */
 void pmd_mpool_usage(struct mpool_descriptor *mp, struct mpool_usage *usage);
 
+/*
+ * pmd_precompact_alsz() - Inform MDC1/255 pre-compacting about the active
+ *	mlog of an mpool MDCi 0<i<=255.
+ *	The size and how much is used are passed in.
+ *	"alsz" stands for active mlog size.
+ * @mp:
+ * @objid: objid of the active mlog of the mpool MDCi
+ * @len: In bytes, how much of the active mlog is used.
+ * @cap: In bytes, size of the active mlog.
+ */
+void pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 cap);
+
 /**
  * pmd_layout_alloc() - create and initialize an pmd_layout
  * @mp:     to get the mpool uuid
@@ -532,4 +544,4 @@ static inline void pmd_mdc_unlock(struct mutex *lock)
 	mutex_unlock(lock);
 }
 
-#endif /* MPOOL_PMD_UTILS_H */
+#endif /* MPOOL_PMD_OBJ_H */

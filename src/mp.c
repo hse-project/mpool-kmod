@@ -31,16 +31,6 @@
  */
 static DEFINE_MUTEX(mpool_s_lock);
 
-merr_t mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
-{
-	if (!mp || !mpname)
-		return merr(EINVAL);
-
-	strlcpy(mpname, mp->pds_name, mplen);
-
-	return 0;
-}
-
 merr_t
 mpool_create(
 	const char             *mpname,

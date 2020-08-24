@@ -1826,46 +1826,6 @@ void pmd_precompact_stop(struct mpool_descriptor *mp)
 	cancel_delayed_work_sync(&mp->pds_pco.pco_dwork);
 }
 
-/*
- * pmd_mlogid2cslot() - Given an mlog object ID which makes one of the mpool
- *	core MDCs (MDCi with i >0), it returns i.
- *	Given an client created object ID (mblock or mlog), it returns -1.
- * @mlogid:
- */
-static int pmd_mlogid2cslot(u64 mlogid)
-{
-	u64 uniq;
-
-	if (pmd_objid_type(mlogid) != OMF_OBJ_MLOG)
-		return -1;
-	if (objid_slot(mlogid))
-		return -1;
-	uniq = objid_uniq(mlogid);
-	if (uniq > (2 * MDC_SLOTS) - 1)
-		return -1;
-
-	return(uniq/2);
-}
-
-void pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 cap)
-{
-	struct pre_compact_ctrs    *pco_cnt;
-	struct pmd_mdc_info        *cinfo;
-
-	int    ret;
-	u8     cslot;
-
-	ret = pmd_mlogid2cslot(objid);
-	if (ret <= 0)
-		return;
-
-	cslot = ret;
-	cinfo = &mp->pds_mda.mdi_slotv[cslot];
-	pco_cnt = &(cinfo->mmi_pco_cnt);
-	atomic64_set(&pco_cnt->pcc_len, len);
-	atomic64_set(&pco_cnt->pcc_cap, cap);
-}
-
 static merr_t pmd_write_meta_to_latest_version(struct mpool_descriptor *mp, bool permitted)
 {
 	struct pmd_mdc_info *cinfo;

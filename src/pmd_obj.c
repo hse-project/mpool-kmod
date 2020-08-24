@@ -554,9 +554,7 @@ merr_t pmd_obj_commit(struct mpool_descriptor *mp, struct pmd_layout *layout)
 
 	pmd_mdc_lock(&cinfo->mmi_compactlock, cslot);
 
-#ifndef OBJ_PERSIST_OFF
 	err = pmd_log_create(mp, layout);
-#endif
 	if (!ev(err)) {
 		pmd_uc_lock(cinfo, cslot);
 		found = pmd_uc_remove(cinfo, layout);
@@ -731,9 +729,7 @@ merr_t pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout)
 		return merr(refcnt > 2 ? EBUSY : EINVAL);
 	}
 
-#ifndef OBJ_PERSIST_OFF
 	err = pmd_log_delete(mp, objid);
-#endif
 	if (err) {
 		pmd_co_wlock(cinfo, cslot);
 		pmd_co_insert(cinfo, found);
@@ -819,9 +815,7 @@ merr_t pmd_obj_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, u64
 
 		pmd_mdc_lock(&cinfo->mmi_compactlock, cslot);
 
-#ifndef OBJ_PERSIST_OFF
 		err = pmd_log_erase(mp, layout->eld_objid, gen);
-#endif
 		if (!ev(err)) {
 			layout->eld_gen = gen;
 			if (cslot)
@@ -887,9 +881,7 @@ static merr_t pmd_alloc_idgen(struct mpool_descriptor *mp, enum obj_type_omf oty
 		 * to prevent a race with mdc compaction.
 		 */
 		pmd_mdc_lock(&cinfo->mmi_compactlock, cslot);
-#ifndef OBJ_PERSIST_OFF
 		err = pmd_log_idckpt(mp, *objid);
-#endif
 		if (!err)
 			cinfo->mmi_lckpt = *objid;
 		pmd_mdc_unlock(&cinfo->mmi_compactlock);
@@ -1557,6 +1549,46 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 	}
 
 	pmd_update_mds_tbl(mp, num_mdc, slotnum);
+}
+
+/*
+ * pmd_mlogid2cslot() - Given an mlog object ID which makes one of the mpool
+ *	core MDCs (MDCi with i >0), it returns i.
+ *	Given an client created object ID (mblock or mlog), it returns -1.
+ * @mlogid:
+ */
+static int pmd_mlogid2cslot(u64 mlogid)
+{
+	u64 uniq;
+
+	if (pmd_objid_type(mlogid) != OMF_OBJ_MLOG)
+		return -1;
+	if (objid_slot(mlogid))
+		return -1;
+	uniq = objid_uniq(mlogid);
+	if (uniq > (2 * MDC_SLOTS) - 1)
+		return -1;
+
+	return(uniq/2);
+}
+
+void pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 cap)
+{
+	struct pre_compact_ctrs    *pco_cnt;
+	struct pmd_mdc_info        *cinfo;
+
+	int    ret;
+	u8     cslot;
+
+	ret = pmd_mlogid2cslot(objid);
+	if (ret <= 0)
+		return;
+
+	cslot = ret;
+	cinfo = &mp->pds_mda.mdi_slotv[cslot];
+	pco_cnt = &(cinfo->mmi_pco_cnt);
+	atomic64_set(&pco_cnt->pcc_len, len);
+	atomic64_set(&pco_cnt->pcc_cap, cap);
 }
 
 merr_t pmd_init(void)

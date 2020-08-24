@@ -36,11 +36,13 @@
 
 #include "mpool_ioctl.h"
 #include "mpool_config.h"
+#include "mblock.h"
 #include "mlog.h"
 #include "mp.h"
 #include "mpctl.h"
 #include "sysfs.h"
 #include "reaper.h"
+#include "init.h"
 
 #if HAVE_MMAP_LOCK
 #include <linux/mmap_lock.h>
@@ -110,6 +112,16 @@ static inline bool mpc_unit_isctldev(const struct mpc_unit *unit)
 static inline bool mpc_unit_ismpooldev(const struct mpc_unit *unit)
 {
 	return (unit->un_uinfo == &mpc_uinfo_mpool);
+}
+
+static inline uid_t mpc_current_uid(void)
+{
+	return from_kuid(current_user_ns(), current_uid());
+}
+
+static inline gid_t mpc_current_gid(void)
+{
+	return from_kgid(current_user_ns(), current_gid());
 }
 
 #define MPC_MPOOL_PARAMS_CNT     7
@@ -202,6 +214,123 @@ static void mpc_params_unregister(struct mpc_unit *unit)
 	mpc_attr_group_destroy(unit->un_attr);
 	mpc_attr_destroy(unit->un_attr);
 	unit->un_attr = NULL;
+}
+
+/**
+ * mpc_toascii() - convert string to restricted ASCII
+ *
+ * Zeroes out the remainder of str[] and returns the length.
+ */
+static size_t mpc_toascii(char *str, size_t sz)
+{
+	size_t  len = 0;
+	int     i;
+
+	if (!str || sz < 1)
+		return 0;
+
+	if (str[0] == '-')
+		str[0] = '_';
+
+	for (i = 0; i < (sz - 1) && str[i]; ++i) {
+		if (isalnum(str[i]) || strchr("_.-", str[i]))
+			continue;
+
+		str[i] = '_';
+	}
+
+	len = i;
+
+	while (i < sz)
+		str[i++] = '\000';
+
+	return len;
+}
+
+static void mpool_params_merge_defaults(struct mpool_params *params)
+{
+	if (params->mp_spare_cap == MPOOL_SPARES_INVALID)
+		params->mp_spare_cap = MPOOL_SPARES_DEFAULT;
+
+	if (params->mp_spare_stg == MPOOL_SPARES_INVALID)
+		params->mp_spare_stg = MPOOL_SPARES_DEFAULT;
+
+	if (params->mp_ra_pages_max == U32_MAX)
+		params->mp_ra_pages_max = MPOOL_RA_PAGES_MAX;
+	params->mp_ra_pages_max = clamp_t(u32, params->mp_ra_pages_max, 0, MPOOL_RA_PAGES_MAX);
+
+	if (params->mp_mode != -1)
+		params->mp_mode &= 0777;
+
+	params->mp_vma_size_max = mpc_xvm_size_max;
+
+	params->mp_rsvd0 = 0;
+	params->mp_rsvd1 = 0;
+	params->mp_rsvd2 = 0;
+	params->mp_rsvd3 = 0;
+	params->mp_rsvd4 = 0;
+
+	if (!strcmp(params->mp_label, MPOOL_LABEL_INVALID))
+		strcpy(params->mp_label, MPOOL_LABEL_DEFAULT);
+
+	mpc_toascii(params->mp_label, sizeof(params->mp_label));
+}
+
+static void mpool_to_mpcore_params(struct mpool_params *params, struct mpcore_params *mpc_params)
+{
+	u64    mdc0cap;
+	u64    mdcncap;
+	u32    mdcnum;
+
+	mpcore_params_defaults(mpc_params);
+
+	mdc0cap = (u64)params->mp_mdc0cap << 20;
+	mdcncap = (u64)params->mp_mdcncap << 20;
+	mdcnum  = params->mp_mdcnum;
+
+	if (mdc0cap != 0)
+		mpc_params->mp_mdc0cap = mdc0cap;
+
+	if (mdcncap != 0)
+		mpc_params->mp_mdcncap = mdcncap;
+
+	if (mdcnum != 0)
+		mpc_params->mp_mdcnum = mdcnum;
+}
+
+static bool mpool_params_merge_config(struct mpool_params *params, struct mpool_config *cfg)
+{
+	uuid_le uuidnull = { };
+	bool    changed = false;
+
+	if (params->mp_uid != -1 && params->mp_uid != cfg->mc_uid) {
+		cfg->mc_uid = params->mp_uid;
+		changed = true;
+	}
+
+	if (params->mp_gid != -1 && params->mp_gid != cfg->mc_gid) {
+		cfg->mc_gid = params->mp_gid;
+		changed = true;
+	}
+
+	if (params->mp_mode != -1 && params->mp_mode != cfg->mc_mode) {
+		cfg->mc_mode = params->mp_mode;
+		changed = true;
+	}
+
+	if (memcmp(&uuidnull, &params->mp_utype, sizeof(uuidnull)) &&
+	    memcmp(&params->mp_utype, &cfg->mc_utype, sizeof(params->mp_utype))) {
+		memcpy(&cfg->mc_utype, &params->mp_utype, sizeof(cfg->mc_utype));
+		changed = true;
+	}
+
+	if (strcmp(params->mp_label, MPOOL_LABEL_DEFAULT) &&
+	    strncmp(params->mp_label, cfg->mc_label, sizeof(params->mp_label))) {
+		strlcpy(cfg->mc_label, params->mp_label, sizeof(cfg->mc_label));
+		changed = true;
+	}
+
+	return changed;
 }
 
 /**
@@ -415,16 +544,6 @@ mpc_unit_lookup_by_name(struct mpc_unit *parent, const char *name, struct mpc_un
 	*unitp = argv[2];
 }
 
-static inline uid_t mpc_current_uid(void)
-{
-	return from_kuid(current_user_ns(), current_uid());
-}
-
-static inline gid_t mpc_current_gid(void)
-{
-	return from_kgid(current_user_ns(), current_gid());
-}
-
 /**
  * mpc_unit_setup() - Create a device unit object and special file
  * @uinfo:
@@ -628,37 +747,6 @@ static merr_t mpc_mp_chown(struct mpc_unit *unit, struct mpool_params *params)
 }
 
 /**
- * mpc_toascii() - convert string to restricted ASCII
- *
- * Zeroes out the remainder of str[] and returns the length.
- */
-static size_t mpc_toascii(char *str, size_t sz)
-{
-	size_t  len = 0;
-	int     i;
-
-	if (!str || sz < 1)
-		return 0;
-
-	if (str[0] == '-')
-		str[0] = '_';
-
-	for (i = 0; i < (sz - 1) && str[i]; ++i) {
-		if (isalnum(str[i]) || strchr("_.-", str[i]))
-			continue;
-
-		str[i] = '_';
-	}
-
-	len = i;
-
-	while (i < sz)
-		str[i++] = '\000';
-
-	return len;
-}
-
-/**
  * mpioc_params_get() - get parameters of an activated mpool
  * @unit:   mpool device unit ptr
  * @get:    mpool params
@@ -837,6 +925,25 @@ static merr_t mpioc_mp_mclass_get(struct mpc_unit *unit, struct mpioc_mclass *mc
 }
 
 /**
+ * mpioc_devprops_get() - Get device properties
+ * @unit:   mpool unit ptr
+ *
+ * MPIOC_PROP_GET ioctl handler to retrieve properties for the specified device.
+ */
+static merr_t mpioc_devprops_get(struct mpc_unit *unit, struct mpioc_devprops *devprops)
+{
+	merr_t err = 0;
+
+	if (unit->un_mpool) {
+		struct mpool_descriptor *mp = unit->un_mpool->mp_desc;
+
+		err = mpool_get_devprops_by_name(mp, devprops->dpr_pdname, &devprops->dpr_devprops);
+	}
+
+	return ev(err);
+}
+
+/**
  * mpioc_prop_get() - Get mpool properties.
  * @unit:   mpool unit ptr
  *
@@ -874,25 +981,6 @@ static void mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop)
 
 	kprop->pr_mcxc = ARRAY_SIZE(kprop->pr_mcxv);
 	mpool_mclass_get(desc, &kprop->pr_mcxc, kprop->pr_mcxv);
-}
-
-/**
- * mpioc_devprops_get() - Get device properties
- * @unit:   mpool unit ptr
- *
- * MPIOC_PROP_GET ioctl handler to retrieve properties for the specified device.
- */
-static merr_t mpioc_devprops_get(struct mpc_unit *unit, struct mpioc_devprops *devprops)
-{
-	merr_t err = 0;
-
-	if (unit->un_mpool) {
-		struct mpool_descriptor *mp = unit->un_mpool->mp_desc;
-
-		err = mpool_get_devprops_by_name(mp, devprops->dpr_pdname, &devprops->dpr_devprops);
-	}
-
-	return ev(err);
 }
 
 /**
@@ -975,28 +1063,6 @@ static merr_t mpioc_proplist_get(struct mpc_unit *unit, struct mpioc_list *ls)
 	return err;
 }
 
-static void mpool_to_mpcore_params(struct mpool_params *params, struct mpcore_params *mpc_params)
-{
-	u64    mdc0cap;
-	u64    mdcncap;
-	u32    mdcnum;
-
-	mpcore_params_defaults(mpc_params);
-
-	mdc0cap = (u64)params->mp_mdc0cap << 20;
-	mdcncap = (u64)params->mp_mdcncap << 20;
-	mdcnum  = params->mp_mdcnum;
-
-	if (mdc0cap != 0)
-		mpc_params->mp_mdc0cap = mdc0cap;
-
-	if (mdcncap != 0)
-		mpc_params->mp_mdcncap = mdcncap;
-
-	if (mdcnum != 0)
-		mpc_params->mp_mdcnum = mdcnum;
-}
-
 /**
  * mpc_mpool_open() - Open the mpool specified by the given drive paths,
  *                    and then create an mpool object to track the
@@ -1063,35 +1129,6 @@ mpc_mpool_open(
 	*mpoolp = mpool;
 
 	return 0;
-}
-
-static void mpool_params_merge_defaults(struct mpool_params *params)
-{
-	if (params->mp_spare_cap == MPOOL_SPARES_INVALID)
-		params->mp_spare_cap = MPOOL_SPARES_DEFAULT;
-
-	if (params->mp_spare_stg == MPOOL_SPARES_INVALID)
-		params->mp_spare_stg = MPOOL_SPARES_DEFAULT;
-
-	if (params->mp_ra_pages_max == U32_MAX)
-		params->mp_ra_pages_max = MPOOL_RA_PAGES_MAX;
-	params->mp_ra_pages_max = clamp_t(u32, params->mp_ra_pages_max, 0, MPOOL_RA_PAGES_MAX);
-
-	if (params->mp_mode != -1)
-		params->mp_mode &= 0777;
-
-	params->mp_vma_size_max = mpc_xvm_size_max;
-
-	params->mp_rsvd0 = 0;
-	params->mp_rsvd1 = 0;
-	params->mp_rsvd2 = 0;
-	params->mp_rsvd3 = 0;
-	params->mp_rsvd4 = 0;
-
-	if (!strcmp(params->mp_label, MPOOL_LABEL_INVALID))
-		strcpy(params->mp_label, MPOOL_LABEL_DEFAULT);
-
-	mpc_toascii(params->mp_label, sizeof(params->mp_label));
 }
 
 /**
@@ -1253,41 +1290,6 @@ errout:
 		mpc_mpool_put(mpool);
 
 	return err;
-}
-
-static bool mpool_params_merge_config(struct mpool_params *params, struct mpool_config *cfg)
-{
-	uuid_le uuidnull = { };
-	bool    changed = false;
-
-	if (params->mp_uid != -1 && params->mp_uid != cfg->mc_uid) {
-		cfg->mc_uid = params->mp_uid;
-		changed = true;
-	}
-
-	if (params->mp_gid != -1 && params->mp_gid != cfg->mc_gid) {
-		cfg->mc_gid = params->mp_gid;
-		changed = true;
-	}
-
-	if (params->mp_mode != -1 && params->mp_mode != cfg->mc_mode) {
-		cfg->mc_mode = params->mp_mode;
-		changed = true;
-	}
-
-	if (memcmp(&uuidnull, &params->mp_utype, sizeof(uuidnull)) &&
-	    memcmp(&params->mp_utype, &cfg->mc_utype, sizeof(params->mp_utype))) {
-		memcpy(&cfg->mc_utype, &params->mp_utype, sizeof(cfg->mc_utype));
-		changed = true;
-	}
-
-	if (strcmp(params->mp_label, MPOOL_LABEL_DEFAULT) &&
-	    strncmp(params->mp_label, cfg->mc_label, sizeof(params->mp_label))) {
-		strlcpy(cfg->mc_label, params->mp_label, sizeof(cfg->mc_label));
-		changed = true;
-	}
-
-	return changed;
 }
 
 /**
@@ -2388,6 +2390,228 @@ static merr_t mpioc_test(struct mpc_unit *unit, struct mpioc_test *test)
 	return err;
 }
 
+static struct mpc_softstate *mpc_cdev2ss(struct cdev *cdev)
+{
+	if (ev(!cdev || cdev->owner != THIS_MODULE)) {
+		merr_t err = merr(EINVAL);
+
+		mp_pr_crit("module dissociated", err);
+		return NULL;
+	}
+
+	return container_of(cdev, struct mpc_softstate, ss_cdev);
+}
+
+static int mpc_bdi_alloc(void)
+{
+#if HAVE_BDI_INIT
+	mpc_bdi = kzalloc(sizeof(*mpc_bdi), GFP_KERNEL);
+	if (mpc_bdi) {
+		int    rc;
+
+		rc = bdi_init(mpc_bdi);
+		if (ev(rc)) {
+			kfree(mpc_bdi);
+			return rc;
+		}
+	}
+#elif HAVE_BDI_ALLOC_NODE
+	mpc_bdi = bdi_alloc_node(GFP_KERNEL, NUMA_NO_NODE);
+#else
+	mpc_bdi = bdi_alloc(NUMA_NO_NODE);
+#endif
+	if (!mpc_bdi)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static void mpc_bdi_save(struct mpc_unit *unit, struct inode *ip, struct file *fp)
+{
+#if HAVE_ADDRESS_SPACE_BDI
+	unit->un_saved_bdi = fp->f_mapping->backing_dev_info;
+	fp->f_mapping->backing_dev_info = mpc_bdi;
+#else
+	unit->un_saved_bdi = ip->i_sb->s_bdi;
+#if HAVE_BDI_INIT
+	ip->i_sb->s_bdi = mpc_bdi;
+#else
+	ip->i_sb->s_bdi = bdi_get(mpc_bdi);
+#endif /* HAVE_BDI_INIT */
+#endif /* HAVE_ADDRESS_SPACE_BDI */
+}
+
+static void mpc_bdi_restore(struct mpc_unit *unit, struct inode *ip, struct file *fp)
+{
+#if HAVE_ADDRESS_SPACE_BDI
+		fp->f_mapping->backing_dev_info = unit->un_saved_bdi;
+#else
+		ip->i_sb->s_bdi = unit->un_saved_bdi;
+#if !HAVE_BDI_INIT
+		bdi_put(mpc_bdi);
+#endif /* !HAVE_BDI_INIT */
+#endif /* HAVE_ADDRESS_SPACE_BDI */
+}
+
+static int mpc_bdi_setup(void)
+{
+	int    rc;
+
+	rc = mpc_bdi_alloc();
+	if (ev(rc))
+		return rc;
+
+#if HAVE_BDI_NAME
+	mpc_bdi->name = "mpoolctl";
+#endif
+	mpc_bdi->capabilities = BDI_CAP_NO_ACCT_AND_WRITEBACK;
+	mpc_bdi->ra_pages = MPOOL_RA_PAGES_MAX;
+
+	return 0;
+}
+
+static void mpc_bdi_teardown(void)
+{
+#if HAVE_BDI_INIT
+	bdi_destroy(mpc_bdi);
+	kfree(mpc_bdi);
+#else
+	bdi_put(mpc_bdi);
+#endif
+}
+
+/*
+ * MPCTL file operations.
+ */
+
+/**
+ * mpc_open() - Open an mpool or dataset device.
+ * @ip: inode ptr
+ * @fp: file ptr
+ *
+ * Return:  Returns 0 on success, -errno otherwise...
+ */
+static int mpc_open(struct inode *ip, struct file *fp)
+{
+	struct mpc_softstate   *ss;
+	struct mpc_unit        *unit;
+
+	bool    firstopen;
+	merr_t  err = 0;
+	int     rc;
+
+	ss = mpc_cdev2ss(ip->i_cdev);
+	if (!ss || ss != &mpc_softstate)
+		return -EBADFD;
+
+	/* Acquire a reference on the unit object.  We'll release it in mpc_release(). */
+	mpc_unit_lookup(iminor(fp->f_inode), &unit);
+	if (!unit)
+		return -ENODEV;
+
+	if (down_trylock(&unit->un_open_lock)) {
+		rc = (fp->f_flags & O_NONBLOCK) ? -EWOULDBLOCK :
+			down_interruptible(&unit->un_open_lock);
+
+		if (rc) {
+			err = merr(rc);
+			goto errout;
+		}
+	}
+
+	firstopen = (unit->un_open_cnt == 0);
+
+	if (!firstopen) {
+		if (fp->f_mapping != unit->un_mapping)
+			err = merr(EBUSY);
+		else if (unit->un_open_excl || (fp->f_flags & O_EXCL))
+			err = merr(EBUSY);
+		goto unlock;
+	}
+
+	if (!mpc_unit_ismpooldev(unit)) {
+		unit->un_open_excl = !!(fp->f_flags & O_EXCL);
+		goto unlock; /* control device */
+	}
+
+	/* First open of an mpool unit (not the control device). */
+	if (!fp->f_mapping || fp->f_mapping != ip->i_mapping) {
+		err = merr(EINVAL);
+		goto unlock;
+	}
+
+	fp->f_op = &mpc_fops_default;
+	fp->f_mapping->a_ops = &mpc_aops_default;
+
+	mpc_bdi_save(unit, ip, fp);
+
+	unit->un_mapping = fp->f_mapping;
+	unit->un_ds_reap = mpc_reap;
+
+	inode_lock(ip);
+	i_size_write(ip, 1ul << 63);
+	inode_unlock(ip);
+
+	unit->un_open_excl = !!(fp->f_flags & O_EXCL);
+
+unlock:
+	if (!err) {
+		fp->private_data = unit;
+		nonseekable_open(ip, fp);
+		++unit->un_open_cnt;
+	}
+	up(&unit->un_open_lock);
+
+errout:
+	if (err) {
+		if (merr_errno(err) != EBUSY)
+			mp_pr_err("open %s failed", err, unit->un_name);
+		mpc_unit_put(unit);
+	}
+
+	return -merr_errno(err);
+}
+
+/**
+ * mpc_release() - Close the specified mpool or dataset device.
+ * @ip: inode ptr
+ * @fp: file ptr
+ *
+ * Return:  Returns 0 on success, -errno otherwise...
+ */
+static int mpc_release(struct inode *ip, struct file *fp)
+{
+	struct mpc_unit    *unit;
+	bool                lastclose;
+
+	unit = fp->private_data;
+	if (!unit)
+		return -EBADFD;
+
+	down(&unit->un_open_lock);
+	lastclose = (--unit->un_open_cnt == 0);
+	if (!lastclose)
+		goto errout;
+
+	if (mpc_unit_ismpooldev(unit)) {
+		mpc_rgnmap_flush(&unit->un_rgnmap);
+
+		unit->un_ds_reap = NULL;
+		unit->un_mapping = NULL;
+
+		mpc_bdi_restore(unit, ip, fp);
+	}
+
+	unit->un_open_excl = false;
+
+errout:
+	up(&unit->un_open_lock);
+
+	mpc_unit_put(unit);
+
+	return 0;
+}
+
 /**
  * mpc_ioctl() - mpc driver ioctl entry point
  * @fp:     file pointer
@@ -2614,228 +2838,13 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	return rc;
 }
 
-
-static struct mpc_softstate *mpc_cdev2ss(struct cdev *cdev)
-{
-	if (ev(!cdev || cdev->owner != THIS_MODULE)) {
-		merr_t err = merr(EINVAL);
-
-		mp_pr_crit("module dissociated", err);
-		return NULL;
-	}
-
-	return container_of(cdev, struct mpc_softstate, ss_cdev);
-}
-
-static int mpc_bdi_alloc(void)
-{
-#if HAVE_BDI_INIT
-	mpc_bdi = kzalloc(sizeof(*mpc_bdi), GFP_KERNEL);
-	if (mpc_bdi) {
-		int    rc;
-
-		rc = bdi_init(mpc_bdi);
-		if (ev(rc)) {
-			kfree(mpc_bdi);
-			return rc;
-		}
-	}
-#elif HAVE_BDI_ALLOC_NODE
-	mpc_bdi = bdi_alloc_node(GFP_KERNEL, NUMA_NO_NODE);
-#else
-	mpc_bdi = bdi_alloc(NUMA_NO_NODE);
-#endif
-	if (!mpc_bdi)
-		return -ENOMEM;
-
-	return 0;
-}
-
-static void mpc_bdi_save(struct mpc_unit *unit, struct inode *ip, struct file *fp)
-{
-#if HAVE_ADDRESS_SPACE_BDI
-	unit->un_saved_bdi = fp->f_mapping->backing_dev_info;
-	fp->f_mapping->backing_dev_info = mpc_bdi;
-#else
-	unit->un_saved_bdi = ip->i_sb->s_bdi;
-#if HAVE_BDI_INIT
-	ip->i_sb->s_bdi = mpc_bdi;
-#else
-	ip->i_sb->s_bdi = bdi_get(mpc_bdi);
-#endif /* HAVE_BDI_INIT */
-#endif /* HAVE_ADDRESS_SPACE_BDI */
-}
-
-static void mpc_bdi_restore(struct mpc_unit *unit, struct inode *ip, struct file *fp)
-{
-#if HAVE_ADDRESS_SPACE_BDI
-		fp->f_mapping->backing_dev_info = unit->un_saved_bdi;
-#else
-		ip->i_sb->s_bdi = unit->un_saved_bdi;
-#if !HAVE_BDI_INIT
-		bdi_put(mpc_bdi);
-#endif /* !HAVE_BDI_INIT */
-#endif /* HAVE_ADDRESS_SPACE_BDI */
-}
-
-static int mpc_bdi_setup(void)
-{
-	int    rc;
-
-	rc = mpc_bdi_alloc();
-	if (ev(rc))
-		return rc;
-
-#if HAVE_BDI_NAME
-	mpc_bdi->name = "mpoolctl";
-#endif
-	mpc_bdi->capabilities = BDI_CAP_NO_ACCT_AND_WRITEBACK;
-	mpc_bdi->ra_pages = MPOOL_RA_PAGES_MAX;
-
-	return 0;
-}
-
-static void mpc_bdi_teardown(void)
-{
-#if HAVE_BDI_INIT
-	bdi_destroy(mpc_bdi);
-	kfree(mpc_bdi);
-#else
-	bdi_put(mpc_bdi);
-#endif
-}
-
-/*
- * MPCTL file operations.
- */
-
-/**
- * mpc_open() - Open an mpool or dataset device.
- * @ip: inode ptr
- * @fp: file ptr
- *
- * Return:  Returns 0 on success, -errno otherwise...
- */
-static int mpc_open(struct inode *ip, struct file *fp)
-{
-	struct mpc_softstate   *ss;
-	struct mpc_unit        *unit;
-
-	bool    firstopen;
-	merr_t  err = 0;
-	int     rc;
-
-	ss = mpc_cdev2ss(ip->i_cdev);
-	if (!ss || ss != &mpc_softstate)
-		return -EBADFD;
-
-	/* Acquire a reference on the unit object.  We'll release it in mpc_release(). */
-	mpc_unit_lookup(iminor(fp->f_inode), &unit);
-	if (!unit)
-		return -ENODEV;
-
-	if (down_trylock(&unit->un_open_lock)) {
-		rc = (fp->f_flags & O_NONBLOCK) ? -EWOULDBLOCK :
-			down_interruptible(&unit->un_open_lock);
-
-		if (rc) {
-			err = merr(rc);
-			goto errout;
-		}
-	}
-
-	firstopen = (unit->un_open_cnt == 0);
-
-	if (!firstopen) {
-		if (fp->f_mapping != unit->un_mapping)
-			err = merr(EBUSY);
-		else if (unit->un_open_excl || (fp->f_flags & O_EXCL))
-			err = merr(EBUSY);
-		goto unlock;
-	}
-
-	if (!mpc_unit_ismpooldev(unit)) {
-		unit->un_open_excl = !!(fp->f_flags & O_EXCL);
-		goto unlock; /* control device */
-	}
-
-	/* First open of an mpool unit (not the control device). */
-	if (!fp->f_mapping || fp->f_mapping != ip->i_mapping) {
-		err = merr(EINVAL);
-		goto unlock;
-	}
-
-	fp->f_op = &mpc_fops_default;
-	fp->f_mapping->a_ops = &mpc_aops_default;
-
-	mpc_bdi_save(unit, ip, fp);
-
-	unit->un_mapping = fp->f_mapping;
-	unit->un_ds_reap = mpc_reap;
-
-	inode_lock(ip);
-	i_size_write(ip, 1ul << 63);
-	inode_unlock(ip);
-
-	unit->un_open_excl = !!(fp->f_flags & O_EXCL);
-
-unlock:
-	if (!err) {
-		fp->private_data = unit;
-		nonseekable_open(ip, fp);
-		++unit->un_open_cnt;
-	}
-	up(&unit->un_open_lock);
-
-errout:
-	if (err) {
-		if (merr_errno(err) != EBUSY)
-			mp_pr_err("open %s failed", err, unit->un_name);
-		mpc_unit_put(unit);
-	}
-
-	return -merr_errno(err);
-}
-
-/**
- * mpc_release() - Close the specified mpool or dataset device.
- * @ip: inode ptr
- * @fp: file ptr
- *
- * Return:  Returns 0 on success, -errno otherwise...
- */
-static int mpc_release(struct inode *ip, struct file *fp)
-{
-	struct mpc_unit    *unit;
-	bool                lastclose;
-
-	unit = fp->private_data;
-	if (!unit)
-		return -EBADFD;
-
-	down(&unit->un_open_lock);
-	lastclose = (--unit->un_open_cnt == 0);
-	if (!lastclose)
-		goto errout;
-
-	if (mpc_unit_ismpooldev(unit)) {
-		mpc_rgnmap_flush(&unit->un_rgnmap);
-
-		unit->un_ds_reap = NULL;
-		unit->un_mapping = NULL;
-
-		mpc_bdi_restore(unit, ip, fp);
-	}
-
-	unit->un_open_excl = false;
-
-errout:
-	up(&unit->un_open_lock);
-
-	mpc_unit_put(unit);
-
-	return 0;
-}
+static const struct file_operations mpc_fops_default = {
+	.owner		= THIS_MODULE,
+	.open		= mpc_open,
+	.release	= mpc_release,
+	.unlocked_ioctl	= mpc_ioctl,
+	.mmap           = mpc_mmap,
+};
 
 static int mpc_exit_unit(int minor, void *item, void *arg)
 {
@@ -2985,10 +2994,3 @@ errout:
 	return err;
 }
 
-static const struct file_operations mpc_fops_default = {
-	.owner		= THIS_MODULE,
-	.open		= mpc_open,
-	.release	= mpc_release,
-	.unlocked_ioctl	= mpc_ioctl,
-	.mmap           = mpc_mmap,
-};

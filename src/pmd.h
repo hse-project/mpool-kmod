@@ -379,18 +379,6 @@ void pmd_precompact_start(struct mpool_descriptor *mp);
  */
 void pmd_precompact_stop(struct mpool_descriptor *mp);
 
-/*
- * pmd_precompact_alsz() - Inform MDC1/255 pre-compacting about the active
- *	mlog of an mpool MDCi 0<i<=255.
- *	The size and how much is used are passed in.
- *	"alsz" stands for active mlog size.
- * @mp:
- * @objid: objid of the active mlog of the mpool MDCi
- * @len: In bytes, how much of the active mlog is used.
- * @cap: In bytes, size of the active mlog.
- */
-void pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 cap);
-
 /**
  * pmd_mdc_addrec_version() -add a version record in a mpool MDC.
  * @mp:

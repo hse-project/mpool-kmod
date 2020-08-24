@@ -1002,22 +1002,3 @@ void mpool_desc_free(struct mpool_descriptor *mp)
 
 	kfree(mp);
 }
-
-enum pd_status mpool_pd_status_get(struct mpool_dev_info *pd)
-{
-	enum pd_status  val;
-
-	/* Acquire semantics used so that no reads will be re-ordered from
-	 * before to after this read.
-	 */
-	val = atomic_read_acquire(&pd->pdi_status);
-
-	return val;
-}
-
-void mpool_pd_status_set(struct mpool_dev_info *pd, enum pd_status status)
-{
-	/* All prior writes must be visible prior to the status change */
-	smp_wmb();
-	atomic_set(&pd->pdi_status, status);
-}

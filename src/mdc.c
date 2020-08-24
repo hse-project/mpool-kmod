@@ -11,6 +11,7 @@
 #include "mpool_printk.h"
 
 #include "mpool_ioctl.h"
+#include "mpcore.h"
 #include "mp.h"
 #include "mlog.h"
 #include "mdc.h"

@@ -66,17 +66,6 @@ struct mpool_config {
  */
 
 /**
- * mpool_get_mpname() - Get the mpool name
- * @mp:     mpool descriptor of the mpool
- * @mpname: buffer to copy the mpool name into
- * @mplen:  buffer length
- *
- * Return:
- * %0 if successful, EINVAL otherwise
- */
-merr_t mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen);
-
-/**
  * mpool_create() - Create an mpool
  * @mpname:
  * @flags: enum mp_mgmt_flags

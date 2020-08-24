@@ -346,8 +346,43 @@ void mpool_desc_free(struct mpool_descriptor *mp);
 
 merr_t mpool_dev_check_new(struct mpool_descriptor *mp, struct mpool_dev_info *pd);
 
-enum pd_status mpool_pd_status_get(struct mpool_dev_info *pd);
+static inline enum pd_status mpool_pd_status_get(struct mpool_dev_info *pd)
+{
+	enum pd_status  val;
 
-void mpool_pd_status_set(struct mpool_dev_info *pd, enum pd_status status);
+	/* Acquire semantics used so that no reads will be re-ordered from
+	 * before to after this read.
+	 */
+	val = atomic_read_acquire(&pd->pdi_status);
+
+	return val;
+}
+
+static inline void mpool_pd_status_set(struct mpool_dev_info *pd, enum pd_status status)
+{
+	/* All prior writes must be visible prior to the status change */
+	smp_wmb();
+	atomic_set(&pd->pdi_status, status);
+}
+
+/**
+ * mpool_get_mpname() - Get the mpool name
+ * @mp:     mpool descriptor of the mpool
+ * @mpname: buffer to copy the mpool name into
+ * @mplen:  buffer length
+ *
+ * Return:
+ * %0 if successful, EINVAL otherwise
+ */
+static inline merr_t mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
+{
+	if (!mp || !mpname)
+		return merr(EINVAL);
+
+	strlcpy(mpname, mp->pds_name, mplen);
+
+	return 0;
+}
+
 
 #endif /* MPOOL_MPCORE_H */

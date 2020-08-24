@@ -3,8 +3,8 @@
  * Copyright (C) 2015-2020 Micron Technology, Inc.  All rights reserved.
  */
 
-#ifndef MPOOL_SMAP_PRIV_H
-#define MPOOL_SMAP_PRIV_H
+#ifndef MPOOL_SMAP_H
+#define MPOOL_SMAP_H
 
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
@@ -347,4 +347,4 @@ merr_t smap_init(void);
 
 void smap_exit(void);
 
-#endif /* MPOOL_SMAP_PRIV_H */
+#endif /* MPOOL_SMAP_H */
