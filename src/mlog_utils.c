@@ -335,7 +335,7 @@ mlog_rw_raw(
  * rw:       MPOOL_OP_READ or MPOOL_OP_WRITE
  * skip_ser: client guarantees serialization
  */
-merr_t
+static merr_t
 mlog_rw(
 	struct mpool_descriptor *mp,
 	struct mlog_descriptor  *mlh,
@@ -655,7 +655,7 @@ mlog_populate_rbuf(
  * @abidx:    allocate log page at index 'abidx'.
  * @skip_ser: client guarantees serialization
  */
-merr_t
+static merr_t
 mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *layout, u16 abidx, bool skip_ser)
 {
 	struct mlog_stat   *lstat = &layout->eld_lstat;
@@ -769,12 +769,10 @@ static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
  * mlog_flush_posthdlr_4ka() - Handles both successful and failed flush for
  * 512B sectors with 4K-Alignment.
  *
- * @mp:     mpool descriptor
  * @layout: layout descriptor
  * @fsucc:  flush status
  */
-static void
-mlog_flush_posthdlr_4ka(struct mpool_descriptor *mp, struct pmd_layout *layout, bool fsucc)
+static void mlog_flush_posthdlr_4ka(struct pmd_layout *layout, bool fsucc)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
 
@@ -859,11 +857,10 @@ exit2:
  * mlog_flush_posthdlr() - Handles both successful and failed flush for
  * 512B and 4K-sectors with native alignment, i.e., 512B and 4K resply.
  *
- * @mp:     mpool descriptor
  * @layout: layout descriptor
  * @fsucc:  flush status
  */
-static void mlog_flush_posthdlr(struct mpool_descriptor *mp, struct pmd_layout *layout, bool fsucc)
+static void mlog_flush_posthdlr(struct pmd_layout *layout, bool fsucc)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
 
@@ -1057,9 +1054,9 @@ merr_t mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layo
 	mlog_free_abuf(lstat, start, end);
 
 	if (!IS_SECPGA(lstat))
-		mlog_flush_posthdlr_4ka(mp, layout, fsucc);
+		mlog_flush_posthdlr_4ka(layout, fsucc);
 	else
-		mlog_flush_posthdlr(mp, layout, fsucc);
+		mlog_flush_posthdlr(layout, fsucc);
 
 	return err;
 }
@@ -1070,7 +1067,7 @@ merr_t mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layo
  * Max data record that can be appended to log in bytes; -1 if no room
  * for a 0 byte data record due to record descriptor length.
  */
-s64 mlog_append_dmax(struct mpool_descriptor *mp, struct pmd_layout *layout)
+s64 mlog_append_dmax(struct pmd_layout *layout)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
 
@@ -1111,7 +1108,7 @@ s64 mlog_append_dmax(struct mpool_descriptor *mp, struct pmd_layout *layout)
  * Check whether the active log block is full and update the append offsets
  * accordingly.
  *
- * Returns: 0 on sucess; merr_t otherwise
+ * Returns: 0 on success; merr_t otherwise
  */
 merr_t mlog_update_append_idx(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser)
 {
@@ -1324,7 +1321,7 @@ media_read:
  *
  * Note: lri can reference the log block currently accumulating in lstat
  *
- * Returns: 0 on sucess; merr_t otherwise
+ * Returns: 0 on success; merr_t otherwise
  * One of the possible errno values in merr_t:
  * ENOMSG - if at end of log -- NB: requires an API change to signal without
  */

@@ -11,7 +11,7 @@
 #ifdef NDEBUG
 #define assert(cond)
 #else
-#define assert(cond)    BUG_ON(!(cond))
+#define assert(cond)    WARN_ON(!(cond))
 #endif
 
 #endif /* MPOOL_ASSERT_H */

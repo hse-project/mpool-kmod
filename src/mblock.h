@@ -54,30 +54,6 @@ mblock_alloc(
 	struct mblock_props         *prop);
 
 /**
- * mblock_realloc() - Re-Allocate an mblock.
- * @mp:        mpool descriptor
- * @objid:     mblock object id to be re-allocated
- * @capreq:    mblock capacity requested
- * @mclassp:   media class performance level requested
- * @mbh:       mblock handle returned
- * @prop:      mblock properties returned
- *
- * Allocate mblock with specified objid to support crash recovery; otherwise
- * is equivalent to mblock_alloc().
- *
- * Return: 0 if successful, merr_t otherwise...
- * EEXIST if objid exists
- */
-merr_t
-mblock_realloc(
-	struct mpool_descriptor     *mp,
-	u64                          objid,
-	enum mp_media_classp         mclassp,
-	bool                         spare,
-	struct mblock_descriptor   **mbh,
-	struct mblock_props         *prop);
-
-/**
  * mblock_find_get() -
  * @mp:
  * @objid:
@@ -101,15 +77,13 @@ mblock_find_get(
 
 /**
  * mblock_put() - Put (release) a ref on an mblock
- * @mp:
  * @mbh:
- * @prop:
  *
  * Put a ref on a known mblock.
  *
  * Return: %0 if successful, merr_t otherwise...
  */
-void mblock_put(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
+void mblock_put(struct mblock_descriptor *mbh);
 
 /**
  * mblock_commit() -
@@ -195,23 +169,6 @@ mblock_read(
 	int                         iovcnt,
 	loff_t                      boff,
 	size_t                      len);
-
-/**
- * mblock_get_props() -
- * @mp:
- * @mbh:
- * @prop:
- *
- * Return basic mblock properties in prop.
- *
- * Return: %0 if successful, merr_t otherwise...
- *
- */
-merr_t
-mblock_get_props(
-	struct mpool_descriptor    *mp,
-	struct mblock_descriptor   *mbh,
-	struct mblock_props        *prop);
 
 /**
  * mblock_get_props_ex() -

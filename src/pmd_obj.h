@@ -260,7 +260,7 @@ pmd_obj_alloc(
  * Note:
  * Object is not persistent until committed; allocation can be aborted.
  *
- * Return: %0 if sucessful; merr_t otherwise
+ * Return: %0 if successful; merr_t otherwise
  */
 merr_t
 pmd_obj_realloc(
@@ -292,7 +292,7 @@ merr_t pmd_obj_commit(struct mpool_descriptor *mp, struct pmd_layout *layout);
  * Discard uncommitted object; caller MUST NOT hold pmd_obj_*lock() on
  * layout; if successful layout is invalid after call.
  *
- * Return: %0 if sucessful; merr_t otherwise
+ * Return: %0 if successful; merr_t otherwise
  */
 merr_t pmd_obj_abort(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
@@ -392,7 +392,6 @@ void pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 ca
 
 /**
  * pmd_layout_alloc() - create and initialize an pmd_layout
- * @mp:     to get the mpool uuid
  * @objid:  mblock/mlog object ID
  * @gen:    generation number
  * @mblen:  mblock written length
@@ -405,12 +404,11 @@ void pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 ca
  */
 struct pmd_layout *
 pmd_layout_alloc(
-	struct mpool_descriptor    *mp,
-	struct mpool_uuid          *uuid,
-	u64                         objid,
-	u64                         gen,
-	u64                         mblen,
-	u32                         zcnt);
+	struct mpool_uuid  *uuid,
+	u64                 objid,
+	u64                 gen,
+	u64                 mblen,
+	u32                 zcnt);
 
 /**
  * pmd_layout_release() - free pmd_layout and internal elements
@@ -528,7 +526,7 @@ static inline bool pmd_objid_isuser(u64 objid)
 	return objtype_user(objid_type(objid)) && objid_slot(objid);
 }
 
-static inline void pmd_obj_put(struct mpool_descriptor *mp, struct pmd_layout *layout)
+static inline void pmd_obj_put(struct pmd_layout *layout)
 {
 	kref_put(&layout->eld_ref, pmd_layout_release);
 }

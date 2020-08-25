@@ -244,7 +244,6 @@ merr_t mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_de
 /**
  * mpool_desc_pdmc_add() - Add a device in its media class.
  * @mp:
- * @flags: mp management flags, enum mp_mgmt_flags
  * @pdh:
  * @omf_devparm:
  * @check_only: if true, the call doesn't change any state, it only check
@@ -293,7 +292,6 @@ merr_t mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_de
 merr_t
 mpool_desc_pdmc_add(
 	struct mpool_descriptor		*mp,
-	u32				 flags,
 	u16				 pdh,
 	struct omf_devparm_descriptor	*omf_devparm,
 	bool				 check_only);
@@ -329,8 +327,7 @@ mpool_desc_init_sb(
 	struct mpool_descriptor    *mp,
 	struct omf_sb_descriptor   *sbmdc0,
 	u32                         flags,
-	bool                       *mc_resize,
-	const char                 *mp_newname);
+	bool                       *mc_resize);
 
 merr_t mpool_dev_sbwrite_newpool(struct mpool_descriptor *mp, struct omf_sb_descriptor *sbmdc0);
 

@@ -24,6 +24,7 @@
 
 static struct kmem_cache  *smap_zone_cache __read_mostly;
 
+static merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh);
 static merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh);
 
 /*
@@ -503,7 +504,7 @@ smap_alloc(
  * Init empty space map for drive pdh with a % spare zones of spzone.
  * Returns: 0 if successful, merr_t otherwise
  */
-merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh)
+static merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh)
 {
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
 	u8                     rgn = 0;

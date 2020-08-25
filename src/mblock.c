@@ -150,21 +150,6 @@ mblock_alloc(
 }
 
 merr_t
-mblock_realloc(
-	struct mpool_descriptor     *mp,
-	u64                          objid,
-	enum mp_media_classp         mclassp,
-	bool                         spare,
-	struct mblock_descriptor   **mbh,
-	struct mblock_props         *prop)
-{
-	if (!mblock_objid(objid))
-		return merr(EINVAL);
-
-	return mblock_alloc_cmn(mp, objid, mclassp, spare, prop, mbh);
-}
-
-merr_t
 mblock_find_get(
 	struct mpool_descriptor    *mp,
 	u64                         objid,
@@ -194,13 +179,13 @@ mblock_find_get(
 	return 0;
 }
 
-void mblock_put(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
+void mblock_put(struct mblock_descriptor *mbh)
 {
 	struct pmd_layout *layout;
 
 	layout = mblock2layout(mbh);
 	if (layout)
-		pmd_obj_put(mp, layout);
+		pmd_obj_put(layout);
 }
 
 /*
@@ -471,27 +456,6 @@ mblock_read(
 	pmd_obj_rdunlock(layout);
 
 	return (state & PMD_LYT_COMMITTED) ? err : merr(EAGAIN);
-}
-
-merr_t
-mblock_get_props(
-	struct mpool_descriptor    *mp,
-	struct mblock_descriptor   *mbh,
-	struct mblock_props        *prop)
-{
-	struct pmd_layout *layout;
-
-	layout = mblock2layout(mbh);
-	if (ev(!layout)) {
-		mp_pr_layout_not_found(mp, mbh);
-		return merr(EINVAL);
-	}
-
-	pmd_obj_rdlock(layout);
-	mblock_getprops_cmn(mp, layout, prop);
-	pmd_obj_rdunlock(layout);
-
-	return 0;
 }
 
 merr_t

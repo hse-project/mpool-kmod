@@ -132,7 +132,7 @@ static struct upgrade_history mdcrec_data_ocreate_table[]
  * entry version <= the version passed in.
  *
  * Note that caller of this routine can pass in either a valid superblock
- * version or a valid mdc verison. If a valid superblock version is passed in,
+ * version or a valid mdc version. If a valid superblock version is passed in,
  * mdcver need to be set to NULL. If a mdc version is passed in, sbver
  * need to set to 0.
  *
@@ -202,7 +202,6 @@ omf_find_upgrade_hist(
  * omf_upgrade_convert_only()-
  *
  * @out:   v2 in-memory metadata structure
- * @outsz: size of v2 in-memory metadata structure
  * @in:    v1 in-memory metadata structure
  * @uhtab: upgrade history table for this structure
  * @tabsz: NELEM(uhtab)
@@ -221,7 +220,6 @@ omf_find_upgrade_hist(
 static __maybe_unused merr_t
 omf_upgrade_convert_only(
 	void                       *out,
-	size_t                      outsz,
 	const void                 *in,
 	struct upgrade_history     *uhtab,
 	size_t                      tabsz,
@@ -291,7 +289,6 @@ omf_upgrade_convert_only(
 /**
  * omf_upgrade_unpack_only() - unpack OMF meta data
  * @out:     output buffer for in-memory structure
- * @outsz:   size of output buffer
  * @inbuf:   OMF structure
  * @uhtab:   upgrade history table
  * @tabsz:   NELEM of uhtab
@@ -301,7 +298,6 @@ omf_upgrade_convert_only(
 static merr_t
 omf_upgrade_unpack_only(
 	void                       *out,
-	size_t                      outsz,
 	const char                 *inbuf,
 	struct upgrade_history     *uhtab,
 	size_t                      tabsz,
@@ -454,7 +450,7 @@ omf_dparm_unpack_letoh(
 	merr_t err;
 
 	if (unpackonly == UNPACKONLY)
-		err = omf_upgrade_unpack_only(dp, sizeof(*dp), inbuf, devparm_descriptor_table,
+		err = omf_upgrade_unpack_only(dp, inbuf, devparm_descriptor_table,
 			ARRAY_SIZE(devparm_descriptor_table), sbver, mdcver);
 	else
 		err = omf_unpack_letoh_and_convert(dp, sizeof(*dp), inbuf, devparm_descriptor_table,
@@ -506,7 +502,7 @@ omf_layout_unpack_letoh(
 	merr_t err;
 
 	if (unpackonly == UNPACKONLY)
-		err = omf_upgrade_unpack_only(ld, sizeof(*ld), inbuf, layout_descriptor_table,
+		err = omf_upgrade_unpack_only(ld, inbuf, layout_descriptor_table,
 			ARRAY_SIZE(layout_descriptor_table), sbver, mdcver);
 	else
 		err = omf_unpack_letoh_and_convert(ld, sizeof(*ld), inbuf, layout_descriptor_table,
@@ -606,7 +602,6 @@ static merr_t omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf)
  * For version 1 of OMF_MDR_OCREATE record (strut layout_descriptor_omf)
  * @mp:
  * @mdcver: version of the mpool MDC content being unpacked.
- * @rtype:
  * @cdr: output
  * @inbuf:
  *
@@ -621,7 +616,6 @@ static merr_t
 omf_pmd_layout_unpack_letoh(
 	struct mpool_descriptor    *mp,
 	struct omf_mdcver          *mdcver,
-	enum mdcrec_type_omf        rtype,
 	struct omf_mdcrec_data     *cdr,
 	const char                 *inbuf)
 {
@@ -642,7 +636,7 @@ omf_pmd_layout_unpack_letoh(
 		return err;
 	}
 
-	ecl = pmd_layout_alloc(mp, &cdr->u.obj.omd_uuid, cdr->u.obj.omd_objid, cdr->u.obj.omd_gen,
+	ecl = pmd_layout_alloc(&cdr->u.obj.omd_uuid, cdr->u.obj.omd_objid, cdr->u.obj.omd_gen,
 			       cdr->u.obj.omd_mblen, cdr->u.obj.omd_old.ol_zcnt);
 	if (!ecl) {
 		err = merr(ENOMEM);
@@ -661,7 +655,7 @@ omf_pmd_layout_unpack_letoh(
 	}
 
 	if (i >= mp->pds_pdvcnt) {
-		pmd_obj_put(mp, ecl);
+		pmd_obj_put(ecl);
 
 		err = merr(ENOENT);
 		mp_pr_err("mpool %s, unpacking layout failed, mclass %u not in mpool",
@@ -1008,7 +1002,7 @@ omf_mdcrec_objcmn_unpack_letoh(
 
 	case OMF_MDR_OCREATE:
 	case OMF_MDR_OUPDATE:
-		err = omf_pmd_layout_unpack_letoh(mp, mdcver, rtype, cdr, inbuf);
+		err = omf_pmd_layout_unpack_letoh(mp, mdcver, cdr, inbuf);
 		ev(err);
 		break;
 
@@ -1323,20 +1317,6 @@ u8 omf_mdcrec_unpack_type_letoh(const char *inbuf)
 /*
  * logblock_header
  */
-bool omf_logblock_empty_le(char *lbuf)
-{
-	bool   ret_val = true;
-	int    i       = 0;
-
-	for (i = 0; i < OMF_LOGBLOCK_HDR_PACKLEN; i++) {
-		if (0 != (u8)lbuf[i]) {
-			ret_val = false;
-			break;
-		}
-	}
-
-	return ret_val;
-}
 
 merr_t omf_logblock_header_pack_htole(struct omf_logblock_header *lbh, char *outbuf)
 {

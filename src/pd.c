@@ -185,7 +185,6 @@ merr_t pd_zone_erase(struct pd_dev_parm *dparm, u64 zaddr, u32 zonecnt, bool rea
 	return ev(err);
 }
 
-
 #if HAVE_SUBMIT_BIO_OP
 #define SUBMIT_BIO(op, bio)            submit_bio((op), (bio))
 #define SUBMIT_BIO_WAIT(op, bio)       submit_bio_wait((op), (bio))
@@ -193,7 +192,6 @@ merr_t pd_zone_erase(struct pd_dev_parm *dparm, u64 zaddr, u32 zonecnt, bool rea
 #define SUBMIT_BIO(op, bio)            submit_bio((bio))
 #define SUBMIT_BIO_WAIT(op, bio)       submit_bio_wait((bio))
 #endif
-
 
 static __always_inline void
 pd_bio_init(struct bio *bio, struct block_device *bdev, int rw, loff_t off, int opflags)
@@ -214,7 +212,7 @@ pd_bio_init(struct bio *bio, struct block_device *bdev, int rw, loff_t off, int 
 }
 
 static __always_inline struct bio *
-pd_bio_chain(struct bio *target, int op, unsigned int nr_pages, gfp_t gfp)
+pd_bio_chain(struct bio *target, unsigned int nr_pages, gfp_t gfp)
 {
 	struct bio *new;
 
@@ -229,9 +227,9 @@ pd_bio_chain(struct bio *target, int op, unsigned int nr_pages, gfp_t gfp)
 
 	if (new) {
 		bio_chain(target, new);
-		SUBMIT_BIO(op, target);
+		SUBMIT_BIO(target);
 	} else {
-		SUBMIT_BIO_WAIT(op, target);
+		SUBMIT_BIO_WAIT(target);
 		bio_put(target);
 	}
 
@@ -363,7 +361,7 @@ pd_bio_rw(
 			if (left == 0) {
 				left = min_t(size_t, tot_pages, iolimit);
 
-				bio = pd_bio_chain(bio, op, left, GFP_NOIO);
+				bio = pd_bio_chain(bio, left, GFP_NOIO);
 				if (!bio)
 					return merr(ENOMEM);
 
@@ -399,7 +397,7 @@ pd_bio_rw(
 	assert(bio);
 	assert(tot_pages == 0);
 
-	rc = SUBMIT_BIO_WAIT(op, bio);
+	rc = SUBMIT_BIO_WAIT(bio);
 	if (rc)
 		err = merr(rc);
 	bio_put(bio);

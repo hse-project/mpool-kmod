@@ -2012,7 +2012,7 @@ static merr_t mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
 		return err;
 
 	mblock_get_props_ex(mpool, mblock, &mb->mb_props);
-	mblock_put(mpool, mblock);
+	mblock_put(mblock);
 
 	mb->mb_objid  = props.mpr_objid;
 	mb->mb_offset = -1;
@@ -2047,7 +2047,7 @@ static merr_t mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
 
 	(void)mblock_get_props_ex(mpool, mblock, &mb->mb_props);
 
-	mblock_put(mpool, mblock);
+	mblock_put(mblock);
 
 	mb->mb_offset = -1;
 
@@ -2109,7 +2109,7 @@ static merr_t mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mb
 	}
 
 	if (drop)
-		mblock_put(mpool, mblock);
+		mblock_put(mblock);
 
 	return err;
 }
@@ -2176,7 +2176,7 @@ mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 				 stkbuf, stkbufsz);
 	}
 
-	mblock_put(mpool, mblock);
+	mblock_put(mblock);
 
 errout:
 	if (xfree)
@@ -2205,7 +2205,7 @@ static merr_t mpioc_mlog_alloc(struct mpc_unit *unit, struct mpioc_mlog *ml)
 		return err;
 
 	mlog_get_props_ex(mpool, mlog, &ml->ml_props);
-	mlog_put(mpool, mlog);
+	mlog_put(mlog);
 
 	ml->ml_objid = props.lpr_objid;
 
@@ -2226,7 +2226,7 @@ static merr_t mpioc_mlog_find(struct mpc_unit *unit, struct mpioc_mlog *ml)
 	err = mlog_find_get(mpool, ml->ml_objid, 0, NULL, &mlog);
 	if (!err) {
 		err = mlog_get_props_ex(mpool, mlog, &ml->ml_props);
-		mlog_put(mpool, mlog);
+		mlog_put(mlog);
 	}
 
 	return err;
@@ -2278,7 +2278,7 @@ static merr_t mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_
 	}
 
 	if (drop)
-		mlog_put(mpool, mlog);
+		mlog_put(mlog);
 
 	return err;
 }
@@ -2332,7 +2332,7 @@ mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi, void *stkbuf, siz
 				 (mi->mi_op == MPOOL_OP_READ) ? READ : WRITE, stkbuf, stkbufsz);
 	}
 
-	mlog_put(mpool, mlog);
+	mlog_put(mlog);
 
 errout:
 	if (xfree)
@@ -2364,7 +2364,7 @@ static merr_t mpioc_mlog_erase(struct mpc_unit *unit, struct mpioc_mlog_id *mi)
 		mi->mi_state = props.lpx_state;
 	}
 
-	mlog_put(mpool, mlog);
+	mlog_put(mlog);
 
 	return err;
 }
@@ -2426,7 +2426,7 @@ static int mpc_bdi_alloc(void)
 	return 0;
 }
 
-static void mpc_bdi_save(struct mpc_unit *unit, struct inode *ip, struct file *fp)
+static void mpc_bdi_save(struct mpc_unit *unit, struct inode *ip)
 {
 #if HAVE_ADDRESS_SPACE_BDI
 	unit->un_saved_bdi = fp->f_mapping->backing_dev_info;
@@ -2441,7 +2441,7 @@ static void mpc_bdi_save(struct mpc_unit *unit, struct inode *ip, struct file *f
 #endif /* HAVE_ADDRESS_SPACE_BDI */
 }
 
-static void mpc_bdi_restore(struct mpc_unit *unit, struct inode *ip, struct file *fp)
+static void mpc_bdi_restore(struct mpc_unit *unit, struct inode *ip)
 {
 #if HAVE_ADDRESS_SPACE_BDI
 		fp->f_mapping->backing_dev_info = unit->un_saved_bdi;
@@ -2543,7 +2543,7 @@ static int mpc_open(struct inode *ip, struct file *fp)
 	fp->f_op = &mpc_fops_default;
 	fp->f_mapping->a_ops = &mpc_aops_default;
 
-	mpc_bdi_save(unit, ip, fp);
+	mpc_bdi_save(unit, ip);
 
 	unit->un_mapping = fp->f_mapping;
 	unit->un_ds_reap = mpc_reap;
@@ -2599,7 +2599,7 @@ static int mpc_release(struct inode *ip, struct file *fp)
 		unit->un_ds_reap = NULL;
 		unit->un_mapping = NULL;
 
-		mpc_bdi_restore(unit, ip, fp);
+		mpc_bdi_restore(unit, ip);
 	}
 
 	unit->un_open_excl = false;
@@ -2993,4 +2993,3 @@ errout:
 
 	return err;
 }
-

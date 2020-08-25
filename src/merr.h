@@ -97,19 +97,9 @@ typedef s64                 merr_t;
 merr_t merr_pack(int error, const char *file, const int line);
 
 /**
- * merr_strerror() - Format errno description from merr_t
- */
-char *merr_strerror(merr_t err, char *buf, size_t bufsz);
-
-/**
  * merr_strinfo() - Format file, line, and errno from merr_t
  */
 char *merr_strinfo(merr_t err, char *buf, size_t bufsz);
-
-/**
- * merr_file() - Return file name ptr from merr_t
- */
-const char *merr_file(merr_t err);
 
 /**
  * merr_to_user() - Convert a merr_t from kernel to user space

@@ -174,13 +174,13 @@ mlog_find_get(
  *
  * Put a reference for mlog with specified objid.
  */
-void mlog_put(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
+void mlog_put(struct mlog_descriptor *mlh)
 {
 	struct pmd_layout *layout;
 
 	layout = mlog2layout(mlh);
 	if (layout)
-		pmd_obj_put(mp, layout);
+		pmd_obj_put(layout);
 }
 
 /**
@@ -281,11 +281,10 @@ merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
  */
 static merr_t
 mlog_logrecs_validate(
-	struct mlog_descriptor *mp,
-	struct mlog_stat       *lstat,
-	int                    *midrec,
-	u16                     rbidx,
-	u16                     lbidx)
+	struct mlog_stat   *lstat,
+	int                *midrec,
+	u16                 rbidx,
+	u16                 lbidx)
 {
 	merr_t                       err = 0;
 	u64                          recnum = 0;
@@ -480,7 +479,7 @@ mlog_logpage_validate(
 		*fsetidmax = lbh.olh_cfsetid;
 
 		/* Validate the log block at lbidx. */
-		err = mlog_logrecs_validate(mlh, lstat, midrec, rbidx, lbidx);
+		err = mlog_logrecs_validate(lstat, midrec, rbidx, lbidx);
 		if (err) {
 			mp_pr_err("mlog %p,, midrec %d, log pg idx %u, sector idx %u",
 				  err, mlh, *midrec, rbidx, lbidx);
@@ -760,7 +759,7 @@ merr_t mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 fl
  *
  * Flush and close log and release resources; no op if log is not open.
  *
- * Returns: 0 on sucess; merr_t otherwise
+ * Returns: 0 on success; merr_t otherwise
  */
 merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
@@ -818,8 +817,7 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
  *
  * Returns: 0 if successful; merr_t otherwise
  */
-merr_t
-mlog_gen(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *gen)
+merr_t mlog_gen(struct mlog_descriptor *mlh, u64 *gen)
 {
 	struct pmd_layout *layout = mlog2layout(mlh);
 
@@ -980,7 +978,7 @@ merr_t mlog_erase(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 
  *
  * Append a marker (log rec with zero-length data field) of type mtype.
  *
- * Returns: 0 on sucess; merr_t otherwise
+ * Returns: 0 on success; merr_t otherwise
  * One of the possible errno values in merr_t:
  * EFBIG - if no room in log
  */
@@ -1006,7 +1004,7 @@ mlog_append_marker(
 	sectsz  = MLOG_SECSZ(lstat);
 	nseclpg = MLOG_NSECLPG(lstat);
 
-	if (mlog_append_dmax(mp, layout) == -1) {
+	if (mlog_append_dmax(layout) == -1) {
 		/* Mlog is already full, flush whatever we can */
 		if (lstat->lst_abdirty) {
 			(void)mlog_logblocks_flush(mp, layout, skip_ser);
@@ -1052,7 +1050,7 @@ mlog_append_marker(
  *
  * Append compaction start marker; log must be open with csem flag true.
  *
- * Returns: 0 on sucess; merr_t otherwise
+ * Returns: 0 on success; merr_t otherwise
  * One of the possible errno values in merr_t:
  * EFBIG - if no room in log
  */
@@ -1106,7 +1104,7 @@ merr_t mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *m
  *
  * Append compaction start marker; log must be open with csem flag true.
  *
- * Returns: 0 on sucess; merr_t otherwise
+ * Returns: 0 on success; merr_t otherwise
  * One of the possible errno values in merr_t:
  * EFBIG - if no room in log
  */
@@ -1208,7 +1206,7 @@ static void memcpy_from_iov(struct kvec *iov, char *buf, size_t buflen, int *nex
  * @sync:     if true, then we do not return until data is on media
  * @skip_ser: client guarantees serialization
  *
- * Returns: 0 on sucess; merr_t otherwise
+ * Returns: 0 on success; merr_t otherwise
  * One of the possible errno values in merr_t:
  * EFBIG - if no room in log
  */
@@ -1248,7 +1246,7 @@ mlog_append_data_internal(
 	lrd.olr_tlen = buflen;
 
 	while (true) {
-		if ((bufoff != buflen) && (mlog_append_dmax(mp, layout) == -1)) {
+		if ((bufoff != buflen) && (mlog_append_dmax(layout) == -1)) {
 
 			/* Mlog is full and there's more to write;
 			 * mlog_append_dmax() should prevent this, but it lied.
@@ -1369,7 +1367,7 @@ mlog_append_datav(
 		mp_pr_err("mpool %s, mlog 0x%lx, inconsistent state %u %u", err, mp->pds_name,
 			  (ulong)layout->eld_objid, lstat->lst_csem, lstat->lst_cstart);
 	} else {
-		dmax = mlog_append_dmax(mp, layout);
+		dmax = mlog_append_dmax(layout);
 		if (dmax < 0 || buflen > dmax) {
 			err = merr(EFBIG);
 			mp_pr_debug("mpool %s, mlog 0x%lx mlog full %ld",
@@ -1434,7 +1432,7 @@ mlog_append_data(
  *
  * Returns: 0 on success; merr_t otherwise
  */
-merr_t mlog_read_data_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
+merr_t mlog_read_data_init(struct mlog_descriptor *mlh)
 {
 	struct pmd_layout      *layout = mlog2layout(mlh);
 	struct mlog_stat       *lstat;
@@ -1708,7 +1706,7 @@ mlog_read_data_next_impl(
  *   EOVERFLOW if buflen is insufficient to hold data record; can retry
  *   errno otherwise
  *
- *   Bytes read on success in the ouput param rdlen (can be 0 if appended a
+ *   Bytes read on success in the output param rdlen (can be 0 if appended a
  *   zero-length data record)
  */
 merr_t
@@ -1729,7 +1727,7 @@ mlog_read_data_next(
  *
  * Returns: 0 if successful; merr_t otherwise
  */
-merr_t
+static merr_t
 mlog_get_props(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, struct mlog_props *prop)
 {
 	struct pmd_layout *layout = mlog2layout(mlh);

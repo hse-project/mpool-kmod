@@ -14,6 +14,26 @@ DEFINE_MERR(merr_bug2, "mpool_merr_bug2k");
 DEFINE_MERR(merr_bug3, "mpool_merr_bug3k");
 DEFINE_MERR(merr_base, "mpool_merr_bug0k");
 
+static const char *merr_file(merr_t err)
+{
+	s32 off;
+
+	if (err == 0 || err == -1 || (err & MERR_RSVD_MASK))
+		return NULL;
+
+	off = (s64)(err & MERR_FILE_MASK) >> MERR_FILE_SHIFT;
+
+	/*
+	 * Rough guess, the offset shouldn't be larger than the number
+	 * of .c files in the module.
+	 * TODO: Better to check the bounds of the "mpool_merr" segment, but how?
+	 */
+	if (off < -32 || off > 32)
+		return merr_bug2;
+
+	return merr_base + (off * MERR_ALIGN);
+}
+
 merr_t merr_to_user(merr_t err, char __user *ubuf)
 {
 	const char *file;
@@ -83,27 +103,7 @@ merr_t merr_pack(int errnum, const char *file, int line)
 	return err;
 }
 
-const char *merr_file(merr_t err)
-{
-	s32 off;
-
-	if (err == 0 || err == -1 || (err & MERR_RSVD_MASK))
-		return NULL;
-
-	off = (s64)(err & MERR_FILE_MASK) >> MERR_FILE_SHIFT;
-
-	/*
-	 * Rough guess, the offset shouldn't be larger than the number
-	 * of .c files in the module.
-	 * TODO: Better to check the bounds of the "mpool_merr" segment, but how?
-	 */
-	if (off < -32 || off > 32)
-		return merr_bug2;
-
-	return merr_base + (off * MERR_ALIGN);
-}
-
-char *merr_strerror(merr_t err, char *buf, size_t bufsz)
+static char *merr_strerror(merr_t err, char *buf, size_t bufsz)
 {
 	int errnum = merr_errno(err);
 	const char *fmt;

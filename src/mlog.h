@@ -155,7 +155,7 @@ mlog_find_get(
 	struct mlog_props          *prop,
 	struct mlog_descriptor    **mlh);
 
-void mlog_put(struct mpool_descriptor *mp, struct mlog_descriptor *layout);
+void mlog_put(struct mlog_descriptor *layout);
 
 void mlog_lookup_rootids(u64 *id1, u64 *id2);
 
@@ -182,7 +182,7 @@ merr_t mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 fl
 
 merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-merr_t mlog_gen(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *gen);
+merr_t mlog_gen(struct mlog_descriptor *mlh, u64 *gen);
 
 merr_t mlog_empty(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool *empty);
 
@@ -200,7 +200,7 @@ mlog_append_data(
 	u64                         buflen,
 	int                         sync);
 
-merr_t mlog_read_data_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
+merr_t mlog_read_data_init(struct mlog_descriptor *mlh);
 
 /**
  * mlog_read_data_next()
@@ -222,9 +222,6 @@ mlog_read_data_next(
 	char                       *buf,
 	u64                         buflen,
 	u64                        *rdlen);
-
-merr_t
-mlog_get_props(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, struct mlog_props *prop);
 
 merr_t
 mlog_get_props_ex(

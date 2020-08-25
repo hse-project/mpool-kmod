@@ -13,8 +13,6 @@ struct pd_dev_parm;
 struct omf_sb_descriptor;
 struct pd_prop;
 
-extern struct omf_sb_descriptor SBCLEAR;
-
 /*
  * Drives have 2 superblocks.
  * + sb0 at byte offset 0

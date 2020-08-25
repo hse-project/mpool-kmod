@@ -224,7 +224,7 @@ struct omf_mdcrec_data {
 /**
  * objid_type()
  *
- * Return the type field from an objid.  Retuned as int, so it can also be
+ * Return the type field from an objid.  Returned as int, so it can also be
  * used for handles, which have the OMF_OBJ_UHANDLE bit set in addition to
  * a type.
  */
@@ -274,16 +274,6 @@ merr_t omf_sb_unpack_letoh(struct omf_sb_descriptor *sb, const char *inbuf, u16 
  * Return: 1 if true; 0 otherwise
  */
 bool omf_sb_has_magic_le(const char *inbuf);
-
-/**
- * omf_logblock_empty_le() - Determine if log block is empty
- * @lbuf: char *
- *
- * Check little-endian log block in lbuf to see if empty (unwritten).
- *
- * Return: 1 if log block is empty; 0 otherwise
- */
-bool omf_logblock_empty_le(char *lbuf);
 
 /**
  * omf_logblock_header_pack_htole() - pack log block header

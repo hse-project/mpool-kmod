@@ -172,7 +172,7 @@ struct pmd_mdc_stats {
  *    the case because all such metadata updates must be logged to
  *    the object's mdc and mdc logging is inherently serial
  *  + see struct pmd_layout comments for specifics on how
- *    compactlock is used to freeze metdata for committed objects
+ *    compactlock is used to freeze metadata for committed objects
  *  + mmi_bgoplock protects the rec count in every committed object
  *    layout in the mdc; it is rarely used so is not a performance
  *    bottleneck and it saves memory by not having a lock per object
@@ -270,7 +270,6 @@ struct pmd_obj_load_work {
  * @mdc01:
  * @mdc02:
  * @create:
- * @flags: to know if mpool metadata conversion is permitted during activate.
  *
  * Load all metadata for mpool mp; create flag indicates if is a new pool;
  * caller must ensure no other thread accesses mp until activation is complete.
@@ -283,8 +282,7 @@ pmd_mpool_activate(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *mdc01,
 	struct pmd_layout          *mdc02,
-	int                         create,
-	u32                         flags);
+	int                         create);
 
 /**
  * pmd_mpool_deactivate() - Deactivate mpool mp.

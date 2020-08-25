@@ -275,7 +275,7 @@ mpool_mdc0_sb2obj(
 	int    i;
 
 	/* MDC0 mlog1 layout */
-	*l1 = pmd_layout_alloc(mp, &sb->osb_mdc01uuid, MDC0_OBJID_LOG1, sb->osb_mdc01gen, 0,
+	*l1 = pmd_layout_alloc(&sb->osb_mdc01uuid, MDC0_OBJID_LOG1, sb->osb_mdc01gen, 0,
 			       sb->osb_mdc01desc.ol_zcnt);
 	if (!*l1) {
 		*l1 = *l2 = NULL;
@@ -299,7 +299,7 @@ mpool_mdc0_sb2obj(
 		char uuid_str[40];
 
 		/* Should never happen */
-		pmd_obj_put(mp, *l1);
+		pmd_obj_put(*l1);
 		*l1 = *l2 = NULL;
 
 		mpool_unparse_uuid(&sb->osb_mdc01devid, uuid_str);
@@ -311,10 +311,10 @@ mpool_mdc0_sb2obj(
 	}
 
 	/* MDC0 mlog2 layout */
-	*l2 = pmd_layout_alloc(mp, &sb->osb_mdc02uuid, MDC0_OBJID_LOG2, sb->osb_mdc02gen, 0,
+	*l2 = pmd_layout_alloc(&sb->osb_mdc02uuid, MDC0_OBJID_LOG2, sb->osb_mdc02gen, 0,
 			       sb->osb_mdc02desc.ol_zcnt);
 	if (!*l2) {
-		pmd_obj_put(mp, *l1);
+		pmd_obj_put(*l1);
 
 		*l1 = *l2 = NULL;
 
@@ -337,8 +337,8 @@ mpool_mdc0_sb2obj(
 		char uuid_str[40];
 
 		/* Should never happen */
-		pmd_obj_put(mp, *l1);
-		pmd_obj_put(mp, *l2);
+		pmd_obj_put(*l1);
+		pmd_obj_put(*l2);
 		*l1 = *l2 = NULL;
 
 		mpool_unparse_uuid(&sb->osb_mdc02devid, uuid_str);
@@ -389,7 +389,6 @@ merr_t mpool_dev_check_new(struct mpool_descriptor *mp, struct mpool_dev_info *p
 merr_t
 mpool_desc_pdmc_add(
 	struct mpool_descriptor	       *mp,
-	u32                             flags,
 	u16                             pdh,
 	struct omf_devparm_descriptor  *omf_devparm,
 	bool                            check_only)
@@ -479,7 +478,7 @@ merr_t mpool_desc_init_newpool(struct mpool_descriptor *mp, u32 flags)
 	 * Add drive in its media class. That may create the class
 	 * if first drive of the class.
 	 */
-	err = mpool_desc_pdmc_add(mp, flags, pdh, NULL, false);
+	err = mpool_desc_pdmc_add(mp, pdh, NULL, false);
 	if (err) {
 		struct mpool_dev_info  *pd __maybe_unused;
 
@@ -564,8 +563,7 @@ mpool_desc_init_sb(
 	struct mpool_descriptor    *mp,
 	struct omf_sb_descriptor   *sbmdc0,
 	u32                         flags,
-	bool                       *mc_resize,
-	const char                 *mp_newname)
+	bool                       *mc_resize)
 {
 	struct omf_sb_descriptor   *sb = NULL;
 	struct mpool_dev_info      *pd = NULL;
@@ -748,7 +746,7 @@ mpool_desc_init_sb(
 		mpool_uuid_copy(&pd->pdi_devid, &sb->osb_parm.odp_devid);
 
 		/* Add drive in its media class. Create the media class if not yet created. */
-		err = mpool_desc_pdmc_add(mp, 0, pdh, NULL, false);
+		err = mpool_desc_pdmc_add(mp, pdh, NULL, false);
 		if (err) {
 			mp_pr_err("%s: pd %s, adding drive in a media class failed",
 				  err, mp->pds_name, pd->pdi_name);
@@ -884,7 +882,7 @@ mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_descripto
 	pd_dev_set_unavail(&pd->pdi_parm, omf_devparm);
 
 	/* Add the PD in its media class. */
-	err = mpool_desc_pdmc_add(mp, 0, mp->pds_pdvcnt, omf_devparm, false);
+	err = mpool_desc_pdmc_add(mp, mp->pds_pdvcnt, omf_devparm, false);
 	if (ev(err))
 		return err;
 
@@ -910,7 +908,7 @@ merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 	for (i = 0; i < 2; ++i) {
 		err = mlog_find_get(mp, root_mlog_id[i], 1, NULL, &ml_desc);
 		if (!err) {
-			mlog_put(mp, ml_desc);
+			mlog_put(ml_desc);
 			continue;
 		}
 
@@ -929,7 +927,7 @@ merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 		}
 
 		if (mlprops.lpr_objid != root_mlog_id[i]) {
-			mlog_put(mp, ml_desc);
+			mlog_put(ml_desc);
 			err = ENOENT;
 			mp_pr_err("mpool %s, root mlog mismatch 0x%lx 0x%lx", err,
 				  mp->pds_name, (ulong)root_mlog_id[i], (ulong)mlprops.lpr_objid);
@@ -939,14 +937,14 @@ merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 		err = mlog_commit(mp, ml_desc);
 		if (err) {
 			if (mlog_abort(mp, ml_desc))
-				mlog_put(mp, ml_desc);
+				mlog_put(ml_desc);
 
 			mp_pr_err("mpool %s, root mlog commit 0x%lx failed",
 				  err, mp->pds_name, (ulong)root_mlog_id[i]);
 			return err;
 		}
 
-		mlog_put(mp, ml_desc);
+		mlog_put(ml_desc);
 	}
 
 	return err;

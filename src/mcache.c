@@ -213,7 +213,7 @@ static void mpc_xvm_release(struct kref *kref)
 		flush_workqueue(mpc_rgn2wq(xvm->xvm_rgn));
 
 	for (i = 0; i < xvm->xvm_mbinfoc; ++i)
-		mblock_put(xvm->xvm_mpdesc, xvm->xvm_mbinfov[i].mbdesc);
+		mblock_put(xvm->xvm_mbinfov[i].mbdesc);
 
 	INIT_WORK(&xvm->xvm_work, mpc_xvm_free_cb);
 	queue_work(mpc_wq_trunc, &xvm->xvm_work);
@@ -919,7 +919,7 @@ merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, stru
 errout:
 	if (err) {
 		for (i = 0; i < mbidc; ++i)
-			mblock_put(mp, mbinfov[i].mbdesc);
+			mblock_put(mbinfov[i].mbdesc);
 		kmem_cache_free(cache, xvm);
 	}
 

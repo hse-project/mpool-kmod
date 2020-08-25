@@ -53,16 +53,6 @@ mlog_read_iter_init(struct pmd_layout *layout, struct mlog_stat *lstat, struct m
 void mlog_stat_init_common(struct pmd_layout *layout, struct mlog_stat *lstat);
 
 merr_t
-mlog_rw(
-	struct mpool_descriptor *mp,
-	struct mlog_descriptor  *mlh,
-	struct kvec             *iov,
-	int                      iovcnt,
-	u64                      boff,
-	u8                       rw,
-	bool                     skip_ser);
-
-merr_t
 mlog_populate_rbuf(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *layout,
@@ -70,15 +60,12 @@ mlog_populate_rbuf(
 	off_t                      *soff,
 	bool                        skip_ser);
 
-merr_t
-mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *layout, u16 abidx, bool skip_ser);
-
 void
 mlog_getprops_cmn(struct mpool_descriptor *mp, struct pmd_layout *layout, struct mlog_props *prop);
 
 merr_t mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser);
 
-s64 mlog_append_dmax(struct mpool_descriptor *mp, struct pmd_layout *layout);
+s64 mlog_append_dmax(struct pmd_layout *layout);
 
 merr_t
 mlog_update_append_idx(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser);

@@ -165,7 +165,6 @@ void pmd_obj_wrunlock(struct pmd_layout *layout)
  */
 struct pmd_layout *
 pmd_layout_alloc(
-	struct mpool_descriptor    *mp,
 	struct mpool_uuid          *uuid,
 	u64                         objid,
 	u64                         gen,
@@ -281,7 +280,7 @@ static void pmd_layout_unprovision(struct mpool_descriptor *mp, struct pmd_layou
 	}
 
 	/* Drop birth reference... */
-	pmd_obj_put(mp, layout);
+	pmd_obj_put(layout);
 }
 
 /**
@@ -297,8 +296,7 @@ pmd_layout_calculate(
 	struct mpool_descriptor   *mp,
 	struct pmd_obj_capacity   *ocap,
 	struct media_class        *mc,
-	u64                       *zcnt,
-	enum obj_type_omf          otype)
+	u64                       *zcnt)
 {
 	u32    zonepg;
 
@@ -587,7 +585,7 @@ merr_t pmd_obj_commit(struct mpool_descriptor *mp, struct pmd_layout *layout)
 			mp_pr_crit("mpool %s, obj 0x%lx collided during commit",
 				   err, mp->pds_name, (ulong)layout->eld_objid);
 
-			/* Put the object back in the uncommited objects tree */
+			/* Put the object back in the uncommitted objects tree */
 			pmd_uc_lock(cinfo, cslot);
 			pmd_uc_insert(cinfo, layout);
 			pmd_uc_unlock(cinfo);
@@ -681,7 +679,7 @@ merr_t pmd_obj_abort(struct mpool_descriptor *mp, struct pmd_layout *layout)
 	pmd_obj_erase_start(mp, layout);
 
 	/* Drop caller's reference... */
-	pmd_obj_put(mp, layout);
+	pmd_obj_put(layout);
 
 	return 0;
 }
@@ -753,7 +751,7 @@ merr_t pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout)
 	pmd_obj_erase_start(mp, layout);
 
 	/* Drop caller's reference... */
-	pmd_obj_put(mp, layout);
+	pmd_obj_put(layout);
 
 	return 0;
 }
@@ -945,7 +943,6 @@ static merr_t pmd_realloc_idvalidate(struct mpool_descriptor *mp, u64 objid)
  * @mp:      Mpool descriptor
  * @objid:   Object ID
  * @otype:   Object type
- * @ocap:    Object capacity info
  * @mclassp: Media class
  */
 static merr_t
@@ -953,7 +950,6 @@ pmd_alloc_argcheck(
 	struct mpool_descriptor    *mp,
 	u64                         objid,
 	enum obj_type_omf           otype,
-	struct pmd_obj_capacity    *ocap,
 	enum mp_media_classp        mclassp)
 {
 	merr_t err;
@@ -1001,7 +997,7 @@ pmd_obj_alloc_cmn(
 
 	*layoutp = NULL;
 
-	err = pmd_alloc_argcheck(mp, objid, otype, ocap, mclass);
+	err = pmd_alloc_argcheck(mp, objid, otype, mclass);
 	if (ev(err))
 		return err;
 
@@ -1039,9 +1035,9 @@ retry:
 	}
 
 	/* Calculate the height (zcnt) of layout. */
-	pmd_layout_calculate(mp, ocap, mc, &zcnt, otype);
+	pmd_layout_calculate(mp, ocap, mc, &zcnt);
 
-	layout = pmd_layout_alloc(mp, &uuid, objid, 0, 0, zcnt);
+	layout = pmd_layout_alloc(&uuid, objid, 0, 0, zcnt);
 	if (!layout) {
 		up_read(&mp->pds_pdvlock);
 		return merr(ENOMEM);
@@ -1052,7 +1048,7 @@ retry:
 	up_read(&mp->pds_pdvlock);
 
 	if (err) {
-		pmd_obj_put(mp, layout);
+		pmd_obj_put(layout);
 
 		/* TODO: Retry only if mperasewq is busy... */
 		if (retries-- > 0) {
@@ -1079,7 +1075,7 @@ retry:
 		kref_get(&layout->eld_ref);
 
 	/*
-	 * If realloc, we MUST confirm (while holding the uncommited obj
+	 * If realloc, we MUST confirm (while holding the uncommitted obj
 	 * tree lock) that objid is not in the committed obj tree in order
 	 * to protect against an invalid *_realloc() call.
 	 */
@@ -1106,7 +1102,7 @@ retry:
 			  (ulong)objid, realloc ? "" : "un");
 
 		if (needref)
-			pmd_obj_put(mp, layout);
+			pmd_obj_put(layout);
 
 		/*
 		 * Since object insertion failed, we need to undo the
@@ -1170,7 +1166,7 @@ void pmd_mpool_usage(struct mpool_descriptor *mp, struct mpool_usage *usage)
  * In 1.0 the MDC0 metadata is replicated on the 4 superblocks of the drive.
  * In case of failure, the SBs of a same drive may end up having different
  * values for the MDC0 metadata.
- * To adress this situation voting could be used along with the SB gen number
+ * To address this situation voting could be used along with the SB gen number
  * psb_gen. But for 1.0 a simpler approach is taken: SB gen number is not used
  * and SB0 is the authoritative replica. The other 3 replicas of MDC0 metadata
  * are not used when the mpool activates.
@@ -1260,7 +1256,7 @@ pmd_update_obj_stats(
 	case PMD_OBJ_LOAD:
 		if (otype == OMF_OBJ_MBLOCK)
 			pms->pms_mblock_wlen += layout->eld_mblen;
-		/* Fall through */
+		fallthrough;
 
 	case PMD_OBJ_ALLOC:
 		cap = pmd_layout_cap_get(mp, layout);
@@ -1281,7 +1277,7 @@ pmd_update_obj_stats(
 	case PMD_OBJ_DELETE:
 		if (otype == OMF_OBJ_MBLOCK)
 			pms->pms_mblock_wlen -= layout->eld_mblen;
-		/* Fall through */
+		fallthrough;
 
 	case PMD_OBJ_ABORT:
 		cap = pmd_layout_cap_get(mp, layout);

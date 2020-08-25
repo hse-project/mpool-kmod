@@ -23,7 +23,7 @@
 #include "mclass.h"
 
 /* Cleared out sb */
-struct omf_sb_descriptor SBCLEAR;
+static struct omf_sb_descriptor SBCLEAR;
 
 /*
  * Drives have 4 superblocks.

@@ -98,14 +98,14 @@ static void pmd_mda_free(struct mpool_descriptor *mp)
 		rbtree_postorder_for_each_entry_safe(
 			layout, tmp, &cinfo->mmi_co_root, eld_nodemdc) {
 
-			pmd_obj_put(mp, layout);
+			pmd_obj_put(layout);
 		}
 
 		/* Release uncommitted objects... */
 		rbtree_postorder_for_each_entry_safe(
 			layout, tmp, &cinfo->mmi_uc_root, eld_nodemdc) {
 
-			pmd_obj_put(mp, layout);
+			pmd_obj_put(layout);
 		}
 	}
 }
@@ -940,7 +940,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 			found = pmd_co_insert(cinfo, layout);
 			if (found) {
 				msg = "OCREATE duplicate object ID";
-				pmd_obj_put(mp, layout);
+				pmd_obj_put(layout);
 				err = merr(EEXIST);
 				break;
 			}
@@ -960,7 +960,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 			}
 
 			pmd_co_remove(cinfo, found);
-			pmd_obj_put(mp, found);
+			pmd_obj_put(found);
 
 			atomic_inc(&cinfo->mmi_pco_cnt.pcc_del);
 			atomic_dec(&cinfo->mmi_pco_cnt.pcc_cobj);
@@ -1016,13 +1016,13 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 			found = pmd_co_find(cinfo, objid);
 			if (!found) {
 				msg = "OUPDATE object not found";
-				pmd_obj_put(mp, layout);
+				pmd_obj_put(layout);
 				err = merr(ENOENT);
 				break;
 			}
 
 			pmd_co_remove(cinfo, found);
-			pmd_obj_put(mp, found);
+			pmd_obj_put(found);
 
 			layout->eld_state = PMD_LYT_COMMITTED;
 			pmd_co_insert(cinfo, layout);
@@ -1369,7 +1369,7 @@ static void pmd_pre_compact_reset(struct pmd_mdc_info *cinfo, u32 compacted)
  *    take any lock.
  *
  * Note: this function or its callees must call pmd_mdc_append() with no sync
- *	instead of pmd_mdc_addrec() to avoid trigerring nested compaction of
+ *	instead of pmd_mdc_addrec() to avoid triggering nested compaction of
  *	a same MDCi.
  *	The sync/flush is done by append of cend, no need to sync before that.
  */
@@ -1946,8 +1946,7 @@ pmd_mpool_activate(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *mdc01,
 	struct pmd_layout          *mdc02,
-	int                         create,
-	u32                         flags)
+	int                         create)
 {
 	merr_t  err;
 
@@ -1966,8 +1965,8 @@ pmd_mpool_activate(
 		 * pmd_mda_free() will dealloc mdc01/2 on subsequent
 		 * activation failures
 		 */
-		pmd_obj_put(mp, mdc01);
-		pmd_obj_put(mp, mdc02);
+		pmd_obj_put(mdc01);
+		pmd_obj_put(mdc02);
 		goto exit;
 	}
 

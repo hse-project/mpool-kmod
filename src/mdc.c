@@ -108,9 +108,9 @@ mdc_find_get(
 
 	if (do_put && ((ferr[0] && !ferr[1]) || (ferr[1] && !ferr[0]))) {
 		if (ferr[0])
-			mlog_put(mp, mlh[1]);
+			mlog_put(mlh[1]);
 		else
-			mlog_put(mp, mlh[0]);
+			mlog_put(mlh[0]);
 	}
 }
 
@@ -118,10 +118,10 @@ mdc_find_get(
  * mdc_put() - Wrapper around put for mlog pair.
  */
 static void
-mdc_put(struct mpool_descriptor *mp, struct mlog_descriptor *mlh1, struct mlog_descriptor *mlh2)
+mdc_put(struct mlog_descriptor *mlh1, struct mlog_descriptor *mlh2)
 {
-	mlog_put(mp, mlh1);
-	mlog_put(mp, mlh2);
+	mlog_put(mlh1);
+	mlog_put(mlh2);
 }
 
 uint64_t
@@ -285,7 +285,7 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 		err1 = mlog_close(mp, mdc->mdc_logh1);
 		err2 = mlog_close(mp, mdc->mdc_logh2);
 
-		mdc_put(mp, mdc->mdc_logh1, mdc->mdc_logh2);
+		mdc_put(mdc->mdc_logh1, mdc->mdc_logh2);
 	}
 
 exit:
@@ -365,7 +365,7 @@ uint64_t mp_mdc_cend(struct mp_mdc *mdc)
 
 	err = mlog_append_cend(mp, tgth);
 	if (!ev(err)) {
-		err = mlog_gen(mp, tgth, &gentgt);
+		err = mlog_gen(tgth, &gentgt);
 		if (!ev(err)) {
 			err = mlog_erase(mp, srch, gentgt + 1);
 			ev(err);
@@ -421,7 +421,7 @@ uint64_t mp_mdc_close(struct mp_mdc *mdc)
 		rval = err;
 	}
 
-	mdc_put(mp, mdc->mdc_logh1, mdc->mdc_logh2);
+	mdc_put(mdc->mdc_logh1, mdc->mdc_logh2);
 
 	mdc_invalidate(mdc);
 	mdc_release(mdc, false);
@@ -443,7 +443,7 @@ uint64_t mp_mdc_rewind(struct mp_mdc *mdc)
 	if (ev(err))
 		return err;
 
-	err = mlog_read_data_init(mdc->mdc_mp, mdc->mdc_alogh);
+	err = mlog_read_data_init(mdc->mdc_alogh);
 	if (err)
 		mp_pr_err("mpool %s, mdc %p rewind failed, mlog %p",
 			  err, mdc->mdc_mpname, mdc, mdc->mdc_alogh);

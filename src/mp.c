@@ -130,7 +130,7 @@ mpool_create(
 		goto errout;
 	}
 
-	err = pmd_mpool_activate(mp, mdc01, mdc02, 1, 0);
+	err = pmd_mpool_activate(mp, mdc01, mdc02, 1);
 	if (err) {
 		mp_pr_err("mpool %s, activation failed", err, mpname);
 		goto errout;
@@ -330,7 +330,7 @@ mpool_activate(
 	mp->pds_pdvcnt = dcnt;
 
 	/* Init mpool descriptor from superblocks on drives */
-	err = mpool_desc_init_sb(mp, sbmdc0, flags, mc_resize, NULL);
+	err = mpool_desc_init_sb(mp, sbmdc0, flags, mc_resize);
 	if (ev(err)) {
 		mp_pr_err("mpool_desc_init_sb failed, first drive path %s", err, dpaths[0]);
 		goto errout;
@@ -350,7 +350,7 @@ mpool_activate(
 		goto errout;
 	}
 
-	err = pmd_mpool_activate(mp, mdc01, mdc02, 0, flags);
+	err = pmd_mpool_activate(mp, mdc01, mdc02, 0);
 	if (ev(err)) {
 		mp_pr_err("mpool %s, activation failed", err, mp->pds_name);
 		goto errout;
@@ -572,7 +572,7 @@ merr_t mpool_destroy(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags
 	mp->pds_pdvcnt = dcnt;
 
 	/* Init mpool descriptor from superblocks on drives */
-	err = mpool_desc_init_sb(mp, sbmdc0, flags, NULL, NULL);
+	err = mpool_desc_init_sb(mp, sbmdc0, flags, NULL);
 	if (err) {
 		mp_pr_err("mpool %s, first pd %s, mpool desc init from sb failed",
 			  err, (mp->pds_name == NULL) ? "" : mp->pds_name, dpaths[0]);
@@ -786,7 +786,7 @@ merr_t mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop 
 	 * Check that the drive can be added in a media class.
 	 */
 	down_read(&mp->pds_pdvlock);
-	err = mpool_desc_pdmc_add(mp, 0, mp->pds_pdvcnt, NULL, true);
+	err = mpool_desc_pdmc_add(mp, mp->pds_pdvcnt, NULL, true);
 	up_read(&mp->pds_pdvlock);
 	if (err) {
 		mp_pr_err("%s: pd %s, can't place in any media class", err, mp->pds_name, dpath);
@@ -845,7 +845,7 @@ merr_t mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop 
 	 * Add the PD in its class. That should NOT fail because we already
 	 * checked that the drive can be added in a media class.
 	 */
-	err = mpool_desc_pdmc_add(mp, 0, mp->pds_pdvcnt - 1, NULL, false);
+	err = mpool_desc_pdmc_add(mp, mp->pds_pdvcnt - 1, NULL, false);
 	if (ev(err))
 		mp->pds_pdvcnt--;
 

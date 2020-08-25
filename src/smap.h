@@ -315,7 +315,6 @@ merr_t smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt
 /*
  * smap internal functions
  */
-merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh);
 
 /**
  * smap_mpool_usage() - Get the media class usage for a given mclass.
