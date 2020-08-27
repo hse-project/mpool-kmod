@@ -24,37 +24,6 @@ extern struct rb_root mpool_pools;
 struct pmd_layout;
 
 /**
- * DOC: LOCKING
- *
- * x-module locking hierarchy for mpool mp
- *
- * + mpool_s_lock
- * + pmd_s_lock
- * + mp.mda.mdi_slotv[x].(unc)obj[objid].rwlock (per object per mdc);
- *   normally obtained by calling pmd_obj_*lock(layout)
- * + mp.omlock
- * + mp.spcap_lock
- * + mp.mda.mdi_slotvlock
- * + mp.mda.mdi_slotv[x].uqlock (one per mdc)
- * + mp.mda.mdi_slotv[x].compactlock (one per mdc)
- * + mp.mda.mdi_slotv[x].uncolock (one per mdc)
- * + mp.mda.mdi_slotv[x].colock (one per mdc)
- * + mp.mda.mdi_slotv[x].bgoplock (one per mdc)
- * + mp.pds_pdvlock
- * + mp.pdv[d].zmlock[z] (one per drive smap allocation zone)
- * + mp.pdv[d].ds.sda_dalock (one per drive)
- *   <eol>
- *
- * NOTE: Every user object (mlog or mblock) is associated with exactly one
- * metadata container X (mdc X), X>0.  Operations on a user object take locks
- * related to that object and its mdc, mp.mda.mdi_slotv[X].* above, and also
- * on the pair of mlog objects used to implement mdc X which are associated
- * with mdc 0.
- * Hence all mp.mda.mdi_slotv[0].* locks are below any mp.mda.mdi_slotv[X].*
- * locks, X>0.
- */
-
-/**
  * enum mpool_status -
  * @MPOOL_STAT_UNDEF:
  * @MPOOL_STAT_OPTIMAL:

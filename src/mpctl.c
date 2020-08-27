@@ -1493,7 +1493,7 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 		return merr(EINVAL);
 
 	if (ev(!mpc_unit_isctldev(ctl)))
-		return merr(ENOTSUPP);
+		return merr(EOPNOTSUPP);
 
 	if (ev(mp->mp_dpathc < 1 || mp->mp_dpathc > MPOOL_DRIVES_MAX))
 		return merr(EDOM);
