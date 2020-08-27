@@ -127,7 +127,7 @@ mdc_put(struct mlog_descriptor *mlh1, struct mlog_descriptor *mlh2)
 uint64_t
 mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struct mp_mdc **mdc_out)
 {
-	struct mlog_props           props[2];
+	struct mlog_props          *props = NULL;
 	struct mlog_descriptor     *mlh[2];
 	struct mp_mdc              *mdc;
 
@@ -154,6 +154,12 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 
 	if (logid1 == logid2) {
 		err = merr(EINVAL);
+		goto exit;
+	}
+
+	props = kcalloc(2, sizeof(*props), GFP_KERNEL);
+	if (!props) {
+		err = merr(ENOMEM);
 		goto exit;
 	}
 
@@ -291,6 +297,8 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 exit:
 	if (err)
 		kfree(mdc);
+
+	kfree(props);
 
 	return err;
 }

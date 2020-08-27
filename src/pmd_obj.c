@@ -1447,12 +1447,21 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 	u64      cap, used, free, nmtoc;
 	u16      credit, cslot;
 	u8       sidx, nidx, num_mdc;
-	u8       slotnum[MDC_SLOTS] = { 0 };
+	u8      *slotnum;
 	void   **sarray = mp->pds_mda.mdi_sel.mds_smdc;
 	u32      nbnoalloc = (u32)mp->pds_params.mp_pconbnoalloc;
 
 	if (mp->pds_mda.mdi_slotvcnt < 2) {
 		mp_pr_warn("Not enough MDCn %u", mp->pds_mda.mdi_slotvcnt - 1);
+		return;
+	}
+
+	slotnum = kcalloc(MDC_SLOTS, sizeof(*slotnum), GFP_KERNEL);
+	if (!slotnum) {
+		merr_t err;
+
+		err = merr(ENOMEM);
+		mp_pr_err("slotnum array alloc failed", err);
 		return;
 	}
 
@@ -1545,6 +1554,8 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 	}
 
 	pmd_update_mds_tbl(mp, num_mdc, slotnum);
+
+	kfree(slotnum);
 }
 
 /*

@@ -994,7 +994,7 @@ static int mpioc_proplist_get_itercb(int minor, void *item, void *arg)
 {
 	struct mpc_unit             *unit = item;
 	struct mpioc_prop __user    *uprop;
-	struct mpioc_prop            kprop;
+	struct mpioc_prop           *kprop;
 	struct mpc_unit             *match;
 	struct mpioc_list           *ls;
 	void                       **argv = arg;
@@ -1021,15 +1021,24 @@ static int mpioc_proplist_get_itercb(int minor, void *item, void *arg)
 	cntp = argv[2];
 	errp = argv[3];
 
-	mpioc_prop_get(unit, &kprop);
+	kprop = kmalloc(sizeof(*kprop), GFP_KERNEL);
+	if (!kprop) {
+		*errp = merr(ENOMEM);
+		return ITERCB_DONE;
+	}
+
+	mpioc_prop_get(unit, kprop);
 
 	uprop = (struct mpioc_prop __user *)ls->ls_listv + *cntp;
 
-	rc = copy_to_user(uprop, &kprop, sizeof(*uprop));
+	rc = copy_to_user(uprop, kprop, sizeof(*uprop));
 	if (rc) {
 		*errp = merr(EFAULT);
+		kfree(kprop);
 		return ITERCB_DONE;
 	}
+
+	kfree(kprop);
 
 	return (++(*cntp) >= ls->ls_listc) ? ITERCB_DONE : ITERCB_NEXT;
 }
@@ -2888,7 +2897,7 @@ merr_t mpctl_init(void)
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpioc_cmn        cmn = { };
-	struct mpool_config     cfg = { };
+	struct mpool_config    *cfg = NULL;
 	struct mpc_unit        *ctlunit;
 	const char             *errmsg = NULL;
 	size_t                  sz;
@@ -2952,10 +2961,6 @@ merr_t mpctl_init(void)
 		goto errout;
 	}
 
-	cfg.mc_uid = mpc_ctl_uid;
-	cfg.mc_gid = mpc_ctl_gid;
-	cfg.mc_mode = mpc_ctl_mode;
-
 	rc = mpc_bdi_setup();
 	if (ev(rc)) {
 		errmsg = "mpc bdi setup failed";
@@ -2963,7 +2968,18 @@ merr_t mpctl_init(void)
 		goto errout;
 	}
 
-	err = mpc_unit_setup(&mpc_uinfo_ctl, MPC_DEV_CTLNAME, &cfg, NULL, &ctlunit, &cmn);
+	cfg = kzalloc(sizeof(*cfg), GFP_KERNEL);
+	if (!cfg) {
+		errmsg = "cfg alloc failed";
+		err = merr(ENOMEM);
+		goto errout;
+	}
+
+	cfg->mc_uid = mpc_ctl_uid;
+	cfg->mc_gid = mpc_ctl_gid;
+	cfg->mc_mode = mpc_ctl_mode;
+
+	err = mpc_unit_setup(&mpc_uinfo_ctl, MPC_DEV_CTLNAME, cfg, NULL, &ctlunit, &cmn);
 	if (err) {
 		errmsg = "cannot create control device";
 		goto errout;
@@ -2990,6 +3006,8 @@ errout:
 		mp_pr_err("%s", err, errmsg);
 		mpctl_exit();
 	}
+
+	kfree(cfg);
 
 	return err;
 }

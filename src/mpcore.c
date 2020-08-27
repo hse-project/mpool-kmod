@@ -615,14 +615,17 @@ mpool_desc_init_sb(
 			 * properties
 			 */
 			if (uuid_to_mpdesc_search(&mpool_pools, &sb->osb_poolid)) {
-				char uuid_str[40];
+				char *uuid_str;
 
-				mpool_unparse_uuid(&sb->osb_poolid, uuid_str);
+				uuid_str = kmalloc(MPOOL_UUID_STRING_LEN + 1, GFP_KERNEL);
+				if (uuid_str)
+					mpool_unparse_uuid(&sb->osb_poolid, uuid_str);
 
 				err = merr(EBUSY);
 				mp_pr_err("%s: mpool already activated, id %s, pd name %s",
 					  err, sb->osb_name, uuid_str, pd->pdi_name);
 				kfree(sb);
+				kfree(uuid_str);
 				return err;
 			}
 			mpool_uuid_copy(&mp->pds_poolid, &sb->osb_poolid);
@@ -632,15 +635,20 @@ mpool_desc_init_sb(
 		} else {
 			/* Second or later drive; validate pool-wide properties */
 			if (mpool_uuid_compare(&sb->osb_poolid, &mp->pds_poolid) != 0) {
-				char uuid_str1[40], uuid_str2[40];
+				char *uuid_str1, *uuid_str2 = NULL;
 
-				mpool_unparse_uuid(&sb->osb_poolid, uuid_str1);
-				mpool_unparse_uuid(&mp->pds_poolid, uuid_str2);
+				uuid_str1 = kmalloc(2 * (MPOOL_UUID_STRING_LEN + 1), GFP_KERNEL);
+				if (uuid_str1) {
+					uuid_str2 = uuid_str1 + MPOOL_UUID_STRING_LEN + 1;
+					mpool_unparse_uuid(&sb->osb_poolid, uuid_str1);
+					mpool_unparse_uuid(&mp->pds_poolid, uuid_str2);
+				}
 
 				err = merr(EINVAL);
 				mp_pr_err("%s: pd %s, mpool id %s different from prior id %s",
 					  err, mp->pds_name, pd->pdi_name, uuid_str1, uuid_str2);
 				kfree(sb);
+				kfree(uuid_str1);
 				return err;
 			}
 		}
@@ -688,13 +696,16 @@ mpool_desc_init_sb(
 		for (i = 0; i < pdh; i++) {
 			if (mpool_uuid_compare(&mp->pds_pdv[i].pdi_devid,
 					       &sb->osb_parm.odp_devid) == 0) {
-				char uuid_str[40];
+				char *uuid_str;
 
-				mpool_unparse_uuid(&sb->osb_parm.odp_devid, uuid_str);
+				uuid_str = kmalloc(MPOOL_UUID_STRING_LEN + 1, GFP_KERNEL);
+				if (uuid_str)
+					mpool_unparse_uuid(&sb->osb_parm.odp_devid, uuid_str);
 				err = merr(EINVAL);
 				mp_pr_err("%s: pd %s, duplicate devices, uuid %s",
 					  err, mp->pds_name, pd->pdi_name, uuid_str);
 				kfree(sb);
+				kfree(uuid_str);
 				return err;
 			}
 		}
@@ -706,8 +717,8 @@ mpool_desc_init_sb(
 			return err;
 		} else if (!force && (omf_ver < OMF_SB_DESC_VER_LAST || resize)) {
 			if ((flags & (1 << MP_FLAGS_PERMIT_META_CONV)) == 0) {
-				char buf1[MAX_MDCVERSTR];
-				char buf2[MAX_MDCVERSTR];
+				char *buf1;
+				char *buf2 = NULL;
 				struct omf_mdcver  *mdcver;
 
 				/*
@@ -717,8 +728,12 @@ mpool_desc_init_sb(
 				mdcver = omf_sbver_to_mdcver(omf_ver);
 				assert(mdcver != NULL);
 
-				omfu_mdcver_to_str(mdcver, buf1, sizeof(buf1));
-				omfu_mdcver_to_str(omfu_mdcver_cur(), buf2, sizeof(buf2));
+				buf1 = kmalloc(2 * MAX_MDCVERSTR, GFP_KERNEL);
+				if (buf1) {
+					buf2 = buf1 + MAX_MDCVERSTR;
+					omfu_mdcver_to_str(mdcver, buf1, sizeof(buf1));
+					omfu_mdcver_to_str(omfu_mdcver_cur(), buf2, sizeof(buf2));
+				}
 
 				err = merr(EPERM);
 				mp_pr_err("%s: reqd sb upgrade from version %s (%s) to %s (%s)",
@@ -726,6 +741,7 @@ mpool_desc_init_sb(
 					  buf1, omfu_mdcver_comment(mdcver) ?: "",
 					  buf2, omfu_mdcver_comment(omfu_mdcver_cur()));
 				kfree(sb);
+				kfree(buf1);
 				return err;
 			}
 
