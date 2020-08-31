@@ -2088,4 +2088,3 @@ void pmd_mpool_deactivate(struct mpool_descriptor *mp)
 
 	mutex_unlock(&pmd_s_lock);
 }
-

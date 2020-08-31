@@ -22,9 +22,9 @@ struct mpcore_params;
 /**
  * struct mc_parms - media class parameters
  * @mcp_classp:    class performance characteristics, enum mp_media_classp
- * @mcp_zonepg: virtual erase block size in PAGE_SIZE units
+ * @mcp_zonepg:    zone size in number of zone pages
  * @mcp_sectorsz:  2^sectorsz is the logical sector size
- * @mcp_devtype:      device type. Enum pd_devtype.
+ * @mcp_devtype:   device type. Enum pd_devtype.
  * @mcp_features:  ored bits from mp_mc_features
  *
  * Two PDs can't be placed in the same media class if they have different

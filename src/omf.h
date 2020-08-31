@@ -126,10 +126,10 @@ OMF_SETGET(struct layout_descriptor_omf, pol_zaddr, 64)
  * struct devparm descriptor_omf -
  * "podp_" = packed omf devparm descriptor
  *
- * @podp_devid: UUID for drive
- * @podp_zonetot: total number of virtual erase blocks
- * @podp_devsz: size of partition in bytes
- * @podp_features:  Features, ored bits of enum mc_features_omf
+ * @podp_devid:    UUID for drive
+ * @podp_zonetot:  total number of zones
+ * @podp_devsz:    size of partition in bytes
+ * @podp_features: Features, ored bits of enum mc_features_omf
  *
  * The fields below uniquely identify the media class of the PD.
  * All drives in a media class must have the same values in the below
@@ -137,7 +137,7 @@ OMF_SETGET(struct layout_descriptor_omf, pol_zaddr, 64)
  * @podp_mclassp:   enum mp_media_classp
  * @podp_devtype:   PD type (enum devtype_omf)
  * @podp_sectorsz:  2^podp_sectorsz = sector size
- * @podp_zonepg: virtual erase block size in PAGE_SIZE units for drive.
+ * @podp_zonepg:    zone size in number of zone pages
  */
 struct devparm_descriptor_omf {
 	u8     podp_mclassp;

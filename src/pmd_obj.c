@@ -711,16 +711,8 @@ merr_t pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout)
 	pmd_obj_wrlock(layout);
 	pmd_mdc_lock(&cinfo->mmi_compactlock, cslot);
 
-	pmd_co_wlock(cinfo, cslot);
 	refcnt = kref_read(&layout->eld_ref);
-	if (refcnt == 2) {
-		found = pmd_co_remove(cinfo, layout);
-		if (found)
-			found->eld_state |= PMD_LYT_REMOVED;
-	}
-	pmd_co_wunlock(cinfo);
-
-	if (!found) {
+	if (refcnt != 2) {
 		pmd_mdc_unlock(&cinfo->mmi_compactlock);
 		pmd_obj_wrunlock(layout);
 
@@ -728,11 +720,11 @@ merr_t pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout)
 	}
 
 	err = pmd_log_delete(mp, objid);
-	if (err) {
+	if (!err) {
 		pmd_co_wlock(cinfo, cslot);
-		pmd_co_insert(cinfo, found);
-		found->eld_state &= ~PMD_LYT_REMOVED;
-		found = NULL;
+		found = pmd_co_remove(cinfo, layout);
+		if (found)
+			found->eld_state |= PMD_LYT_REMOVED;
 		pmd_co_wunlock(cinfo);
 	}
 
@@ -1256,7 +1248,7 @@ pmd_update_obj_stats(
 	case PMD_OBJ_LOAD:
 		if (otype == OMF_OBJ_MBLOCK)
 			pms->pms_mblock_wlen += layout->eld_mblen;
-		fallthrough;
+		/* Fall through */
 
 	case PMD_OBJ_ALLOC:
 		cap = pmd_layout_cap_get(mp, layout);
@@ -1277,7 +1269,7 @@ pmd_update_obj_stats(
 	case PMD_OBJ_DELETE:
 		if (otype == OMF_OBJ_MBLOCK)
 			pms->pms_mblock_wlen -= layout->eld_mblen;
-		fallthrough;
+		/* Fall through */
 
 	case PMD_OBJ_ABORT:
 		cap = pmd_layout_cap_get(mp, layout);

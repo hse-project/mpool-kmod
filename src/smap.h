@@ -267,7 +267,7 @@ void smap_drive_free(struct mpool_descriptor *mp, u16 pdh);
  * @zonecnt: number of zones in entry
  *
  * Add entry to space map for an existing object with a strip on drive pdh
- * starting at virtual erase block zoneaddr and continuing for zonecnt blocks.
+ * starting at zoneaddr and continuing for zonecnt blocks.
  *
  * Used, in part for superblocks.
  *
@@ -284,7 +284,7 @@ merr_t smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonec
  * @zoneaddr: u64 *, the starting zone for the allocated range
  * @align: no. of zones (must be a power-of-2)
  *
- * Attempt to allocate zonecnt contiguous virtual erase blocks on drive pdh
+ * Attempt to allocate zonecnt contiguous zones on drive pdh
  * in accordance with space allocation policy sapolicy.
  *
  * Return: 0 if succcessful; merr_t otherwise
@@ -305,7 +305,7 @@ smap_alloc(
  * @zoneaddr: u64, starting zone for the range to free
  * @zonecnt: u16, the number of zones in the range
  *
- * Free currently allocated space starting at virtual erase block zoneaddr
+ * Free currently allocated space starting at zoneaddr
  * and continuing for zonecnt blocks.
  *
  * Return: 0 if successful, merr_t otherwise

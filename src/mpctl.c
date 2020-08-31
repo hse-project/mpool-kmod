@@ -44,9 +44,6 @@
 #include "reaper.h"
 #include "init.h"
 
-#if HAVE_MMAP_LOCK
-#include <linux/mmap_lock.h>
-#endif
 
 #define NODEV               MKDEV(0, 0)    /* Non-existent device */
 
@@ -2435,7 +2432,7 @@ static int mpc_bdi_alloc(void)
 	return 0;
 }
 
-static void mpc_bdi_save(struct mpc_unit *unit, struct inode *ip)
+static void mpc_bdi_save(struct mpc_unit *unit, struct inode *ip, struct file *fp)
 {
 #if HAVE_ADDRESS_SPACE_BDI
 	unit->un_saved_bdi = fp->f_mapping->backing_dev_info;
@@ -2450,14 +2447,14 @@ static void mpc_bdi_save(struct mpc_unit *unit, struct inode *ip)
 #endif /* HAVE_ADDRESS_SPACE_BDI */
 }
 
-static void mpc_bdi_restore(struct mpc_unit *unit, struct inode *ip)
+static void mpc_bdi_restore(struct mpc_unit *unit, struct inode *ip, struct file *fp)
 {
 #if HAVE_ADDRESS_SPACE_BDI
-		fp->f_mapping->backing_dev_info = unit->un_saved_bdi;
+	fp->f_mapping->backing_dev_info = unit->un_saved_bdi;
 #else
-		ip->i_sb->s_bdi = unit->un_saved_bdi;
+	ip->i_sb->s_bdi = unit->un_saved_bdi;
 #if !HAVE_BDI_INIT
-		bdi_put(mpc_bdi);
+	bdi_put(mpc_bdi);
 #endif /* !HAVE_BDI_INIT */
 #endif /* HAVE_ADDRESS_SPACE_BDI */
 }
@@ -2552,7 +2549,7 @@ static int mpc_open(struct inode *ip, struct file *fp)
 	fp->f_op = &mpc_fops_default;
 	fp->f_mapping->a_ops = &mpc_aops_default;
 
-	mpc_bdi_save(unit, ip);
+	mpc_bdi_save(unit, ip, fp);
 
 	unit->un_mapping = fp->f_mapping;
 	unit->un_ds_reap = mpc_reap;
@@ -2608,7 +2605,7 @@ static int mpc_release(struct inode *ip, struct file *fp)
 		unit->un_ds_reap = NULL;
 		unit->un_mapping = NULL;
 
-		mpc_bdi_restore(unit, ip);
+		mpc_bdi_restore(unit, ip, fp);
 	}
 
 	unit->un_open_excl = false;

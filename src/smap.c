@@ -646,7 +646,7 @@ static u32 smap_addr2rgn(struct mpool_descriptor *mp, struct mpool_dev_info *pd,
 }
 
 /*
- * Add entry to space map in rgn starting at virtual erase block zoneaddr
+ * Add entry to space map in rgn starting at zoneaddr
  * and continuing for zonecnt blocks.
  *
  *   Returns: 0 if successful, merr_t otherwise

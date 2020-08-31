@@ -137,7 +137,7 @@ _Static_assert((PD_DEV_STATE_LAST < 256), "enum pd_state must fit in uint8_t");
  * Error codes: All pd functions can return one or more of:
  *
  * -EINVAL    invalid fn args
- * -EBADSLT   attempt to read or write a bad erase block on a zone device
+ * -EBADSLT   attempt to read or write a bad zone on a zone device
  * -EIO       all other errors
  */
 

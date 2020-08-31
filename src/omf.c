@@ -21,7 +21,6 @@
 #include "assert.h"
 #include "mpool_printk.h"
 
-#include "mpool_config.h"
 #include "upgrade.h"
 #include "pmd_obj.h"
 #include "mpcore.h"

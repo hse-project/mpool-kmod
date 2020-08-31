@@ -212,7 +212,7 @@ pd_bio_init(struct bio *bio, struct block_device *bdev, int rw, loff_t off, int 
 }
 
 static __always_inline struct bio *
-pd_bio_chain(struct bio *target, unsigned int nr_pages, gfp_t gfp)
+pd_bio_chain(struct bio *target, int op, unsigned int nr_pages, gfp_t gfp)
 {
 	struct bio *new;
 
@@ -227,9 +227,9 @@ pd_bio_chain(struct bio *target, unsigned int nr_pages, gfp_t gfp)
 
 	if (new) {
 		bio_chain(target, new);
-		SUBMIT_BIO(target);
+		SUBMIT_BIO(op, target);
 	} else {
-		SUBMIT_BIO_WAIT(target);
+		SUBMIT_BIO_WAIT(op, target);
 		bio_put(target);
 	}
 
@@ -361,7 +361,7 @@ pd_bio_rw(
 			if (left == 0) {
 				left = min_t(size_t, tot_pages, iolimit);
 
-				bio = pd_bio_chain(bio, left, GFP_NOIO);
+				bio = pd_bio_chain(bio, op, left, GFP_NOIO);
 				if (!bio)
 					return merr(ENOMEM);
 
@@ -397,7 +397,7 @@ pd_bio_rw(
 	assert(bio);
 	assert(tot_pages == 0);
 
-	rc = SUBMIT_BIO_WAIT(bio);
+	rc = SUBMIT_BIO_WAIT(op, bio);
 	if (rc)
 		err = merr(rc);
 	bio_put(bio);

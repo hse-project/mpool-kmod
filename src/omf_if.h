@@ -35,18 +35,18 @@ struct omf_layout_descriptor {
 /*
  * struct omf_devparm_descriptor: version 1 devparm descriptor
  *
- * @odp_devid:     UUID for drive
- * @odp_devsz:     size, in bytes, of the volume/device
- * @odp_zonetot:    total number of virtual erase blocks
+ * @odp_devid:   UUID for drive
+ * @odp_devsz:   size, in bytes, of the volume/device
+ * @odp_zonetot: total number of zones
  *
  * The fields below uniquely identify the media class of the PD.
  * All drives in a media class must have the same values in the below fields.
  *
- * @odp_zonepg: virtual erase block size in PAGE_SIZE units for drive
- * @odp_mclassp:   enum mp_media_classp
- * @odp_devtype:   PD type. Enum pd_devtype
- * @odp_sectorsz:  2^podp_sectorsz = sector size
- * @odp_features:  Features, ored bits of enum mp_mc_features
+ * @odp_zonepg:   zone size in number of zone pages
+ * @odp_mclassp:  enum mp_media_classp
+ * @odp_devtype:  PD type. Enum pd_devtype
+ * @odp_sectorsz: 2^podp_sectorsz = sector size
+ * @odp_features: Features, ored bits of enum mp_mc_features
  */
 struct omf_devparm_descriptor {
 	struct mpool_uuid  odp_devid;
