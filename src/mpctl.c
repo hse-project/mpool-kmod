@@ -991,7 +991,7 @@ static int mpioc_proplist_get_itercb(int minor, void *item, void *arg)
 {
 	struct mpc_unit             *unit = item;
 	struct mpioc_prop __user    *uprop;
-	struct mpioc_prop           *kprop;
+	struct mpioc_prop            kprop;
 	struct mpc_unit             *match;
 	struct mpioc_list           *ls;
 	void                       **argv = arg;
@@ -1018,24 +1018,15 @@ static int mpioc_proplist_get_itercb(int minor, void *item, void *arg)
 	cntp = argv[2];
 	errp = argv[3];
 
-	kprop = kmalloc(sizeof(*kprop), GFP_KERNEL);
-	if (!kprop) {
-		*errp = merr(ENOMEM);
-		return ITERCB_DONE;
-	}
-
-	mpioc_prop_get(unit, kprop);
+	mpioc_prop_get(unit, &kprop);
 
 	uprop = (struct mpioc_prop __user *)ls->ls_listv + *cntp;
 
-	rc = copy_to_user(uprop, kprop, sizeof(*uprop));
+	rc = copy_to_user(uprop, &kprop, sizeof(*uprop));
 	if (rc) {
 		*errp = merr(EFAULT);
-		kfree(kprop);
 		return ITERCB_DONE;
 	}
-
-	kfree(kprop);
 
 	return (++(*cntp) >= ls->ls_listc) ? ITERCB_DONE : ITERCB_NEXT;
 }
