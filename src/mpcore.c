@@ -20,7 +20,6 @@
 #include "mpool_ioctl.h"
 
 #include "mpool_printk.h"
-#include "evc.h"
 #include "assert.h"
 #include "uuid.h"
 
@@ -431,7 +430,7 @@ mpool_desc_pdmc_add(
 		 * No media class corresponding to the PD class yet, create one.
 		 */
 		err = mc_smap_parms_get(&mp->pds_mc[mc_parms.mcp_classp], &mp->pds_params, &mcsp);
-		if (ev(err))
+		if (err)
 			return err;
 
 		if (!check_only)
@@ -470,7 +469,7 @@ merr_t mpool_desc_init_newpool(struct mpool_descriptor *mp, u32 flags)
 
 	if (!(flags & (1 << MP_FLAGS_FORCE))) {
 		err = mpool_dev_check_new(mp, &mp->pds_pdv[pdh]);
-		if (ev(err))
+		if (err)
 			return err;
 	}
 
@@ -601,7 +600,7 @@ mpool_desc_init_sb(
 		 * from device parameters stored in the super block.
 		 */
 		err = sb_read(&pd->pdi_parm, sb, &omf_ver, force);
-		if (ev(err)) {
+		if (err) {
 			mp_pr_err("sb read from %s failed", err, pd->pdi_name);
 			kfree(sb);
 			return err;
@@ -899,7 +898,7 @@ mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_descripto
 
 	/* Add the PD in its media class. */
 	err = mpool_desc_pdmc_add(mp, mp->pds_pdvcnt, omf_devparm, false);
-	if (ev(err))
+	if (err)
 		return err;
 
 	mp->pds_pdvcnt = mp->pds_pdvcnt + 1;

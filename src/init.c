@@ -6,7 +6,6 @@
 #include <linux/module.h>
 
 #include "merr.h"
-#include "evc.h"
 #include "mpool_printk.h"
 
 #include "omf_if.h"
@@ -57,7 +56,6 @@ static void mpool_exit_impl(void)
 	sb_exit();
 	omf_exit();
 	pd_exit();
-	evc_exit();
 }
 
 /**
@@ -67,8 +65,6 @@ static __init int mpool_init(void)
 {
 	const char *errmsg = NULL;
 	merr_t      err;
-
-	evc_init();
 
 	err = pd_init();
 	if (err) {

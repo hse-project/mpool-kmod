@@ -15,7 +15,6 @@
 #include "mp.h"
 #include "mpool_printk.h"
 #include "assert.h"
-#include "evc.h"
 
 #include "mpool_config.h"
 #include "mpctl.h"
@@ -246,7 +245,7 @@ static int mpc_alloc_and_readpage(struct vm_area_struct *vma, pgoff_t offset, gf
 	int                     rc;
 
 	page = __page_cache_alloc(gfp | __GFP_NOWARN);
-	if (ev(!page))
+	if (!page)
 		return -ENOMEM;
 
 	file    = vma->vm_file;
@@ -312,7 +311,7 @@ static int mpc_handle_page_error(struct page *page, struct vm_area_struct *vma)
 	rc = mpc_readpage_impl(page, vma->vm_private_data);
 	if (rc == 0) {
 		wait_on_page_locked(page);
-		if (ev(!PageUptodate(page)))
+		if (!PageUptodate(page))
 			rc = -EIO;
 	}
 
@@ -336,7 +335,7 @@ static vm_fault_t mpc_vm_fault_impl(struct vm_area_struct *vma, struct vm_fault 
 	vmfrc   = 0;
 
 	size = round_up(i_size_read(inode), PAGE_SIZE);
-	if (ev(offset >= (size >> PAGE_SHIFT)))
+	if (offset >= (size >> PAGE_SHIFT))
 		return VM_FAULT_SIGBUS;
 
 retry_find:
@@ -344,7 +343,7 @@ retry_find:
 	if (!page) {
 		int rc = mpc_alloc_and_readpage(vma, offset, mapping_gfp_mask(mapping));
 
-		if (ev(rc < 0))
+		if (rc < 0)
 			return (rc == -ENOMEM) ? VM_FAULT_OOM : VM_FAULT_SIGBUS;
 
 		vmfrc = VM_FAULT_MAJOR;
@@ -375,7 +374,7 @@ retry_find:
 		int rc = mpc_handle_page_error(page, vma);
 
 		/* At this point, page is not locked and has no ref. */
-		if (ev(rc))
+		if (rc)
 			return VM_FAULT_SIGBUS;
 		goto retry_find;
 	}
@@ -419,7 +418,7 @@ static int mpc_readpage_impl(struct page *page, struct mpc_xvm *xvm)
 	offset %= (1ul << mpc_xvm_size_max);
 
 	mbnum = offset / xvm->xvm_bktsz;
-	if (ev(mbnum >= xvm->xvm_mbinfoc)) {
+	if (mbnum >= xvm->xvm_mbinfoc) {
 		unlock_page(page);
 		return -EINVAL;
 	}
@@ -427,7 +426,7 @@ static int mpc_readpage_impl(struct page *page, struct mpc_xvm *xvm)
 	mbinfo = xvm->xvm_mbinfov + mbnum;
 	offset %= xvm->xvm_bktsz;
 
-	if (ev(offset >= mbinfo->mblen)) {
+	if (offset >= mbinfo->mblen) {
 		unlock_page(page);
 		return -EINVAL;
 	}
@@ -436,7 +435,7 @@ static int mpc_readpage_impl(struct page *page, struct mpc_xvm *xvm)
 	iov[0].iov_len = PAGE_SIZE;
 
 	err = mblock_read(xvm->xvm_mpdesc, mbinfo->mbdesc, iov, 1, offset, PAGE_SIZE);
-	if (ev(err)) {
+	if (err) {
 		unlock_page(page);
 		return -merr_errno(err);
 	}
@@ -493,7 +492,7 @@ static void mpc_readpages_cb(struct work_struct *work)
 	 * Synchronize with mpc_xvm_put() to prevent dropping our
 	 * mblock references while there are reads in progress.
 	 */
-	if (ev(atomic_inc_return(&xvm->xvm_rabusy) > WQ_MAX_ACTIVE)) {
+	if (atomic_inc_return(&xvm->xvm_rabusy) > WQ_MAX_ACTIVE) {
 		err = merr(ENXIO);
 		goto errout;
 	}
@@ -505,7 +504,7 @@ static void mpc_readpages_cb(struct work_struct *work)
 
 	err = mblock_read(xvm->xvm_mpdesc, args->a_mbdesc, iov,
 			  pagec, args->a_mboffset, pagec << PAGE_SHIFT);
-	if (ev(err))
+	if (err)
 		goto errout;
 
 	if (xvm->xvm_hcpagesp)
@@ -582,13 +581,13 @@ mpc_readpages(
 	xvm = idr_find(&unit->un_rgnmap.rm_root, key);
 	rcu_read_unlock();
 
-	if (ev(!xvm))
+	if (!xvm)
 		return 0;
 
 	offset %= (1ul << mpc_xvm_size_max);
 
 	mbnum = offset / xvm->xvm_bktsz;
-	if (ev(mbnum >= xvm->xvm_mbinfoc))
+	if (mbnum >= xvm->xvm_mbinfoc)
 		return 0;
 
 	mbinfo = xvm->xvm_mbinfov + mbnum;
@@ -678,11 +677,11 @@ static int mpc_releasepage(struct page *page, gfp_t gfp)
 {
 	struct mpc_xvm *xvm;
 
-	if (ev(!PagePrivate(page)))
+	if (!PagePrivate(page))
 		return 0;
 
 	xvm = (void *)page_private(page);
-	if (ev(!xvm))
+	if (!xvm)
 		return 0;
 
 	ClearPagePrivate(page);
@@ -806,7 +805,7 @@ merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, stru
 	merr_t  err;
 	int     rc, i;
 
-	if (ev(!unit || !unit->un_mapping || !ioc))
+	if (!unit || !unit->un_mapping || !ioc)
 		return merr(EINVAL);
 
 	if (ioc->im_mbidc < 1)
@@ -939,7 +938,7 @@ merr_t mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	struct mpc_xvm     *xvm;
 	u64                 rgn;
 
-	if (ev(!unit || !ioc))
+	if (!unit || !ioc)
 		return merr(EINVAL);
 
 	rgn = ioc->im_offset >> mpc_xvm_size_max;
@@ -964,7 +963,7 @@ merr_t mpioc_xvm_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	struct mpc_xvm *xvm;
 	u64             rgn;
 
-	if (ev(!unit || !ioc))
+	if (!unit || !ioc)
 		return merr(EINVAL);
 
 	rgn = ioc->im_offset >> mpc_xvm_size_max;
@@ -985,7 +984,7 @@ merr_t mpioc_xvm_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	struct mpc_xvm *xvm;
 	u64             rgn;
 
-	if (ev(!unit || !ioc))
+	if (!unit || !ioc)
 		return merr(EINVAL);
 
 	rgn = ioc->im_offset >> mpc_xvm_size_max;
@@ -1041,7 +1040,7 @@ merr_t mcache_init(void)
 	}
 
 	err = mpc_reap_create(&mpc_reap);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("reap create failed", err);
 		goto errout;
 	}

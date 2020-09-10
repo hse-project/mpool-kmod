@@ -32,7 +32,6 @@
 
 #include "mpool_printk.h"
 #include "assert.h"
-#include "evc.h"
 
 #include "mpool_ioctl.h"
 #include "mpool_config.h"
@@ -182,7 +181,7 @@ static merr_t mpc_params_register(struct mpc_unit *unit, int cnt)
 	int                         rc;
 
 	attr = mpc_attr_create(unit->un_device, "parameters", cnt);
-	if (ev(!attr))
+	if (!attr)
 		return merr(ENOMEM);
 
 	dattr = attr->a_dattr;
@@ -196,7 +195,7 @@ static merr_t mpc_params_register(struct mpc_unit *unit, int cnt)
 		mpc_reap_params_add(dattr);
 
 	rc = mpc_attr_group_create(attr);
-	if (ev(rc)) {
+	if (rc) {
 		mpc_attr_destroy(attr);
 		return merr(rc);
 	}
@@ -617,7 +616,7 @@ mpc_unit_setup(
 	unit->un_ra_pages_max = cfg->mc_ra_pages_max;
 
 	device = device_create(ss->ss_class, NULL, unit->un_devno, unit, uinfo->ui_subdirfmt, name);
-	if (ev(IS_ERR(device))) {
+	if (IS_ERR(device)) {
 		err = merr(PTR_ERR(device));
 		mp_pr_err("device_create %s failed", err, name);
 		goto errout;
@@ -830,7 +829,7 @@ static merr_t mpioc_params_set(struct mpc_unit *unit, struct mpioc_params *set)
 	mutex_lock(&ss->ss_lock);
 	if (params->mp_uid != -1 || params->mp_gid != -1 || params->mp_mode != -1) {
 		err = mpc_mp_chown(unit, params);
-		if (ev(err)) {
+		if (err) {
 			mutex_unlock(&ss->ss_lock);
 			return err;
 		}
@@ -858,7 +857,7 @@ static merr_t mpioc_params_set(struct mpc_unit *unit, struct mpioc_params *set)
 		err = mpc_cf_journal(unit);
 	mutex_unlock(&ss->ss_lock);
 
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("%s: params commit failed", err, unit->un_name);
 		return err;
 	}
@@ -867,13 +866,13 @@ static merr_t mpioc_params_set(struct mpc_unit *unit, struct mpioc_params *set)
 
 	if (params->mp_spare_cap != MPOOL_SPARES_INVALID) {
 		err = mpool_drive_spares(mp, MP_MED_CAPACITY, params->mp_spare_cap);
-		if (ev(err && merr_errno(err) != ENOENT))
+		if (err && merr_errno(err) != ENOENT)
 			rerr = err;
 	}
 
 	if (params->mp_spare_stg != MPOOL_SPARES_INVALID) {
 		err = mpool_drive_spares(mp, MP_MED_STAGING, params->mp_spare_stg);
-		if (ev(err && merr_errno(err) != ENOENT))
+		if (err && merr_errno(err) != ENOENT)
 			rerr = err;
 	}
 
@@ -937,7 +936,7 @@ static merr_t mpioc_devprops_get(struct mpc_unit *unit, struct mpioc_devprops *d
 		err = mpool_get_devprops_by_name(mp, devprops->dpr_pdname, &devprops->dpr_devprops);
 	}
 
-	return ev(err);
+	return err;
 }
 
 /**
@@ -1259,7 +1258,7 @@ mpioc_mp_create(
 	mp->mp_params.mp_oidv[1] = cfg.mc_oid2;
 
 	err = mpc_params_register(unit, MPC_MPOOL_PARAMS_CNT);
-	if (ev(err)) {
+	if (err) {
 		mpc_unit_put(unit); /* drop birth ref */
 		goto errout;
 	}
@@ -1368,7 +1367,7 @@ mpioc_mp_activate(
 	strlcpy(mp->mp_params.mp_label, cfg.mc_label, sizeof(mp->mp_params.mp_label));
 
 	err = mpc_params_register(unit, MPC_MPOOL_PARAMS_CNT);
-	if (ev(err)) {
+	if (err) {
 		mpc_unit_put(unit); /* drop birth ref */
 		goto errout;
 	}
@@ -1477,13 +1476,13 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 	const char             *action;
 	size_t                  len;
 
-	if (ev(!ctl || !mp))
+	if (!ctl || !mp)
 		return merr(EINVAL);
 
-	if (ev(!mpc_unit_isctldev(ctl)))
+	if (!mpc_unit_isctldev(ctl))
 		return merr(EOPNOTSUPP);
 
-	if (ev(mp->mp_dpathc < 1 || mp->mp_dpathc > MPOOL_DRIVES_MAX))
+	if (mp->mp_dpathc < 1 || mp->mp_dpathc > MPOOL_DRIVES_MAX)
 		return merr(EDOM);
 
 	len = mpc_toascii(mp->mp_params.mp_name, sizeof(mp->mp_params.mp_name));
@@ -1520,7 +1519,7 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 		return err;
 	}
 
-	if (ev(mp->mp_dpathssz > (mp->mp_dpathc + 1) * PATH_MAX))
+	if (mp->mp_dpathssz > (mp->mp_dpathc + 1) * PATH_MAX)
 		return merr(EINVAL);
 
 	rc = down_interruptible(&ss->ss_op_sema);
@@ -1610,7 +1609,7 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 			unit = NULL;
 
 			err = mp_deactivate_impl(ctl, mp, true);
-			if (ev(err)) {
+			if (err) {
 				action = "deactivate";
 				break;
 			}
@@ -1624,7 +1623,7 @@ static merr_t mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *m
 		break;
 	}
 
-	if (ev(err))
+	if (err)
 		mp_pr_err("%s: %s failed", err, mp->mp_params.mp_name, action);
 
 errout:
@@ -1721,7 +1720,7 @@ static merr_t mpioc_mp_add(struct mpc_unit *unit, struct mpioc_drive *drv)
 
 	for (i = 0; i < drv->drv_dpathc; ++i) {
 		err = mpool_drive_add(desc, dpathv[i], &pd_prop[i]);
-		if (ev(err))
+		if (err)
 			break;
 	}
 
@@ -1949,16 +1948,13 @@ mpc_physio(
 	case MP_OBJ_MBLOCK:
 		if (rw == WRITE) {
 			err = mblock_write(mpd, desc, iov_base, niov, pagesc << PAGE_SHIFT);
-			ev(err);
 		} else {
 			err = mblock_read(mpd, desc, iov_base, niov, offset, pagesc << PAGE_SHIFT);
-			ev(err);
 		}
 		break;
 
 	case MP_OBJ_MLOG:
 		err = mlog_rw_raw(mpd, desc, iov_base, niov, offset, rw);
-		ev(err);
 		break;
 
 	default:
@@ -2005,7 +2001,7 @@ static merr_t mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
 	mpool = unit->un_mpool->mp_desc;
 
 	err = mblock_alloc(mpool, mb->mb_mclassp, mb->mb_spare, &mblock, &props);
-	if (ev(err))
+	if (err)
 		return err;
 
 	mblock_get_props_ex(mpool, mblock, &mb->mb_props);
@@ -2039,7 +2035,7 @@ static merr_t mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
 	mpool = unit->un_mpool->mp_desc;
 
 	err = mblock_find_get(mpool, mb->mb_objid, 0, NULL, &mblock);
-	if (ev(err))
+	if (err)
 		return err;
 
 	(void)mblock_get_props_ex(mpool, mblock, &mb->mb_props);
@@ -2082,7 +2078,7 @@ static merr_t mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mb
 	drop = true;
 
 	err = mblock_find_get(mpool, mi->mi_objid, which, NULL, &mblock);
-	if (ev(err))
+	if (err)
 		return err;
 
 	switch (cmd) {
@@ -2198,7 +2194,7 @@ static merr_t mpioc_mlog_alloc(struct mpc_unit *unit, struct mpioc_mlog *ml)
 	mpool = unit->un_mpool->mp_desc;
 
 	err = mlog_alloc(mpool, &ml->ml_cap, ml->ml_mclassp, &props, &mlog);
-	if (ev(err))
+	if (err)
 		return err;
 
 	mlog_get_props_ex(mpool, mlog, &ml->ml_props);
@@ -2370,7 +2366,7 @@ static merr_t mpioc_test(struct mpc_unit *unit, struct mpioc_test *test)
 {
 	merr_t err = 0;
 
-	if (ev(!unit || !test))
+	if (!unit || !test)
 		return merr(EINVAL);
 
 	switch (test->mpt_cmd) {
@@ -2389,7 +2385,7 @@ static merr_t mpioc_test(struct mpc_unit *unit, struct mpioc_test *test)
 
 static struct mpc_softstate *mpc_cdev2ss(struct cdev *cdev)
 {
-	if (ev(!cdev || cdev->owner != THIS_MODULE)) {
+	if (!cdev || cdev->owner != THIS_MODULE) {
 		merr_t err = merr(EINVAL);
 
 		mp_pr_crit("module dissociated", err);
@@ -2407,7 +2403,7 @@ static int mpc_bdi_alloc(void)
 		int    rc;
 
 		rc = bdi_init(mpc_bdi);
-		if (ev(rc)) {
+		if (rc) {
 			kfree(mpc_bdi);
 			return rc;
 		}
@@ -2455,7 +2451,7 @@ static int mpc_bdi_setup(void)
 	int    rc;
 
 	rc = mpc_bdi_alloc();
-	if (ev(rc))
+	if (rc)
 		return rc;
 
 #if HAVE_BDI_NAME
@@ -2826,7 +2822,7 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 			cmn->mc_err = merr_to_user(err, cmn->mc_merr_base);
 
 		if (copy_to_user((void __user *)arg, argp, iosz))
-			rc = ev(-EFAULT);
+			rc = -EFAULT;
 	}
 
 	if (argp != argbuf)
@@ -2950,7 +2946,7 @@ merr_t mpctl_init(void)
 	}
 
 	rc = mpc_bdi_setup();
-	if (ev(rc)) {
+	if (rc) {
 		errmsg = "mpc bdi setup failed";
 		err = merr(rc);
 		goto errout;
@@ -2976,7 +2972,7 @@ merr_t mpctl_init(void)
 	/* The reaper component has already been initialized before mpctl. */
 	ctlunit->un_ds_reap = mpc_reap;
 	err = mpc_params_register(ctlunit, MPC_REAP_PARAMS_CNT);
-	if (ev(err)) {
+	if (err) {
 		errmsg = "cannot register common parameters";
 		goto errout;
 	}

@@ -10,7 +10,6 @@
 #include <linux/slab.h>
 #include <asm/page.h>
 
-#include "evc.h"
 #include "assert.h"
 #include "mpool_printk.h"
 
@@ -229,7 +228,7 @@ void mlog_stat_free(struct pmd_layout *layout)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
 
-	if (ev(!lstat->lst_abuf))
+	if (!lstat->lst_abuf)
 		return;
 
 	mlog_free_rbuf(lstat, 0, MLOG_NLPGMB(lstat) - 1);
@@ -321,7 +320,7 @@ mlog_rw_raw(
 	err = pmd_layout_rw(mp, layout, iov, iovcnt, boff, flags, rw);
 	pmd_obj_wrunlock(layout);
 
-	return ev(err);
+	return err;
 }
 
 /**
@@ -431,7 +430,7 @@ mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u32 l_io
 
 		iov = kcalloc(iovcnt, sizeof(*iov), GFP_KERNEL);
 		if (!iov)
-			return merr(ev(ENOMEM));
+			return merr(ENOMEM);
 
 		alloc_iov = true;
 		*riov = iov;
@@ -752,7 +751,7 @@ static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
 		(IS_SECPGA(lstat) && IS_ALIGNED(off, MLOG_SECSZ(lstat))));
 
 	err = mlog_rw(mp, layout2mlog(layout), iov, abidx + 1, off, MPOOL_OP_WRITE, skip_ser);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("mpool %s, mlog 0x%lx flush append buf, IO failed iovcnt %u, off 0x%lx",
 			  err, mp->pds_name, (ulong)layout->eld_objid, abidx + 1, off);
 		kfree(iov);
@@ -1023,13 +1022,13 @@ merr_t mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layo
 
 	/* Pack log block header in all the log blocks. */
 	err = mlog_logblocks_hdrpack(layout);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("mpool %s, mlog 0x%lx packing header failed",
 			  err, mp->pds_name, (ulong)layout->eld_objid);
 
 	} else {
 		err = mlog_flush_abuf(mp, layout, skip_ser);
-		if (ev(err))
+		if (err)
 			mp_pr_err("mpool %s, mlog 0x%lx log block flush failed",
 				  err, mp->pds_name, (ulong)layout->eld_objid);
 	}
@@ -1081,7 +1080,6 @@ s64 mlog_append_dmax(struct pmd_layout *layout)
 
 	if (lstat->lst_wsoff >= datalb) {
 		/* Mlog already full */
-		ev(1);
 		return -1;
 	}
 
@@ -1093,9 +1091,9 @@ s64 mlog_append_dmax(struct pmd_layout *layout)
 		if (lbrest)
 			return lbrest;
 
-		ev(1);
 		return -1;
 	}
+
 	/*
 	 * Can start in current log block and spill over to others (if any)
 	 */

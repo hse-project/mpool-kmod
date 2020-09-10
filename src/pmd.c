@@ -19,7 +19,6 @@
 #include <linux/slab.h>
 
 #include "assert.h"
-#include "evc.h"
 #include "merr.h"
 #include "mpool_printk.h"
 
@@ -225,7 +224,7 @@ static merr_t pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 
 	pmd_co_runlock(cinfo);
 
-	if (ev(err))
+	if (err)
 		goto exit;
 
 	if (!mdcmax) {
@@ -421,7 +420,7 @@ merr_t pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter)
 	layout1 = NULL;
 	err = pmd_obj_alloc_cmn(mp, reverse ? logid2 : logid1, OMF_OBJ_MLOG,
 				&ocap, mclassp, 0, false, &layout1);
-	if (ev(err)) {
+	if (err) {
 		if (merr_errno(err) != ENOENT)
 			msg = "allocation of first mlog failed";
 		goto exit;
@@ -430,7 +429,7 @@ merr_t pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter)
 	layout2 = NULL;
 	err = pmd_obj_alloc_cmn(mp, reverse ? logid1 : logid2, OMF_OBJ_MLOG,
 				&ocap, mclassp, 0, false, &layout2);
-	if (ev(err)) {
+	if (err) {
 		pmd_obj_abort(mp, layout1);
 		if (merr_errno(err) != ENOENT)
 			msg = "allocation of second mlog failed";
@@ -456,7 +455,7 @@ merr_t pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter)
 		if (err)
 			msg = "erase of second mlog failed";
 	}
-	if (ev(err)) {
+	if (err) {
 		pmd_obj_abort(mp, layout1);
 		pmd_obj_abort(mp, layout2);
 		goto exit;
@@ -468,14 +467,14 @@ merr_t pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter)
 	 * way through this process
 	 */
 	err = pmd_obj_commit(mp, layout1);
-	if (ev(err)) {
+	if (err) {
 		pmd_obj_abort(mp, layout1);
 		pmd_obj_abort(mp, layout2);
 		msg = "commit of first mlog failed";
 		goto exit;
 	} else {
 		err = pmd_obj_commit(mp, layout2);
-		if (ev(err)) {
+		if (err) {
 			pmd_obj_delete(mp, layout1);
 			pmd_obj_abort(mp, layout2);
 			msg = "commit of second mlog failed";
@@ -488,7 +487,7 @@ merr_t pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter)
 	 * lock fields.
 	 */
 	err = mp_mdc_open(mp, logid1, logid2, MDC_OF_SKIP_SER, &cinew->mmi_mdc);
-	if (ev(err)) {
+	if (err) {
 		msg = "mdc open failed";
 
 		/* Failed open so just delete logid1/2; don't
@@ -505,7 +504,7 @@ merr_t pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter)
 	 */
 	if (omfu_mdcver_cmp2(omfu_mdcver_cur(), ">=", 1, 0, 0, 1)) {
 		err = pmd_mdc_addrec_version(mp, mdcslot);
-		if (ev(err)) {
+		if (err) {
 			msg = "error adding the version record";
 			/*
 			 * No version record in a MDC will trigger a MDC
@@ -755,7 +754,7 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp)
 			mp->pds_cfg = cdr->u.omd_cfg;
 	}
 
-	if (ev(err)) {
+	if (err) {
 		kfree(cdr);
 		return err;
 	}
@@ -782,11 +781,11 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp)
 		if (j >= 0) {
 			zombie[j] = false;
 			err = pmd_cmp_drv_mdc0(mp, j, omd);
-			if (ev(err))
+			if (err)
 				break;
 		} else {
 			err = mpool_desc_unavail_add(mp, omd);
-			if (ev(err))
+			if (err)
 				break;
 			zombie[mp->pds_pdvcnt - 1] = false;
 		}
@@ -836,7 +835,7 @@ static merr_t pmd_props_load(struct mpool_descriptor *mp)
 				 * Should never happen, it should exist a class
 				 * with perf. level mclassp with a least 1 PD.
 				 */
-				if (ev(err))
+				if (err)
 					break;
 			}
 		}
@@ -884,7 +883,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 		}
 
 		err = mp_mdc_open(mp, logid1, logid2, MDC_OF_SKIP_SER, &cinfo->mmi_mdc);
-		if (ev(err)) {
+		if (err) {
 			msg = "mdc open failed";
 			goto errout;
 		}
@@ -892,7 +891,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 
 	/* Read mdc and capture net result of object data records. */
 	err = mp_mdc_rewind(cinfo->mmi_mdc);
-	if (ev(err)) {
+	if (err) {
 		msg = "mdc rewind failed";
 		goto errout;
 	}
@@ -913,7 +912,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 		u64 objid;
 
 		err = mp_mdc_read(cinfo->mmi_mdc, recbuf, recbufsz, &rlen);
-		if (ev(err)) {
+		if (err) {
 			msg = "mdc read data failed";
 			break;
 		}
@@ -955,7 +954,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 			continue;
 
 		err = omf_mdcrec_unpack_letoh(&cinfo->mmi_mdcver, mp, cdr, recbuf);
-		if (ev(err)) {
+		if (err) {
 			msg = "mlog record unpack failed";
 			break;
 		}
@@ -1068,7 +1067,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 		}
 	}
 
-	if (ev(err))
+	if (err)
 		goto errout;
 
 	/*
@@ -1091,7 +1090,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 		}
 
 		err = pmd_smap_insert(mp, layout);
-		if (ev(err)) {
+		if (err) {
 			msg = "smap insert failed";
 			break;
 		}
@@ -1103,7 +1102,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 			mdcmax = max(mdcmax, (objid_uniq(layout->eld_objid) >> 1));
 	}
 
-	if (ev(err))
+	if (err)
 		goto errout;
 
 	cdr->u.obj.omd_objid = 0;
@@ -1116,7 +1115,7 @@ static merr_t pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 
 		/* MDC0 only: validate other mdc metadata; may make adjustments to mp.mda. */
 		err = pmd_mdc0_validate(mp, 1);
-		if (ev(err))
+		if (err)
 			msg = "MDC0 validation failed";
 	} else {
 		/*
@@ -1174,7 +1173,7 @@ static void pmd_objs_load_worker(struct work_struct *ws)
 			break; /* No more MDCs to load */
 
 		err = pmd_objs_load(olw->olw_mp, sidx);
-		if (ev(err))
+		if (err)
 			atomic64_set(olw->olw_err, err);
 	}
 }
@@ -1243,7 +1242,6 @@ static merr_t pmd_objs_load_parallel(struct mpool_descriptor *mp)
 static merr_t
 pmd_mdc_append(struct mpool_descriptor *mp, u8 cslot, struct omf_mdcrec_data *cdr, int sync)
 {
-	merr_t                  err;
 	struct pmd_mdc_info    *cinfo = &mp->pds_mda.mdi_slotv[cslot];
 	s64                     plen;
 
@@ -1253,10 +1251,7 @@ pmd_mdc_append(struct mpool_descriptor *mp, u8 cslot, struct omf_mdcrec_data *cd
 		return plen;
 	}
 
-	err = mp_mdc_append(cinfo->mmi_mdc, cinfo->mmi_recbuf, plen, sync);
-	ev(err);
-
-	return err;
+	return mp_mdc_append(cinfo->mmi_mdc, cinfo->mmi_recbuf, plen, sync);
 }
 
 /**
@@ -1323,7 +1318,7 @@ static merr_t pmd_log_mdc0_cobjs(struct mpool_descriptor *mp)
 	for (i = 0; i < mp->pds_pdvcnt; i++) {
 		pd = &(mp->pds_pdv[i]);
 		err = pmd_prop_mcconfig(mp, pd, true);
-		if (ev(err))
+		if (err)
 			return err;
 	}
 
@@ -1340,16 +1335,12 @@ static merr_t pmd_log_mdc0_cobjs(struct mpool_descriptor *mp)
 		if (mc->mc_pdmc >= 0) {
 			err = pmd_prop_mcspare(mp, mc->mc_parms.mcp_classp,
 					       mc->mc_sparms.mcsp_spzone, true);
-			if (ev(err))
+			if (err)
 				return err;
 		}
 	}
 
-	err = pmd_prop_mpconfig(mp, &mp->pds_cfg, true);
-	if (ev(err))
-		return err;
-
-	return 0;
+	return pmd_prop_mpconfig(mp, &mp->pds_cfg, true);
 }
 
 /**
@@ -1361,10 +1352,10 @@ static merr_t pmd_log_mdc0_cobjs(struct mpool_descriptor *mp)
 static merr_t
 pmd_log_non_mdc0_cobjs(struct mpool_descriptor *mp, u8 cslot, struct omf_mdcrec_data *cdr)
 {
-	struct pmd_mdc_info    *cinfo;
-	merr_t err;
+	struct pmd_mdc_info *cinfo;
 
 	cinfo = &mp->pds_mda.mdi_slotv[cslot];
+
 	/*
 	 * if not mdc0 log last objid checkpoint to support realloc of
 	 * uncommitted objects after a crash and to guarantee objids are
@@ -1372,9 +1363,8 @@ pmd_log_non_mdc0_cobjs(struct mpool_descriptor *mp, u8 cslot, struct omf_mdcrec_
 	 */
 	cdr->omd_rtype = OMF_MDR_OIDCKPT;
 	cdr->u.obj.omd_objid = cinfo->mmi_lckpt;
-	err = pmd_mdc_append(mp, cslot, cdr, 0);
 
-	return ev(err);
+	return pmd_mdc_append(mp, cslot, cdr, 0);
 }
 
 /**
@@ -1439,7 +1429,7 @@ static merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 
 		if (err) {
 			err = mp_mdc_open(mp, logid1, logid2, MDC_OF_SKIP_SER, &cinfo->mmi_mdc);
-			if (ev(err))
+			if (err)
 				continue;
 		}
 
@@ -1449,12 +1439,12 @@ static merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 			    (ulong)((struct pmd_layout *)cinfo->mmi_mdc->mdc_logh2)->eld_gen);
 
 		err = mp_mdc_cstart(cinfo->mmi_mdc);
-		if (ev(err))
+		if (err)
 			continue;
 
 		if (omfu_mdcver_cmp2(omfu_mdcver_cur(), ">=", 1, 0, 0, 1)) {
 			err = pmd_mdc_addrec_version(mp, cslot);
-			if (ev(err)) {
+			if (err) {
 				mp_mdc_close(cinfo->mmi_mdc);
 				continue;
 			}
@@ -1464,7 +1454,7 @@ static merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 			err = pmd_log_non_mdc0_cobjs(mp, cslot, cdr);
 		else
 			err = pmd_log_mdc0_cobjs(mp);
-		if (ev(err))
+		if (err)
 			continue;
 
 		err = pmd_log_all_mdc_cobjs(mp, cslot, cdr, &compacted, &total);
@@ -1472,7 +1462,7 @@ static merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 		mp_pr_debug("mpool %s, MDC%u compacted %u of %u objects: retry=%d",
 			    err, mp->pds_name, cslot, compacted, total, retry);
 
-		if (!ev(err))
+		if (!err)
 			/*
 			 * Append the compaction end record in the new active
 			 * mlog, and flush/sync all the previous records
@@ -1480,7 +1470,7 @@ static merr_t pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 			 * above.
 			 */
 			err = mp_mdc_cend(cinfo->mmi_mdc);
-		if (!ev(err)) {
+		if (!err) {
 			if (cslot) {
 				/*
 				 * MDCi i>0 compacted successfully
@@ -1513,7 +1503,7 @@ static merr_t pmd_mdc_addrec(struct mpool_descriptor *mp, u8 cslot, struct omf_m
 
 	if (merr_errno(err) == EFBIG) {
 		err = pmd_mdc_compact(mp, cslot);
-		if (!ev(err))
+		if (!err)
 			err = pmd_mdc_append(mp, cslot, cdr, 1);
 	}
 
@@ -1539,7 +1529,6 @@ merr_t pmd_mdc_addrec_version(struct mpool_descriptor *mp, u8 cslot)
 
 merr_t pmd_prop_mcconfig(struct mpool_descriptor *mp, struct mpool_dev_info *pd, bool compacting)
 {
-	merr_t                  err;
 	struct omf_mdcrec_data  cdr;
 	struct mc_parms		mc_parms;
 
@@ -1550,13 +1539,11 @@ merr_t pmd_prop_mcconfig(struct mpool_descriptor *mp, struct mpool_dev_info *pd,
 	cdr.u.dev.omd_parm.odp_zonetot = pd->pdi_parm.dpr_zonetot;
 	cdr.u.dev.omd_parm.odp_devsz = pd->pdi_parm.dpr_devsz;
 
+	/* If compacting no sync needed and don't trigger another compaction. */
 	if (compacting)
-		/* No sync needed and don't trigger another compaction. */
-		err = pmd_mdc_append(mp, 0, &cdr, 0);
-	else
-		err = pmd_mdc_addrec(mp, 0, &cdr);
+		return pmd_mdc_append(mp, 0, &cdr, 0);
 
-	return ev(err);
+	return pmd_mdc_addrec(mp, 0, &cdr);
 }
 
 merr_t
@@ -1583,10 +1570,8 @@ pmd_prop_mcspare(
 	if (compacting) {
 		/* No sync needed and don't trigger another compaction. */
 		err = pmd_mdc_append(mp, 0, &cdr, 0);
-		ev(err);
 	} else {
 		err = pmd_mdc_addrec(mp, 0, &cdr);
-		ev(err);
 	}
 
 	return err;
@@ -1633,17 +1618,14 @@ merr_t
 pmd_prop_mpconfig(struct mpool_descriptor *mp, const struct mpool_config *cfg, bool compacting)
 {
 	struct omf_mdcrec_data  cdr = { };
-	merr_t                  err;
 
 	cdr.omd_rtype = OMF_MDR_MPCONFIG;
 	cdr.u.omd_cfg = *cfg;
 
 	if (compacting)
-		err = pmd_mdc_append(mp, 0, &cdr, 0);
-	else
-		err = pmd_mdc_addrec(mp, 0, &cdr);
+		return pmd_mdc_append(mp, 0, &cdr, 0);
 
-	return ev(err);
+	return pmd_mdc_addrec(mp, 0, &cdr);
 }
 
 /**
@@ -1924,7 +1906,7 @@ static merr_t pmd_write_meta_to_latest_version(struct mpool_descriptor *mp, bool
 		err = pmd_mdc_compact(mp, cslot);
 		pmd_mdc_unlock(&cinfo->mmi_compactlock);
 
-		if (ev(err)) {
+		if (err) {
 			mp_pr_err("mpool %s, failed to compact MDC %u post upgrade from %s to %s",
 				  err, mp->pds_name, cslot, buf1, buf2);
 			return err;
@@ -2014,7 +1996,7 @@ pmd_mpool_activate(
 
 	/* Initialize mdc0 for mpool */
 	err = pmd_mdc0_init(mp, mdc01, mdc02);
-	if (ev(err)) {
+	if (err) {
 		/*
 		 * pmd_mda_free() will dealloc mdc01/2 on subsequent
 		 * activation failures
@@ -2027,7 +2009,7 @@ pmd_mpool_activate(
 	/* Load mpool properties from mdc0 including drive list and states */
 	if (!create) {
 		err = pmd_props_load(mp);
-		if (ev(err))
+		if (err)
 			goto exit;
 	}
 
@@ -2036,17 +2018,17 @@ pmd_mpool_activate(
 	 * is finalized)
 	 */
 	err = smap_mpool_init(mp);
-	if (ev(err))
+	if (err)
 		goto exit;
 
 	/* Load mdc layouts from mdc0 and finalize mda initialization */
 	err = pmd_objs_load(mp, 0);
-	if (ev(err))
+	if (err)
 		goto exit;
 
 	/* Load user object layouts from all other mdc */
 	err = pmd_objs_load_parallel(mp);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("mpool %s, failed to load user MDCs", err, mp->pds_name);
 		goto exit;
 	}
@@ -2058,7 +2040,7 @@ pmd_mpool_activate(
 	 */
 	if (!create) {
 		err = pmd_write_meta_to_latest_version(mp, true);
-		if (ev(err)) {
+		if (err) {
 			mp_pr_err("mpool %s, failed to compact MDCs (metadata conversion)",
 				  err, mp->pds_name);
 			goto exit;

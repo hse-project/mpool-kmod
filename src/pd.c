@@ -16,7 +16,6 @@
 #include <linux/blk_types.h>
 
 #include "mpool_printk.h"
-#include "evc.h"
 #include "assert.h"
 
 #include "init.h"
@@ -70,7 +69,7 @@ merr_t pd_dev_close(struct pd_dev_parm *dparm)
 		blkdev_put(bdev, pd_bio_fmode);
 	}
 
-	return bdev ? 0 : ev(EINVAL);
+	return bdev ? 0 : merr(EINVAL);
 }
 
 merr_t pd_dev_flush(struct pd_dev_parm *dparm)
@@ -182,7 +181,7 @@ merr_t pd_zone_erase(struct pd_dev_parm *dparm, u64 zaddr, u32 zonecnt, bool rea
 		err = pd_bio_discard(dparm, zaddr * zlen, zonecnt * zlen);
 	}
 
-	return ev(err);
+	return err;
 }
 
 #if HAVE_SUBMIT_BIO_OP
@@ -290,7 +289,7 @@ pd_bio_rw(
 	}
 
 	sector_mask = PD_SECTORMASK(&dparm->dpr_prop);
-	if (ev(off & sector_mask)) {
+	if (off & sector_mask) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s, %s offset 0x%lx not multiple of sector size %u",
 			  err, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
@@ -298,7 +297,7 @@ pd_bio_rw(
 		return err;
 	}
 
-	if (ev(off > PD_LEN(&dparm->dpr_prop))) {
+	if (off > PD_LEN(&dparm->dpr_prop)) {
 		err = merr(EINVAL);
 		mp_pr_err("bdev %s, %s offset 0x%lx past device end 0x%lx",
 			  err, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
@@ -310,7 +309,7 @@ pd_bio_rw(
 	tot_len = 0;
 	for (i = 0; i < iovcnt; i++) {
 		if (!PAGE_ALIGNED((uintptr_t)iov[i].iov_base) || (iov[i].iov_len & sector_mask)) {
-			err = merr(ev(EINVAL));
+			err = merr(EINVAL);
 			mp_pr_err("bdev %s, %s off 0x%lx, misaligned kvec, base 0x%lx, len 0x%lx",
 				  err, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
 				  (ulong)off, (ulong)iov[i].iov_base, (ulong)iov[i].iov_len);
@@ -327,7 +326,7 @@ pd_bio_rw(
 	}
 
 	if (off + tot_len > PD_LEN(&dparm->dpr_prop)) {
-		err = merr(ev(EINVAL));
+		err = merr(EINVAL);
 		mp_pr_err("bdev %s, %s I/O end past device end 0x%lx, 0x%lx:0x%x",
 			  err, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
 			  (ulong)PD_LEN(&dparm->dpr_prop), (ulong)off, tot_len);
@@ -433,7 +432,7 @@ pd_zone_pwritev_sync(
 	struct block_device    *bdev;
 
 	err = pd_zone_pwritev(dparm, iov, iovcnt, zaddr, boff, REQ_FUA);
-	if (ev(err))
+	if (err)
 		return err;
 
 	/*

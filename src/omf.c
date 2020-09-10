@@ -17,7 +17,6 @@
 #include <crypto/hash.h>
 
 #include "merr.h"
-#include "evc.h"
 #include "assert.h"
 #include "mpool_printk.h"
 
@@ -305,13 +304,9 @@ omf_upgrade_unpack_only(
 {
 	struct upgrade_history *res;
 
-	merr_t err;
-
 	res = omf_find_upgrade_hist(uhtab, tabsz, sbver, mdcver);
 
-	err = res->uh_unpack(out, inbuf);
-
-	return ev(err);
+	return res->uh_unpack(out, inbuf);
 }
 
 /**
@@ -351,8 +346,7 @@ omf_unpack_letoh_and_convert(
 		 * Current version is the latest version.
 		 * Don't need to do any conversion
 		 */
-		err = omf->uh_unpack(out, inbuf);
-		return ev(err);
+		return omf->uh_unpack(out, inbuf);
 	}
 
 	old = kzalloc(omf->uh_size, GFP_KERNEL);
@@ -360,7 +354,7 @@ omf_unpack_letoh_and_convert(
 		return merr(ENOMEM);
 
 	err = omf->uh_unpack(old, inbuf);
-	if (ev(err)) {
+	if (err) {
 		kfree(old);
 		return err;
 	}
@@ -455,7 +449,7 @@ omf_dparm_unpack_letoh(
 		err = omf_unpack_letoh_and_convert(dp, sizeof(*dp), inbuf, devparm_descriptor_table,
 			ARRAY_SIZE(devparm_descriptor_table), sbver, mdcver);
 
-	return ev(err);
+	return err;
 }
 
 
@@ -507,7 +501,7 @@ omf_layout_unpack_letoh(
 		err = omf_unpack_letoh_and_convert(ld, sizeof(*ld), inbuf, layout_descriptor_table,
 			ARRAY_SIZE(layout_descriptor_table), sbver, mdcver);
 
-	return ev(err);
+	return err;
 }
 
 /*
@@ -587,10 +581,8 @@ static merr_t omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf)
 
 	err = omf_layout_unpack_letoh(&cdr->u.obj.omd_old, (char *)&(ocre_omf->pdrc_ld),
 				      OMF_SB_DESC_V1, NULL, UNPACKONLY);
-	if (ev(err))
-		return err;
 
-	return 0;
+	return err;
 }
 
 
@@ -626,7 +618,7 @@ omf_pmd_layout_unpack_letoh(
 	err = omf_unpack_letoh_and_convert(cdr, sizeof(*cdr), inbuf, mdcrec_data_ocreate_table,
 					   ARRAY_SIZE(mdcrec_data_ocreate_table),
 					   OMF_SB_DESC_UNDEF, mdcver);
-	if (ev(err)) {
+	if (err) {
 		char buf[MAX_MDCVERSTR];
 
 		omfu_mdcver_to_str(mdcver, buf, sizeof(buf));
@@ -870,7 +862,7 @@ merr_t omf_sb_unpack_letoh(struct omf_sb_descriptor *sb, const char *inbuf, u16 
 
 	err = omf_unpack_letoh_and_convert(sb, sizeof(*sb), inbuf, sb_descriptor_table,
 					   ARRAY_SIZE(sb_descriptor_table), *omf_ver, NULL);
-	if (ev(err))
+	if (err)
 		mp_pr_err("Unpacking superblock failed for version %u", err, *omf_ver);
 
 	return err;
@@ -940,12 +932,12 @@ omf_mdcrec_objcmn_pack_htole(struct mpool_descriptor *mp, struct omf_mdcrec_data
 	/* OCREATE or OUPDATE: pack object in provided layout descriptor */
 	if (!layout) {
 		mp_pr_warn("mpool %s, invalid layout", mp->pds_name);
-		return ev(-EINVAL);
+		return -EINVAL;
 	}
 
 	bytes = omf_pmd_layout_pack_htole(mp, cdr->omd_rtype, layout, outbuf);
 	if (bytes < 0)
-		return ev(-EINVAL);
+		return -EINVAL;
 
 	return bytes;
 }
@@ -1002,7 +994,6 @@ omf_mdcrec_objcmn_unpack_letoh(
 	case OMF_MDR_OCREATE:
 	case OMF_MDR_OUPDATE:
 		err = omf_pmd_layout_unpack_letoh(mp, mdcver, cdr, inbuf);
-		ev(err);
 		break;
 
 	default:
@@ -1059,7 +1050,7 @@ omf_mdcrec_mcconfig_unpack_letoh(
 	err = omf_dparm_unpack_letoh(&(cdr->u.dev.omd_parm), (char *)&(mc_omf->pdrs_parm),
 				     OMF_SB_DESC_UNDEF, mdcver, UNPACKCONVERT);
 
-	return ev(err);
+	return err;
 }
 
 
@@ -1156,7 +1147,7 @@ omf_mdcrec_mcspare_unpack_letoh(
 
 	err = omf_unpack_letoh_and_convert(cdr, sizeof(*cdr), inbuf, mdcrec_data_mcspare_table,
 				ARRAY_SIZE(mdcrec_data_mcspare_table), sbver, mdcver);
-	return ev(err);
+	return err;
 }
 
 
@@ -1274,7 +1265,7 @@ int omf_mdcrec_pack_htole(struct mpool_descriptor *mp, struct omf_mdcrec_data *c
 
 	mp_pr_warn("mpool %s, invalid record type %u in mdc log", mp->pds_name, rtype);
 
-	return ev(-EINVAL);
+	return -EINVAL;
 }
 
 merr_t
@@ -1359,7 +1350,6 @@ int omf_logblock_header_len_le(char *lbuf)
 	if (omf_polh_vers(lbh_omf) == OMF_LOGBLOCK_VERS)
 		return OMF_LOGBLOCK_HDR_PACKLEN;
 
-	ev(1);
 	return -EINVAL;
 }
 
