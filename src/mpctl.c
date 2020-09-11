@@ -2362,27 +2362,6 @@ static merr_t mpioc_mlog_erase(struct mpc_unit *unit, struct mpioc_mlog_id *mi)
 	return err;
 }
 
-static merr_t mpioc_test(struct mpc_unit *unit, struct mpioc_test *test)
-{
-	merr_t err = 0;
-
-	if (!unit || !test)
-		return merr(EINVAL);
-
-	switch (test->mpt_cmd) {
-	case 0:
-		test->mpt_sval[1] = merr((int)test->mpt_sval[0]);
-		err = test->mpt_sval[1];
-		break;
-
-	default:
-		err = merr(EINVAL);
-		break;
-	}
-
-	return err;
-}
-
 static struct mpc_softstate *mpc_cdev2ss(struct cdev *cdev)
 {
 	if (!cdev || cdev->owner != THIS_MODULE) {
@@ -2645,7 +2624,6 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		case MPIOC_MLOG_FIND:
 		case MPIOC_MLOG_READ:
 		case MPIOC_MLOG_PROPS:
-		case MPIOC_TEST:
 			break;
 
 		default:
@@ -2686,7 +2664,7 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				return -EFAULT;
 			}
 
-			if (cmn->mc_err) {
+			if (cmn->mc_rsvd || cmn->mc_errno) {
 				if (argp != argbuf)
 					kfree(argp);
 				return -EINVAL;
@@ -2799,10 +2777,6 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		err = mpioc_xvm_vrss(unit, argp);
 		break;
 
-	case MPIOC_TEST:
-		err = mpioc_test(unit, argp);
-		break;
-
 	default:
 		err = merr(ENOTTY);
 		mp_pr_rl("invalid command %x: dir=%u type=%c nr=%u size=%u",
@@ -2815,11 +2789,8 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 	if (_IOC_DIR(cmd) & _IOC_READ) {
 		struct mpioc_cmn *cmn = argp;
 
-		cmn->mc_err = err;
+		cmn->mc_errno = rc;
 		rc = 0;
-
-		if (err)
-			cmn->mc_err = merr_to_user(err, cmn->mc_merr_base);
 
 		if (copy_to_user((void __user *)arg, argp, iosz))
 			rc = -EFAULT;
