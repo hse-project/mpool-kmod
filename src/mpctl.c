@@ -548,7 +548,6 @@ mpc_unit_lookup_by_name(struct mpc_unit *parent, const char *name, struct mpc_un
  * @mpool:
  * @unitp: unitp can be NULL. *unitp is updated only if unitp is not NULL
  *	and no error is returned.
- * @cmn:
  *
  * If successful, this function adopts mpool.  On failure, mpool
  * remains the responsibility of the caller.
@@ -566,15 +565,14 @@ mpc_unit_setup(
 	const char                 *name,
 	const struct mpool_config  *cfg,
 	struct mpc_mpool           *mpool,
-	struct mpc_unit           **unitp,
-	struct mpioc_cmn           *cmn)
+	struct mpc_unit           **unitp)
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
 	struct mpc_unit        *unit;
 	struct device          *device;
 	merr_t                  err;
 
-	if (!ss || !uinfo || !name || !name[0] || !cfg || !unitp || !cmn)
+	if (!ss || !uinfo || !name || !name[0] || !cfg || !unitp)
 		return merr(EINVAL);
 
 	if (cfg->mc_uid == -1 || cfg->mc_gid == -1 || cfg->mc_mode == -1)
@@ -812,7 +810,6 @@ static merr_t mpioc_params_set(struct mpc_unit *unit, struct mpioc_params *set)
 	struct mpc_softstate       *ss = &mpc_softstate;
 	struct mpool_descriptor    *mp;
 	struct mpool_params        *params;
-	struct mpioc_cmn           *cmn;
 
 	uuid_le uuidnull = { };
 	merr_t  rerr = 0, err = 0;
@@ -821,7 +818,6 @@ static merr_t mpioc_params_set(struct mpc_unit *unit, struct mpioc_params *set)
 	if (!mpc_unit_ismpooldev(unit))
 		return merr(EINVAL);
 
-	cmn = &set->mps_cmn;
 	params = &set->mps_params;
 
 	params->mp_vma_size_max = mpc_xvm_size_max;
@@ -1243,7 +1239,7 @@ mpioc_mp_create(
 
 	/* A unit is born with two references:  A birth reference, and one for the caller. */
 	err = mpc_unit_setup(&mpc_uinfo_mpool, mp->mp_params.mp_name,
-			     &cfg, mpool, &unit, &mp->mp_cmn);
+			     &cfg, mpool, &unit);
 	if (err) {
 		mp_pr_err("%s: unit setup failed", err, mp->mp_params.mp_name);
 		goto errout;
@@ -1348,7 +1344,7 @@ mpioc_mp_activate(
 
 	/* A unit is born with two references:  A birth reference, and one for the caller. */
 	err = mpc_unit_setup(&mpc_uinfo_mpool, mp->mp_params.mp_name,
-			     &cfg, mpool, &unit, &mp->mp_cmn);
+			     &cfg, mpool, &unit);
 	if (err) {
 		mp_pr_err("%s unit setup failed", err, mp->mp_params.mp_name);
 		goto errout;
@@ -2362,27 +2358,6 @@ static merr_t mpioc_mlog_erase(struct mpc_unit *unit, struct mpioc_mlog_id *mi)
 	return err;
 }
 
-static merr_t mpioc_test(struct mpc_unit *unit, struct mpioc_test *test)
-{
-	merr_t err = 0;
-
-	if (!unit || !test)
-		return merr(EINVAL);
-
-	switch (test->mpt_cmd) {
-	case 0:
-		test->mpt_sval[1] = merr((int)test->mpt_sval[0]);
-		err = test->mpt_sval[1];
-		break;
-
-	default:
-		err = merr(EINVAL);
-		break;
-	}
-
-	return err;
-}
-
 static struct mpc_softstate *mpc_cdev2ss(struct cdev *cdev)
 {
 	if (!cdev || cdev->owner != THIS_MODULE) {
@@ -2645,7 +2620,6 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		case MPIOC_MLOG_FIND:
 		case MPIOC_MLOG_READ:
 		case MPIOC_MLOG_PROPS:
-		case MPIOC_TEST:
 			break;
 
 		default:
@@ -2663,11 +2637,6 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 	/* Set up argp/argbuf for read/write requests. */
 	if (_IOC_DIR(cmd) & (_IOC_READ | _IOC_WRITE)) {
-		struct mpioc_cmn *cmn;
-
-		if (iosz < sizeof(*cmn))
-			return -EINVAL;
-
 		argp = argbuf;
 		if (iosz > argbufsz) {
 			argbufsz = roundup_pow_of_two(iosz);
@@ -2677,22 +2646,12 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 				return -ENOMEM;
 		}
 
-		cmn = argp;
-
 		if (_IOC_DIR(cmd) & _IOC_WRITE) {
 			if (copy_from_user(argp, (const void __user *)arg, iosz)) {
 				if (argp != argbuf)
 					kfree(argp);
 				return -EFAULT;
 			}
-
-			if (cmn->mc_err) {
-				if (argp != argbuf)
-					kfree(argp);
-				return -EINVAL;
-			}
-		} else {
-			memset(cmn, 0, sizeof(*cmn));
 		}
 	}
 
@@ -2799,10 +2758,6 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 		err = mpioc_xvm_vrss(unit, argp);
 		break;
 
-	case MPIOC_TEST:
-		err = mpioc_test(unit, argp);
-		break;
-
 	default:
 		err = merr(ENOTTY);
 		mp_pr_rl("invalid command %x: dir=%u type=%c nr=%u size=%u",
@@ -2812,15 +2767,7 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 	rc = -merr_errno(err);
 
-	if (_IOC_DIR(cmd) & _IOC_READ) {
-		struct mpioc_cmn *cmn = argp;
-
-		cmn->mc_err = err;
-		rc = 0;
-
-		if (err)
-			cmn->mc_err = merr_to_user(err, cmn->mc_merr_base);
-
+	if (!rc && _IOC_DIR(cmd) & _IOC_READ) {
 		if (copy_to_user((void __user *)arg, argp, iosz))
 			rc = -EFAULT;
 	}
@@ -2880,7 +2827,6 @@ void mpctl_exit(void)
 merr_t mpctl_init(void)
 {
 	struct mpc_softstate   *ss = &mpc_softstate;
-	struct mpioc_cmn        cmn = { };
 	struct mpool_config    *cfg = NULL;
 	struct mpc_unit        *ctlunit;
 	const char             *errmsg = NULL;
@@ -2963,7 +2909,7 @@ merr_t mpctl_init(void)
 	cfg->mc_gid = mpc_ctl_gid;
 	cfg->mc_mode = mpc_ctl_mode;
 
-	err = mpc_unit_setup(&mpc_uinfo_ctl, MPC_DEV_CTLNAME, cfg, NULL, &ctlunit, &cmn);
+	err = mpc_unit_setup(&mpc_uinfo_ctl, MPC_DEV_CTLNAME, cfg, NULL, &ctlunit);
 	if (err) {
 		errmsg = "cannot create control device";
 		goto errout;

@@ -8,27 +8,13 @@
 
 #include <linux/printk.h>
 
-#include "merr.h"
-
 /* TODO: Use dev_crit(), dev_err(), ... */
 
 #define mp_pr_crit(_fmt, _err, ...)				\
-do {								\
-	char errbuf[128];					\
-								\
-	pr_crit("%s: " _fmt ": %s",		                \
-	       __func__, ## __VA_ARGS__,			\
-	       merr_strinfo((_err), errbuf, sizeof(errbuf)));	\
-} while (0)
+	pr_crit("%s: " _fmt ": errno %d", __func__, ## __VA_ARGS__, (_err))
 
 #define mp_pr_err(_fmt, _err, ...)				\
-do {								\
-	char errbuf[128];					\
-								\
-	pr_err("%s: " _fmt ": %s",		                \
-	       __func__, ## __VA_ARGS__,			\
-	       merr_strinfo((_err), errbuf, sizeof(errbuf)));	\
-} while (0)
+	pr_err("%s: " _fmt ": errno %d", __func__, ## __VA_ARGS__, (_err))
 
 #define mp_pr_warn(_fmt, ...)					\
 	pr_warn("%s: " _fmt, __func__, ## __VA_ARGS__)
@@ -40,26 +26,18 @@ do {								\
 	pr_info("%s: " _fmt, __func__, ## __VA_ARGS__)
 
 #define mp_pr_debug(_fmt, _err, ...)				\
-do {								\
-	char errbuf[128];					\
-								\
-	pr_debug("%s: " _fmt ": %s",			        \
-	       __func__, ## __VA_ARGS__,			\
-	       merr_strinfo((_err), errbuf, sizeof(errbuf)));	\
-} while (0)
+	pr_debug("%s: " _fmt ": errno %d", __func__, ## __VA_ARGS__,  (_err))
 
 
 /* Rate limited version of mp_pr_err(). */
 #define mp_pr_rl(_fmt, _err, ...)				\
 do {								\
-	static unsigned long state;				\
+	static unsigned long mp_pr_rl_state;			\
 	uint dly = msecs_to_jiffies(333);			\
-	char errbuf[128];					\
 								\
-	if (printk_timed_ratelimit(&state, dly)) {		\
-		merr_strinfo((_err), errbuf, sizeof(errbuf));	\
-		pr_err("%s: " _fmt ": %s",		        \
-		       __func__, ## __VA_ARGS__, errbuf);	\
+	if (printk_timed_ratelimit(&mp_pr_rl_state, dly)) {	\
+		pr_err("%s: " _fmt ": errno %d",		\
+		       __func__, ## __VA_ARGS__, (_err));	\
 	}							\
 } while (0)
 
