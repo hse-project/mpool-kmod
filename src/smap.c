@@ -12,7 +12,6 @@
 #include <linux/delay.h>
 #include <linux/slab.h>
 
-#include "evc.h"
 #include "assert.h"
 #include "mpool_printk.h"
 
@@ -92,7 +91,7 @@ merr_t smap_mpool_init(struct mpool_descriptor *mp)
 		mc = &mp->pds_mc[pd->pdi_mclass];
 		err = mc_smap_parms_get(&mp->pds_mc[mc->mc_parms.mcp_classp],
 					&mp->pds_params, &mcsp);
-		if (ev(err))
+		if (err)
 			break;
 
 		err = smap_drive_init(mp, &mcsp, pdh);
@@ -385,7 +384,7 @@ smap_alloc(
 	*zoneaddr = 0;
 	pd = &mp->pds_pdv[pdh];
 
-	if (ev(!zonecnt || !saptype_valid(sapolicy)))
+	if (!zonecnt || !saptype_valid(sapolicy))
 		return merr(EINVAL);
 
 	assert(is_power_of_2(align));
@@ -393,7 +392,7 @@ smap_alloc(
 	ds = &pd->pdi_ds;
 	mc = &mp->pds_mc[pd->pdi_mclass];
 	err = mc_smap_parms_get(&mp->pds_mc[mc->mc_parms.mcp_classp], &mp->pds_params, &mcsp);
-	if (ev(err))
+	if (err)
 		return err;
 	rgnc = mcsp.mcsp_rgnc;
 
@@ -473,7 +472,7 @@ smap_alloc(
 	if (ualen) {
 		if (!elem) {
 			elem = kmem_cache_alloc(smap_zone_cache, GFP_ATOMIC);
-			if (ev(!elem)) {
+			if (!elem) {
 				mutex_unlock(rmlock);
 				return merr(ENOMEM);
 			}
@@ -855,7 +854,7 @@ static merr_t smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, 
 			node = node->rb_right;
 		} else {
 			msg = "chunk overlapping";
-			err = merr(ev(EINVAL));
+			err = merr(EINVAL);
 			goto unlock;
 		}
 	}

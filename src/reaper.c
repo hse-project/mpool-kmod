@@ -36,7 +36,6 @@
 
 #include "mpool_printk.h"
 #include "assert.h"
-#include "evc.h"
 
 #include "sysfs.h"
 #include "mpctl.h"
@@ -503,11 +502,11 @@ merr_t mpc_reap_create(struct mpc_reap **reapp)
 	*reapp = NULL;
 
 	reap = kzalloc(roundup_pow_of_two(sizeof(*reap)), GFP_KERNEL);
-	if (ev(!reap))
+	if (!reap)
 		return merr(ENOMEM);
 
 	reap->reap_wq = alloc_workqueue("mpc_reap", flags, REAP_ELEM_MAX + 1);
-	if (ev(!reap->reap_wq)) {
+	if (!reap->reap_wq) {
 		kfree(reap);
 		return merr(ENOMEM);
 	}
@@ -550,7 +549,7 @@ void mpc_reap_destroy(struct mpc_reap *reap)
 	struct mpc_reap_elem   *elem;
 	int                     i;
 
-	if (ev(!reap))
+	if (!reap)
 		return;
 
 	cancel_delayed_work_sync(&reap->reap_dwork);

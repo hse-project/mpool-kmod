@@ -9,8 +9,6 @@
 
 #include <linux/errno.h>
 
-#include "evc.h"
-
 #include "omf_if.h"
 #include "pd.h"
 #include "params.h"
@@ -72,7 +70,7 @@ void mc_pd_prop2mc_parms(struct pd_prop *pd_prop, struct mc_parms *mc_parms)
 
 merr_t mc_set_spzone(struct media_class *mc, u8 spzone)
 {
-	if (ev(!mc))
+	if (!mc)
 		return merr(EINVAL);
 
 	if (mc->mc_pdmc < 0)
@@ -96,7 +94,7 @@ mc_smap_parms_get(
 	struct mpcore_params   *params,
 	struct mc_smap_parms   *mcsp)
 {
-	if (ev(!mc || !mcsp))
+	if (!mc || !mcsp)
 		return merr(EINVAL);
 
 	if (mc->mc_pdmc >= 0)

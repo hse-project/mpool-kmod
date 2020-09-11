@@ -6,7 +6,6 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 
-#include "evc.h"
 #include "merr.h"
 #include "mpool_printk.h"
 
@@ -170,7 +169,7 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 	id[0] = logid1;
 	id[1] = logid2;
 	mdc_find_get(mp, id, true, props, mlh, ferr);
-	if (ev(ferr[0] || ferr[1])) {
+	if (ferr[0] || ferr[1]) {
 		err = ferr[0] ? : ferr[1];
 		goto exit;
 	}
@@ -185,9 +184,9 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 	err1 = mlog_open(mp, mdc->mdc_logh1, mlflags, &gen1);
 	err2 = mlog_open(mp, mdc->mdc_logh2, mlflags, &gen2);
 
-	if (ev(err1) && merr_errno(err1) != EMSGSIZE && merr_errno(err1) != EBUSY) {
+	if (err1 && merr_errno(err1) != EMSGSIZE && merr_errno(err1) != EBUSY) {
 		err = err1;
-	} else if (ev(err2) && merr_errno(err2) != EMSGSIZE && merr_errno(err2) != EBUSY) {
+	} else if (err2 && merr_errno(err2) != EMSGSIZE && merr_errno(err2) != EBUSY) {
 		err = err2;
 	} else if ((err1 && err2) || (!err1 && !err2 && gen1 && gen1 == gen2)) {
 
@@ -315,7 +314,7 @@ uint64_t mp_mdc_cstart(struct mp_mdc *mdc)
 		return merr(EINVAL);
 
 	err = mdc_acquire(mdc, rw);
-	if (ev(err))
+	if (err)
 		return err;
 
 	mp = mdc->mdc_mp;
@@ -358,7 +357,7 @@ uint64_t mp_mdc_cend(struct mp_mdc *mdc)
 		return merr(EINVAL);
 
 	err = mdc_acquire(mdc, rw);
-	if (ev(err))
+	if (err)
 		return err;
 
 	mp = mdc->mdc_mp;
@@ -372,12 +371,10 @@ uint64_t mp_mdc_cend(struct mp_mdc *mdc)
 	}
 
 	err = mlog_append_cend(mp, tgth);
-	if (!ev(err)) {
+	if (!err) {
 		err = mlog_gen(tgth, &gentgt);
-		if (!ev(err)) {
+		if (!err)
 			err = mlog_erase(mp, srch, gentgt + 1);
-			ev(err);
-		}
 	}
 
 	if (err) {
@@ -408,7 +405,7 @@ uint64_t mp_mdc_close(struct mp_mdc *mdc)
 		return merr(EINVAL);
 
 	err = mdc_acquire(mdc, rw);
-	if (ev(err))
+	if (err)
 		return err;
 
 	mp = mdc->mdc_mp;
@@ -448,7 +445,7 @@ uint64_t mp_mdc_rewind(struct mp_mdc *mdc)
 		return merr(EINVAL);
 
 	err = mdc_acquire(mdc, rw);
-	if (ev(err))
+	if (err)
 		return err;
 
 	err = mlog_read_data_init(mdc->mdc_alogh);
@@ -470,11 +467,11 @@ uint64_t mp_mdc_read(struct mp_mdc *mdc, void *data, size_t len, size_t *rdlen)
 		return merr(EINVAL);
 
 	err = mdc_acquire(mdc, rw);
-	if (ev(err))
+	if (err)
 		return err;
 
 	err = mlog_read_data_next(mdc->mdc_mp, mdc->mdc_alogh, data, (u64)len, (u64 *)rdlen);
-	if ((ev(err)) && (merr_errno(err) != EOVERFLOW))
+	if (err && (merr_errno(err) != EOVERFLOW))
 		mp_pr_err("mpool %s, mdc %p read failed, mlog %p len %lu",
 			  err, mdc->mdc_mpname, mdc, mdc->mdc_alogh, len);
 
@@ -492,7 +489,7 @@ uint64_t mp_mdc_append(struct mp_mdc *mdc, void *data, ssize_t len, bool sync)
 		return merr(EINVAL);
 
 	err = mdc_acquire(mdc, rw);
-	if (ev(err))
+	if (err)
 		return err;
 
 	err = mlog_append_data(mdc->mdc_mp, mdc->mdc_alogh, data, (u64)len, sync);

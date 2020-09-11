@@ -21,7 +21,6 @@
 
 #include "mpool_printk.h"
 #include "uuid.h"
-#include "evc.h"
 #include "assert.h"
 
 #include "pd.h"
@@ -178,7 +177,7 @@ pmd_layout_alloc(
 		cache = pmd_layout_priv_cache;
 
 	layout = kmem_cache_zalloc(cache, GFP_KERNEL);
-	if (ev(!layout))
+	if (!layout)
 		return NULL;
 
 	layout->eld_objid     = objid;
@@ -341,7 +340,7 @@ pmd_layout_provision(
 
 	/* To reduce/eliminate fragmenation, make sure the alignment is a power of 2. */
 	err = mc_smap_parms_get(&mp->pds_mc[mc->mc_parms.mcp_classp], &mp->pds_params, &mcsp);
-	if (ev(err))
+	if (err)
 		return err;
 
 	align = min_t(u64, zcnt, mcsp.mcsp_align);
@@ -349,7 +348,7 @@ pmd_layout_provision(
 
 	pdh = mc->mc_pdmc;
 	err = smap_alloc(mp, pdh, zcnt, spctype, &zoneaddr, align);
-	if (ev(err))
+	if (err)
 		return err;
 
 	layout->eld_ld.ol_pdh = pdh;
@@ -391,7 +390,7 @@ pmd_layout_rw(
 	else
 		err = pd_zone_pwritev(&pd->pdi_parm, iov, iovcnt, zaddr, boff, flags);
 
-	if (ev(err))
+	if (err)
 		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
 
 	return err;
@@ -411,7 +410,7 @@ merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout)
 
 	err = pd_zone_erase(&pd->pdi_parm, layout->eld_ld.ol_zaddr, layout->eld_ld.ol_zcnt,
 			    pmd_objid_type(layout->eld_objid) == OMF_OBJ_MLOG);
-	if (ev(err))
+	if (err)
 		mpool_pd_status_set(pd, PD_STAT_OFFLINE);
 
 	return err;
@@ -553,7 +552,7 @@ merr_t pmd_obj_commit(struct mpool_descriptor *mp, struct pmd_layout *layout)
 	pmd_mdc_lock(&cinfo->mmi_compactlock, cslot);
 
 	err = pmd_log_create(mp, layout);
-	if (!ev(err)) {
+	if (!err) {
 		pmd_uc_lock(cinfo, cslot);
 		found = pmd_uc_remove(cinfo, layout);
 		pmd_uc_unlock(cinfo);
@@ -786,7 +785,7 @@ merr_t pmd_obj_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, u64
 		 * Note: for 1.0, there is only one drive.
 		 */
 		err = pmd_mdc0_meta_update(mp, layout);
-		if (!ev(err))
+		if (!err)
 			/*
 			 * Update in-memory eld_gen, only if on-media
 			 * gen gets successfully updated
@@ -806,7 +805,7 @@ merr_t pmd_obj_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, u64
 		pmd_mdc_lock(&cinfo->mmi_compactlock, cslot);
 
 		err = pmd_log_erase(mp, layout->eld_objid, gen);
-		if (!ev(err)) {
+		if (!err) {
 			layout->eld_gen = gen;
 			if (cslot)
 				atomic_inc(&cinfo->mmi_pco_cnt.pcc_er);
@@ -881,7 +880,7 @@ static merr_t pmd_alloc_idgen(struct mpool_descriptor *mp, enum obj_type_omf oty
 		cinfo->mmi_luniq = cinfo->mmi_luniq + 1;
 	pmd_mdc_unlock(&cinfo->mmi_uqlock);
 
-	if (ev(err)) {
+	if (err) {
 		mp_pr_rl("mpool %s, checkpoint append for objid 0x%lx failed",
 			 err, mp->pds_name, (ulong)*objid);
 		*objid = 0;
@@ -990,7 +989,7 @@ pmd_obj_alloc_cmn(
 	*layoutp = NULL;
 
 	err = pmd_alloc_argcheck(mp, objid, otype, mclass);
-	if (ev(err))
+	if (err)
 		return err;
 
 	if (!objid) {
@@ -1005,7 +1004,7 @@ pmd_obj_alloc_cmn(
 		err = pmd_realloc_idvalidate(mp, objid);
 	}
 	if (err)
-		return ev(err);
+		return err;
 
 	if (otype == OMF_OBJ_MLOG)
 		mpool_generate_uuid(&uuid);
@@ -1211,7 +1210,7 @@ static merr_t pmd_mdc0_meta_update(struct mpool_descriptor *mp, struct pmd_layou
 	 * MDC0 metadata replica is the one in SB0.
 	 */
 	err = sb_write_update(&pd->pdi_parm, sb);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("compacting %s MDC0, writing superblock on drive %s failed",
 			  err, mp->pds_name, pd->pdi_name);
 	}

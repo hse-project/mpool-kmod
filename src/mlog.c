@@ -9,7 +9,6 @@
 #include <asm/page.h>
 
 #include "assert.h"
-#include "evc.h"
 #include "mpool_printk.h"
 
 #include "omf_if.h"
@@ -43,19 +42,19 @@ mlog_alloc_cmn(
 
 	if (!objid) {
 		err = pmd_obj_alloc(mp, OMF_OBJ_MLOG, &ocap, mclassp, &layout);
-		if (ev(err) || !layout) {
+		if (err || !layout) {
 			if (merr_errno(err) != ENOENT)
 				mp_pr_err("mpool %s, allocating mlog failed", err, mp->pds_name);
 		}
 	} else {
 		err = pmd_obj_realloc(mp, objid, &ocap, mclassp, &layout);
-		if (ev(err) || !layout) {
+		if (err || !layout) {
 			if (merr_errno(err) != ENOENT)
 				mp_pr_err("mpool %s, re-allocating mlog 0x%lx failed",
 					  err, mp->pds_name, (ulong)objid);
 		}
 	}
-	if (ev(err))
+	if (err)
 		return err;
 
 	/*
@@ -64,7 +63,7 @@ mlog_alloc_cmn(
 	 */
 	pmd_obj_wrlock(layout);
 	err = pmd_layout_erase(mp, layout);
-	if (!ev(err))
+	if (!err)
 		mlog_getprops_cmn(mp, layout, prop);
 	pmd_obj_wrunlock(layout);
 
@@ -99,11 +98,7 @@ mlog_alloc(
 	struct mlog_props       *prop,
 	struct mlog_descriptor  **mlh)
 {
-	merr_t err;
-
-	err = mlog_alloc_cmn(mp, 0, capreq, mclassp, prop, mlh);
-
-	return ev(err);
+	return mlog_alloc_cmn(mp, 0, capreq, mclassp, prop, mlh);
 }
 
 
@@ -791,7 +786,7 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 	if (lstat->lst_abdirty) {
 		err = mlog_logblocks_flush(mp, layout, skip_ser);
 		lstat->lst_abdirty = false;
-		if (ev(err))
+		if (err)
 			mp_pr_err("mpool %s, mlog 0x%lx close, log block flush failed",
 				  err, mp->pds_name, (ulong)layout->eld_objid);
 	}
@@ -1016,7 +1011,7 @@ mlog_append_marker(
 
 	err = mlog_update_append_idx(mp, layout, skip_ser);
 	if (err)
-		return ev(err);
+		return err;
 
 	abidx  = lstat->lst_abidx;
 	abuf   = lstat->lst_abuf[abidx];
@@ -1254,11 +1249,11 @@ mlog_append_data_internal(
 			mp_pr_warn("mpool %s, mlog 0x%lx append, mlog free space incorrect",
 				   mp->pds_name, (ulong)layout->eld_objid);
 
-			return merr(ev(EFBIG));
+			return merr(EFBIG);
 		}
 
 		err = mlog_update_append_idx(mp, layout, skip_ser);
-		if (ev(err))
+		if (err)
 			return err;
 
 		abidx  = lstat->lst_abidx;
@@ -1381,14 +1376,14 @@ mlog_append_datav(
 		}
 	}
 
-	if (ev(err)) {
+	if (err) {
 		if (!skip_ser)
 			pmd_obj_wrunlock(layout);
 		return err;
 	}
 
 	err = mlog_append_data_internal(mp, mlh, iov, buflen, sync, skip_ser);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("mpool %s, mlog 0x%lx append failed",
 			  err, mp->pds_name, (ulong)layout->eld_objid);
 
@@ -1553,7 +1548,7 @@ mlog_read_data_next_impl(
 				*rdlen = 0;
 		}
 
-		return ev(err);
+		return err;
 	}
 
 	bufoff = 0;
@@ -1783,11 +1778,11 @@ void mlog_precompact_alsz(struct mpool_descriptor *mp, struct mlog_descriptor *m
 	merr_t err;
 
 	err = mlog_get_props(mp, mlh, &prop);
-	if (ev(err))
+	if (err)
 		return;
 
 	err = mlog_len(mp, mlh, &len);
-	if (ev(err))
+	if (err)
 		return;
 
 	pmd_precompact_alsz(mp, prop.lpr_objid, len, prop.lpr_alloc_cap);

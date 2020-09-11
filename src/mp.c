@@ -14,7 +14,6 @@
 #include <linux/mutex.h>
 #include <crypto/hash.h>
 
-#include "evc.h"
 #include "assert.h"
 #include "merr.h"
 #include "mpool_printk.h"
@@ -321,7 +320,7 @@ mpool_activate(
 
 	/* Get device parm for all drive paths */
 	err = mpool_dev_init_all(mp->pds_pdv, dcnt, dpaths, pd_prop);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("can't get drive device params, first drive path %s", err, dpaths[0]);
 		goto errout;
 	}
@@ -331,7 +330,7 @@ mpool_activate(
 
 	/* Init mpool descriptor from superblocks on drives */
 	err = mpool_desc_init_sb(mp, sbmdc0, flags, mc_resize);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("mpool_desc_init_sb failed, first drive path %s", err, dpaths[0]);
 		goto errout;
 	}
@@ -345,13 +344,13 @@ mpool_activate(
 
 	/* Alloc mdc0 mlog layouts from superblock and activate mpool */
 	err = mpool_mdc0_sb2obj(mp, sbmdc0, &mdc01, &mdc02);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("mpool %s, allocation of MDC0 mlogs layouts failed", err, mp->pds_name);
 		goto errout;
 	}
 
 	err = pmd_mpool_activate(mp, mdc01, mdc02, 0);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("mpool %s, activation failed", err, mp->pds_name);
 		goto errout;
 	}
@@ -446,7 +445,7 @@ mpool_activate(
 	 * root mlogs also exist and if they don't, re-create them.
 	 */
 	err = mpool_create_rmlogs(mp, mlog_cap);
-	if (ev(err)) {
+	if (err) {
 		/* Root mlogs creation failure - non-functional mpool */
 		mp_pr_err("mpool %s, root mlogs creation failed", err, mp->pds_name);
 		goto errout;
@@ -459,7 +458,7 @@ mpool_activate(
 	pmd_precompact_start(mp);
 
 errout:
-	if (ev(err)) {
+	if (err) {
 		if (mp->pds_workq)
 			destroy_workqueue(mp->pds_workq);
 		if (mp->pds_erase_wq)
@@ -563,7 +562,7 @@ merr_t mpool_destroy(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags
 
 	/* Get device parm for all drive paths */
 	err = mpool_dev_init_all(mp->pds_pdv, dcnt, dpaths, pd_prop);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("first pd %s, get device params failed", err, dpaths[0]);
 		goto errout;
 	}
@@ -671,7 +670,7 @@ mpool_rename(
 
 	/* Get device parm for all drive paths */
 	err = mpool_dev_init_all(mp->pds_pdv, dcnt, dpaths, pd_prop);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("first pd %s, get device params failed", err, dpaths[0]);
 		goto errout;
 	}
@@ -695,7 +694,7 @@ mpool_rename(
 		 * from device parameters stored in the super block.
 		 */
 		err = sb_read(&pd->pdi_parm, sb, &omf_ver, force);
-		if (ev(err)) {
+		if (err) {
 			mp_pr_err("pd %s, sb read failed", err, pd->pdi_name);
 			goto errout;
 		}
@@ -777,7 +776,7 @@ merr_t mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop 
 
 	/* Confirm drive meets all criteria for adding to this mpool */
 	err = mpool_dev_check_new(mp, pd);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("%s: pd %s, drive doesn't pass criteria", err, mp->pds_name, dpath);
 		goto errout;
 	}
@@ -808,7 +807,7 @@ merr_t mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop 
 	down_read(&mp->pds_pdvlock);
 	err = mc_smap_parms_get(&mp->pds_mc[pd->pdi_mclass], &mp->pds_params, &mcsp);
 	up_read(&mp->pds_pdvlock);
-	if (ev(err))
+	if (err)
 		goto errout;
 
 	/* Alloc space map for drive */
@@ -846,7 +845,7 @@ merr_t mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop 
 	 * checked that the drive can be added in a media class.
 	 */
 	err = mpool_desc_pdmc_add(mp, mp->pds_pdvcnt - 1, NULL, false);
-	if (ev(err))
+	if (err)
 		mp->pds_pdvcnt--;
 
 	up_write(&mp->pds_pdvlock);
@@ -971,7 +970,7 @@ mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8
 	 * complete
 	 */
 	err = pmd_prop_mcspare(mp, mclassp, drive_spares, false);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("mpool %s, setting spare %u mclass %d failed, could not record in MDC0",
 			  err, mp->pds_name, drive_spares, mclassp);
 	} else {
@@ -979,7 +978,7 @@ mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8
 		down_write(&mp->pds_pdvlock);
 
 		err = mc_set_spzone(&mp->pds_mc[mclassp], drive_spares);
-		if (ev(err))
+		if (err)
 			mp_pr_err("mpool %s, setting spare %u mclass %d failed",
 				  err, mp->pds_name, drive_spares, mclassp);
 		else
@@ -1097,7 +1096,7 @@ merr_t mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config
 {
 	merr_t err;
 
-	if (ev(!mp || !cfg))
+	if (!mp || !cfg)
 		return merr(EINVAL);
 
 	mp->pds_cfg = *cfg;
@@ -1111,7 +1110,7 @@ merr_t mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config
 
 merr_t mpool_config_fetch(struct mpool_descriptor *mp, struct mpool_config *cfg)
 {
-	if (ev(!mp || !cfg))
+	if (!mp || !cfg)
 		return merr(EINVAL);
 
 	*cfg = mp->pds_cfg;

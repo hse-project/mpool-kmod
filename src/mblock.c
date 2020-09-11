@@ -19,7 +19,6 @@
 
 #include "mpool_printk.h"
 #include "assert.h"
-#include "evc.h"
 
 #include "pd.h"
 #include "pmd_obj.h"
@@ -39,7 +38,7 @@ static struct pmd_layout *mblock2layout(struct mblock_descriptor *mbh)
 {
 	struct pmd_layout *layout = (void *)mbh;
 
-	if (ev(!layout))
+	if (!layout)
 		return NULL;
 
 	WARN_ONCE(layout->eld_objid == 0 || kref_read(&layout->eld_ref) < 2,
@@ -124,7 +123,7 @@ mblock_alloc_cmn(
 		}
 	}
 
-	if (ev(!layout))
+	if (!layout)
 		return merr(EBUG);
 
 	if (prop) {
@@ -161,11 +160,11 @@ mblock_find_get(
 
 	*mbh = NULL;
 
-	if (ev(!mblock_objid(objid)))
+	if (!mblock_objid(objid))
 		return merr(EINVAL);
 
 	layout = pmd_obj_find_get(mp, objid, which);
-	if (ev(!layout))
+	if (!layout)
 		return merr(ENOENT);
 
 	if (prop) {
@@ -210,7 +209,7 @@ merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 	struct mpool_dev_info *pd;
 
 	layout = mblock2layout(mbh);
-	if (ev(!layout)) {
+	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
 		return merr(EINVAL);
 	}
@@ -218,13 +217,13 @@ merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 	pd = pmd_layout_pd_get(mp, layout);
 	if (!pd->pdi_fua) {
 		err = pd_dev_flush(&pd->pdi_parm);
-		if (ev(err))
+		if (err)
 			return err;
 	}
 
 	/* Commit will fail with EBUSY if aborting flag set. */
 	err = pmd_obj_commit(mp, layout);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_rl("mpool %s, committing mblock 0x%lx failed",
 			 err, mp->pds_name, (ulong)layout->eld_objid);
 		return err;
@@ -239,13 +238,13 @@ merr_t mblock_abort(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 	merr_t              err;
 
 	layout = mblock2layout(mbh);
-	if (ev(!layout)) {
+	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
 		return merr(EINVAL);
 	}
 
 	err = pmd_obj_abort(mp, layout);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("mpool %s, aborting mblock 0x%lx failed",
 			  err, mp->pds_name, (ulong)layout->eld_objid);
 		return err;
@@ -259,7 +258,7 @@ merr_t mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 	struct pmd_layout *layout;
 
 	layout = mblock2layout(mbh);
-	if (ev(!layout)) {
+	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
 		return merr(EINVAL);
 	}
@@ -326,7 +325,7 @@ mblock_rw_argcheck(
 		 *
 		 * TODO: Use (len != MCACHE_RA_PAGES_MAX)
 		 */
-		if (ev(boff + len > layout->eld_mblen))
+		if (boff + len > layout->eld_mblen)
 			return merr(EINVAL);
 	} else {
 		/* Write boff required to match eld_mblen */
@@ -372,13 +371,13 @@ mblock_write(
 	u8     state;
 
 	layout = mblock2layout(mbh);
-	if (ev(!layout)) {
+	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
 		return merr(EINVAL);
 	}
 
 	err = mblock_rw_argcheck(mp, layout, layout->eld_mblen, MPOOL_OP_WRITE, len);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_debug("mblock write argcheck failed ", err);
 		return err;
 	}
@@ -427,13 +426,13 @@ mblock_read(
 	assert(mp);
 
 	layout = mblock2layout(mbh);
-	if (ev(!layout)) {
+	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
 		return merr(EINVAL);
 	}
 
 	err = mblock_rw_argcheck(mp, layout, boff, MPOOL_OP_READ, len);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_debug("mblock read argcheck failed ", err);
 		return err;
 	}
@@ -467,7 +466,7 @@ mblock_get_props_ex(
 	struct pmd_layout *layout;
 
 	layout = mblock2layout(mbh);
-	if (ev(!layout)) {
+	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
 		return merr(EINVAL);
 	}

@@ -14,7 +14,6 @@
 
 #include "mpool_printk.h"
 #include "assert.h"
-#include "evc.h"
 
 #include "mpool_ioctl.h"
 #include "pd.h"
@@ -313,7 +312,7 @@ merr_t sb_write_update(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb)
 	memset(outbuf, 0, SB_AREA_SZ);
 
 	err = omf_sb_pack_htole(sb, outbuf);
-	if (ev(err)) {
+	if (err) {
 		mp_pr_err("sb(%s) packing failed", err, dparm->dpr_name);
 		kfree(outbuf);
 		return err;
@@ -322,7 +321,7 @@ merr_t sb_write_update(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb)
 	/* Update sb0 first and then sb1 if that is successful */
 	for (i = 0; i < SB_SB_COUNT; i++) {
 		err = sb_write_sbx(dparm, outbuf, i);
-		if (ev(err)) {
+		if (err) {
 			mp_pr_err("sb(%s, %d) sbx write failed", err, dparm->dpr_name, i);
 			if (i == 0)
 				break;
@@ -500,7 +499,7 @@ merr_t sb_read(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb, u16 *omf
 	 * update the PD properties from it.
 	 */
 	err = sb_reconcile(sb, dparm, force);
-	if (ev(err))
+	if (err)
 		rval = err;
 
 exit:
@@ -617,29 +616,25 @@ int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb)
 {
 	/* Basic consistency validation; can make more extensive as needed */
 
-	if (ev(mpool_uuid_compare(&sb->osb_mdc01devid, &sb->osb_mdc02devid) ||
-	       mpool_uuid_compare(&sb->osb_mdc01devid, &sb->osb_mdc0dev.odp_devid)))
+	if (mpool_uuid_compare(&sb->osb_mdc01devid, &sb->osb_mdc02devid) ||
+	    mpool_uuid_compare(&sb->osb_mdc01devid, &sb->osb_mdc0dev.odp_devid))
 		return 0;
 
-	if (ev(mpool_uuid_is_null(&sb->osb_mdc01devid)))
+	if (mpool_uuid_is_null(&sb->osb_mdc01devid))
 		return 0;
 
-	if (ev(mpool_uuid_is_null(&sb->osb_parm.odp_devid)))
+	if (mpool_uuid_is_null(&sb->osb_parm.odp_devid))
 		return 0;
 
 	/* Confirm this drive is supposed to contain this mdc0 info */
-	if (!mpool_uuid_compare(&sb->osb_mdc01devid, &sb->osb_parm.odp_devid)) {
-		/* Found this drive in mdc0 strip list; confirm param and ownership */
-		if (ev(mc_cmp_omf_devparm(&sb->osb_parm, &sb->osb_mdc0dev)))
-			return 0;
-	} else {
-		return 0;
-	}
-
-	if (ev(sb->osb_mdc01desc.ol_zcnt != sb->osb_mdc02desc.ol_zcnt))
+	if (mpool_uuid_compare(&sb->osb_mdc01devid, &sb->osb_parm.odp_devid))
 		return 0;
 
-	return 1;
+	/* Found this drive in mdc0 strip list; confirm param and ownership */
+	if (mc_cmp_omf_devparm(&sb->osb_parm, &sb->osb_mdc0dev))
+		return 0;
+
+	return (sb->osb_mdc01desc.ol_zcnt == sb->osb_mdc02desc.ol_zcnt);
 }
 
 merr_t sb_init(void)
