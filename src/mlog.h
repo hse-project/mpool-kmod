@@ -11,8 +11,6 @@
 
 #include <linux/uio.h>
 
-#include "merr.h"
-
 #include "mpool_ioctl.h"
 
 #define MB       (1024 * 1024)
@@ -130,7 +128,7 @@ struct mlog_stat {
  * -EBUSY = log is in erasing state; wait or retry erase
  */
 
-merr_t
+int
 mlog_alloc(
 	struct mpool_descriptor *mp,
 	struct mlog_capacity    *capreq,
@@ -138,7 +136,7 @@ mlog_alloc(
 	struct mlog_props       *prop,
 	struct mlog_descriptor  **mlh);
 
-merr_t
+int
 mlog_realloc(
 	struct mpool_descriptor *mp,
 	u64                      objid,
@@ -147,7 +145,7 @@ mlog_realloc(
 	struct mlog_props       *prop,
 	struct mlog_descriptor  **mlh);
 
-merr_t
+int
 mlog_find_get(
 	struct mpool_descriptor    *mp,
 	u64                         objid,
@@ -159,11 +157,11 @@ void mlog_put(struct mlog_descriptor *layout);
 
 void mlog_lookup_rootids(u64 *id1, u64 *id2);
 
-merr_t mlog_commit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
+int mlog_commit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-merr_t mlog_abort(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
+int mlog_abort(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
+int mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
 /**
  * mlog_open()
@@ -176,23 +174,23 @@ merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
  * @flags:
  * @gen: output
  *
- * Returns: 0 if successful, merr_t otherwise
+ * Returns: 0 if successful, -errno otherwise
  */
-merr_t mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 flags, u64 *gen);
+int mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 flags, u64 *gen);
 
-merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
+int mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-merr_t mlog_gen(struct mlog_descriptor *mlh, u64 *gen);
+int mlog_gen(struct mlog_descriptor *mlh, u64 *gen);
 
-merr_t mlog_empty(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool *empty);
+int mlog_empty(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool *empty);
 
-merr_t mlog_erase(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 mingen);
+int mlog_erase(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 mingen);
 
-merr_t mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
+int mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-merr_t mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
+int mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-merr_t
+int
 mlog_append_data(
 	struct mpool_descriptor    *mp,
 	struct mlog_descriptor     *mlh,
@@ -200,7 +198,7 @@ mlog_append_data(
 	u64                         buflen,
 	int                         sync);
 
-merr_t mlog_read_data_init(struct mlog_descriptor *mlh);
+int mlog_read_data_init(struct mlog_descriptor *mlh);
 
 /**
  * mlog_read_data_next()
@@ -215,7 +213,7 @@ merr_t mlog_read_data_init(struct mlog_descriptor *mlh);
  *   hold the read data. Can be retried with a bigger receive buffer whose
  *   size is returned in rdlen.
  */
-merr_t
+int
 mlog_read_data_next(
 	struct mpool_descriptor    *mp,
 	struct mlog_descriptor     *mlh,
@@ -223,7 +221,7 @@ mlog_read_data_next(
 	u64                         buflen,
 	u64                        *rdlen);
 
-merr_t
+int
 mlog_get_props_ex(
 	struct mpool_descriptor    *mp,
 	struct mlog_descriptor     *mlh,
@@ -231,7 +229,7 @@ mlog_get_props_ex(
 
 void mlog_precompact_alsz(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-merr_t
+int
 mlog_rw_raw(
 	struct mpool_descriptor    *mp,
 	struct mlog_descriptor     *mlh,

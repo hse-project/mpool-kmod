@@ -15,8 +15,6 @@
 
 #include <linux/uio.h>
 
-#include "merr.h"
-
 #include "mpool_ioctl.h"
 /*
  * Opaque handles for clients
@@ -43,9 +41,9 @@ struct mpool_obj_layout;
  * properties.
  * Note: mblock is not persistent until committed; allocation can be aborted.
  *
- * Return: %0 if successful, merr_t otherwise...
+ * Return: %0 if successful, -errno otherwise...
  */
-merr_t
+int
 mblock_alloc(
 	struct mpool_descriptor	    *mp,
 	enum   mp_media_classp       mclassp,
@@ -65,9 +63,9 @@ mblock_alloc(
  * successful, the caller holds a ref on the mblock (which must be put
  * eventually)
  *
- * Return: %0 if successful, merr_t otherwise...
+ * Return: %0 if successful, -errno otherwise...
  */
-merr_t
+int
 mblock_find_get(
 	struct mpool_descriptor    *mp,
 	u64                         objid,
@@ -81,7 +79,7 @@ mblock_find_get(
  *
  * Put a ref on a known mblock.
  *
- * Return: %0 if successful, merr_t otherwise...
+ * Return: %0 if successful, -errno otherwise...
  */
 void mblock_put(struct mblock_descriptor *mbh);
 
@@ -93,10 +91,10 @@ void mblock_put(struct mblock_descriptor *mbh);
  * Make allocated mblock persistent; if fails mblock still exists in an
  * uncommitted state so can retry commit or abort except as noted.
  *
- * Return: %0 if successful, merr_t otherwise...
+ * Return: %0 if successful, -errno otherwise...
  * EBUSY if must abort
  */
-merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
+int mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
 
 /**
  * mblock_abort() -
@@ -105,10 +103,10 @@ merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
  *
  * Discard uncommitted mblock; if successful mbh is invalid after call.
  *
- * Return: %0 if successful, merr_t otherwise...
+ * Return: %0 if successful, -errno otherwise...
  *
  */
-merr_t mblock_abort(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
+int mblock_abort(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
 
 /**
  * mblock_delete() -
@@ -117,9 +115,9 @@ merr_t mblock_abort(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
  *
  * Delete committed mblock; if successful mbh is invalid after call.
  *
- * Return: %0 if successful, merr_t otherwise...
+ * Return: %0 if successful, -errno otherwise...
  */
-merr_t mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
+int mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
 
 /**
  * mblock_write() -
@@ -134,9 +132,9 @@ merr_t mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
  * to the same mblock, all but the last write call must be optimal write size aligned.
  * The mpr_optimal_wrsz field in struct mblock_props gives the optimal write size.
  *
- * Return: %0 if success, merr_t otherwise...
+ * Return: %0 if success, -errno otherwise...
  */
-merr_t
+int
 mblock_write(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
@@ -159,9 +157,9 @@ mblock_write(
  *
  * If fails can call mblock_get_props() to confirm mblock was written.
  *
- * Return: 0 if successful, merr_t otherwise...
+ * Return: 0 if successful, -errno otherwise...
  */
-merr_t
+int
 mblock_read(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
@@ -178,9 +176,9 @@ mblock_read(
  *
  * Return extended mblock properties in prop.
  *
- * Return: %0 if successful, merr_t otherwise...
+ * Return: %0 if successful, -errno otherwise...
  */
-merr_t
+int
 mblock_get_props_ex(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,

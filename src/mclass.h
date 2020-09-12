@@ -6,8 +6,6 @@
 #ifndef MPOOL_MCLASS_H
 #define MPOOL_MCLASS_H
 
-#include "merr.h"
-
 #include "mpool_ioctl.h"
 
 struct omf_devparm_descriptor;
@@ -117,7 +115,7 @@ void mc_init_class(struct media_class *mc, struct mc_parms *mc_parms, struct mc_
  *
  * Return: 0, or merr(ENOENT) if the specified mclass doesn't exist.
  */
-merr_t mc_set_spzone(struct media_class *mc, u8 spzone);
+int mc_set_spzone(struct media_class *mc, u8 spzone);
 
 /**
  * mclass_isvalid() - Return true if the media class is valid.
@@ -134,7 +132,7 @@ static inline bool mclass_isvalid(enum mp_media_classp mclass)
  * @mclass:
  * @mcsp: (output)
  */
-merr_t
+int
 mc_smap_parms_get(
 	struct media_class     *mc,
 	struct mpcore_params   *params,

@@ -36,29 +36,29 @@ static struct bio_set *mpool_bioset;
 static const fmode_t    pd_bio_fmode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
 static char            *pd_bio_holder = "mpool";
 
-merr_t pd_dev_open(const char *path, struct pd_dev_parm *dparm, struct pd_prop *pd_prop)
+int pd_dev_open(const char *path, struct pd_dev_parm *dparm, struct pd_prop *pd_prop)
 {
 	struct block_device *bdev;
 
 	bdev = blkdev_get_by_path(path, pd_bio_fmode, pd_bio_holder);
 	if (IS_ERR(bdev))
-		return merr(PTR_ERR(bdev));
+		return PTR_ERR(bdev);
 
 	dparm->dpr_dev_private = bdev;
 	dparm->dpr_prop = *pd_prop;
 
 	if ((pd_prop->pdp_devtype != PD_DEV_TYPE_BLOCK_STD) &&
 	    (pd_prop->pdp_devtype != PD_DEV_TYPE_BLOCK_NVDIMM)) {
-		merr_t err = merr(EINVAL);
+		int rc = -EINVAL;
 
-		mp_pr_err("unsupported PD type %d", err, pd_prop->pdp_devtype);
-		return err;
+		mp_pr_err("unsupported PD type %d", rc, pd_prop->pdp_devtype);
+		return rc;
 	}
 
 	return 0;
 }
 
-merr_t pd_dev_close(struct pd_dev_parm *dparm)
+int pd_dev_close(struct pd_dev_parm *dparm)
 {
 	struct block_device *bdev = dparm->dpr_dev_private;
 
@@ -69,32 +69,30 @@ merr_t pd_dev_close(struct pd_dev_parm *dparm)
 		blkdev_put(bdev, pd_bio_fmode);
 	}
 
-	return bdev ? 0 : merr(EINVAL);
+	return bdev ? 0 : -EINVAL;
 }
 
-merr_t pd_dev_flush(struct pd_dev_parm *dparm)
+int pd_dev_flush(struct pd_dev_parm *dparm)
 {
-	struct block_device    *bdev;
-	merr_t                  err = 0;
-	int                     rc;
+	struct block_device *bdev;
+	int rc;
 
 	bdev = dparm->dpr_dev_private;
 	if (!bdev) {
-		err = merr(EINVAL);
-		mp_pr_err("bdev %s not registered", err, dparm->dpr_name);
-		return err;
+		rc = -EINVAL;
+		mp_pr_err("bdev %s not registered", rc, dparm->dpr_name);
+		return rc;
 	}
+
 #if HAVE_BLKDEV_FLUSH_3
 	rc = blkdev_issue_flush(bdev, GFP_NOIO, NULL);
 #else
 	rc = blkdev_issue_flush(bdev, GFP_NOIO);
 #endif
-	if (rc) {
-		err = merr(rc);
-		mp_pr_err("bdev %s, flush failed", err, dparm->dpr_name);
-	}
+	if (rc)
+		mp_pr_err("bdev %s, flush failed", rc, dparm->dpr_name);
 
-	return err;
+	return rc;
 }
 
 /**
@@ -103,42 +101,39 @@ merr_t pd_dev_flush(struct pd_dev_parm *dparm)
  * @off:
  * @len:
  */
-static merr_t pd_bio_discard(struct pd_dev_parm *dparm, u64 off, size_t len)
+static int pd_bio_discard(struct pd_dev_parm *dparm, u64 off, size_t len)
 {
-	struct block_device    *bdev;
-	merr_t                  err = 0;
-	int                     rc;
+	struct block_device *bdev;
+	int rc;
 
 	bdev = dparm->dpr_dev_private;
 	if (!bdev) {
-		err = merr(EINVAL);
-		mp_pr_err("bdev %s not registered", err, dparm->dpr_name);
-		return err;
+		rc = -EINVAL;
+		mp_pr_err("bdev %s not registered", rc, dparm->dpr_name);
+		return rc;
 	}
 
 	/* Validate I/O offset is sector-aligned */
 	if (off & PD_SECTORMASK(&dparm->dpr_prop)) {
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("bdev %s, offset 0x%lx not multiple of sec size %u",
-			  err, dparm->dpr_name, (ulong)off, (1 << PD_SECTORSZ(&dparm->dpr_prop)));
-		return err;
+			  rc, dparm->dpr_name, (ulong)off, (1 << PD_SECTORSZ(&dparm->dpr_prop)));
+		return rc;
 	}
 
 	if (off > PD_LEN(&dparm->dpr_prop)) {
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("bdev %s, offset 0x%lx past end 0x%lx",
-			  err, dparm->dpr_name, (ulong)off, (ulong)PD_LEN(&dparm->dpr_prop));
-		return err;
+			  rc, dparm->dpr_name, (ulong)off, (ulong)PD_LEN(&dparm->dpr_prop));
+		return rc;
 	}
 
 	rc = blkdev_issue_discard(bdev, off >> SECTOR_SHIFT, len >> SECTOR_SHIFT, GFP_NOIO, 0);
-	if (rc) {
-		err = merr(rc);
+	if (rc)
 		mp_pr_err("bdev %s, offset 0x%lx len 0x%lx, discard faiure",
-			  err, dparm->dpr_name, (ulong)off, (ulong)len);
-	}
+			  rc, dparm->dpr_name, (ulong)off, (ulong)len);
 
-	return err;
+	return rc;
 }
 
 /**
@@ -149,20 +144,20 @@ static merr_t pd_bio_discard(struct pd_dev_parm *dparm, u64 off, size_t len)
  * @flag:
  * @afp:
  */
-merr_t pd_zone_erase(struct pd_dev_parm *dparm, u64 zaddr, u32 zonecnt, bool reads_erased)
+int pd_zone_erase(struct pd_dev_parm *dparm, u64 zaddr, u32 zonecnt, bool reads_erased)
 {
-	merr_t err = 0;
-	u64    cmdopt;
+	int rc = 0;
+	u64 cmdopt;
 
 	/* Validate args against zone param */
 	if (zaddr >= dparm->dpr_zonetot)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	if (zonecnt == 0)
 		zonecnt = dparm->dpr_zonetot - zaddr;
 
 	if (zonecnt > (dparm->dpr_zonetot - zaddr))
-		return merr(EINVAL);
+		return -EINVAL;
 
 	if (zonecnt == 0)
 		return 0;
@@ -178,10 +173,10 @@ merr_t pd_zone_erase(struct pd_dev_parm *dparm, u64 zaddr, u32 zonecnt, bool rea
 		size_t zlen;
 
 		zlen = dparm->dpr_zonepg << PAGE_SHIFT;
-		err = pd_bio_discard(dparm, zaddr * zlen, zonecnt * zlen);
+		rc = pd_bio_discard(dparm, zaddr * zlen, zonecnt * zlen);
 	}
 
-	return err;
+	return rc;
 }
 
 #if HAVE_SUBMIT_BIO_OP
@@ -192,14 +187,13 @@ merr_t pd_zone_erase(struct pd_dev_parm *dparm, u64 zaddr, u32 zonecnt, bool rea
 #define SUBMIT_BIO_WAIT(op, bio)       submit_bio_wait((bio))
 #endif
 
-static __always_inline void
-pd_bio_init(struct bio *bio, struct block_device *bdev, int rw, loff_t off, int opflags)
+static void pd_bio_init(struct bio *bio, struct block_device *bdev, int rw, loff_t off, int flags)
 {
 #if HAVE_BIO_SET_OP_ATTRS
-	bio_set_op_attrs(bio, rw, opflags);
+	bio_set_op_attrs(bio, rw, flags);
 	bio->bi_iter.bi_sector = off >> SECTOR_SHIFT;
 #else
-	bio->bi_rw = opflags;
+	bio->bi_rw = flags;
 	bio->bi_sector = off >> SECTOR_SHIFT;
 #endif
 
@@ -210,8 +204,7 @@ pd_bio_init(struct bio *bio, struct block_device *bdev, int rw, loff_t off, int 
 #endif
 }
 
-static __always_inline struct bio *
-pd_bio_chain(struct bio *target, int op, unsigned int nr_pages, gfp_t gfp)
+static struct bio *pd_bio_chain(struct bio *target, int op, unsigned int nr_pages, gfp_t gfp)
 {
 	struct bio *new;
 
@@ -259,61 +252,55 @@ pd_bio_chain(struct bio *target, int op, unsigned int nr_pages, gfp_t gfp)
  * all other split writes, due to mismatch between data and DIF tags.
  * In order to use DIF with stock linux kernel, do not IOs larger than MDTS.
  */
-static merr_t
-pd_bio_rw(
-	struct pd_dev_parm     *dparm,
-	const struct kvec      *iov,
-	int                     iovcnt,
-	loff_t                  off,
-	int                     rw,
-	int                     opflags)
+static int pd_bio_rw(struct pd_dev_parm *dparm, const struct kvec *iov,
+		     int iovcnt, loff_t off, int rw, int opflags)
 {
 	struct block_device    *bdev;
 	struct bio             *bio;
 	struct page            *page;
 	struct request_queue   *q;
-	merr_t                  err = 0;
-	u64                     iov_base, sector_mask;
-	u32                     tot_pages, tot_len, len, iov_len, left;
-	u32                     iolimit;
-	int                     i, cc, op, rc;
+	u64 iov_base, sector_mask;
+	u32 tot_pages, tot_len, len, iov_len, left;
+	u32 iolimit;
+	int i, cc, op;
+	int rc = 0;
 
 	if (iovcnt < 1)
 		return 0;
 
 	bdev = dparm->dpr_dev_private;
 	if (!bdev) {
-		err = merr(EINVAL);
-		mp_pr_err("bdev %s not registered", err, dparm->dpr_name);
-		return err;
+		rc = -EINVAL;
+		mp_pr_err("bdev %s not registered", rc, dparm->dpr_name);
+		return rc;
 	}
 
 	sector_mask = PD_SECTORMASK(&dparm->dpr_prop);
 	if (off & sector_mask) {
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("bdev %s, %s offset 0x%lx not multiple of sector size %u",
-			  err, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
+			  rc, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
 			  (ulong)off, (1 << PD_SECTORSZ(&dparm->dpr_prop)));
-		return err;
+		return rc;
 	}
 
 	if (off > PD_LEN(&dparm->dpr_prop)) {
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("bdev %s, %s offset 0x%lx past device end 0x%lx",
-			  err, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
+			  rc, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
 			  (ulong)off, (ulong)PD_LEN(&dparm->dpr_prop));
-		return err;
+		return rc;
 	}
 
 	tot_pages = 0;
 	tot_len = 0;
 	for (i = 0; i < iovcnt; i++) {
 		if (!PAGE_ALIGNED((uintptr_t)iov[i].iov_base) || (iov[i].iov_len & sector_mask)) {
-			err = merr(EINVAL);
+			rc = -EINVAL;
 			mp_pr_err("bdev %s, %s off 0x%lx, misaligned kvec, base 0x%lx, len 0x%lx",
-				  err, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
+				  rc, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
 				  (ulong)off, (ulong)iov[i].iov_base, (ulong)iov[i].iov_len);
-			return err;
+			return rc;
 		}
 
 		iov_len = iov[i].iov_len;
@@ -326,11 +313,11 @@ pd_bio_rw(
 	}
 
 	if (off + tot_len > PD_LEN(&dparm->dpr_prop)) {
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("bdev %s, %s I/O end past device end 0x%lx, 0x%lx:0x%x",
-			  err, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
+			  rc, dparm->dpr_name, (rw == REQ_OP_READ) ? "read" : "write",
 			  (ulong)PD_LEN(&dparm->dpr_prop), (ulong)off, tot_len);
-		return err;
+		return rc;
 	}
 
 	if (tot_len == 0)
@@ -362,7 +349,7 @@ pd_bio_rw(
 
 				bio = pd_bio_chain(bio, op, left, GFP_NOIO);
 				if (!bio)
-					return merr(ENOMEM);
+					return -ENOMEM;
 
 				pd_bio_init(bio, bdev, rw, off, opflags);
 			}
@@ -382,7 +369,7 @@ pd_bio_rw(
 
 				bio_io_error(bio);
 				bio_put(bio);
-				return merr(EBUG);
+				return -ENOTRECOVERABLE;
 			}
 
 			iov_len -= len;
@@ -397,21 +384,13 @@ pd_bio_rw(
 	assert(tot_pages == 0);
 
 	rc = SUBMIT_BIO_WAIT(op, bio);
-	if (rc)
-		err = merr(rc);
 	bio_put(bio);
 
-	return err;
+	return rc;
 }
 
-merr_t
-pd_zone_pwritev(
-	struct pd_dev_parm     *dparm,
-	const struct kvec      *iov,
-	int                     iovcnt,
-	u64                     zaddr,
-	loff_t                  boff,
-	int                     opflags)
+int pd_zone_pwritev(struct pd_dev_parm *dparm, const struct kvec *iov,
+		    int iovcnt, u64 zaddr, loff_t boff, int opflags)
 {
 	loff_t woff;
 
@@ -420,20 +399,15 @@ pd_zone_pwritev(
 	return pd_bio_rw(dparm, iov, iovcnt, woff, REQ_OP_WRITE, opflags);
 }
 
-merr_t
-pd_zone_pwritev_sync(
-	struct pd_dev_parm     *dparm,
-	const struct kvec      *iov,
-	int                     iovcnt,
-	u64                     zaddr,
-	loff_t                  boff)
+int pd_zone_pwritev_sync(struct pd_dev_parm *dparm, const struct kvec *iov,
+			 int iovcnt, u64 zaddr, loff_t boff)
 {
-	merr_t		        err;
-	struct block_device    *bdev;
+	struct block_device *bdev;
+	int rc;
 
-	err = pd_zone_pwritev(dparm, iov, iovcnt, zaddr, boff, REQ_FUA);
-	if (err)
-		return err;
+	rc = pd_zone_pwritev(dparm, iov, iovcnt, zaddr, boff, REQ_FUA);
+	if (rc)
+		return rc;
 
 	/*
 	 * This sync & invalidate bdev ensures that the data written from the
@@ -448,13 +422,8 @@ pd_zone_pwritev_sync(
 	return 0;
 }
 
-merr_t
-pd_zone_preadv(
-	struct pd_dev_parm     *dparm,
-	const struct kvec      *iov,
-	int                     iovcnt,
-	u64                     zaddr,
-	loff_t                  boff)
+int pd_zone_preadv(struct pd_dev_parm *dparm, const struct kvec *iov,
+		   int iovcnt, u64 zaddr, loff_t boff)
 {
 	loff_t roff;
 
@@ -485,35 +454,29 @@ void pd_dev_set_unavail(struct pd_dev_parm *dparm, struct omf_devparm_descriptor
 }
 
 
-merr_t pd_init(void)
+int pd_init(void)
 {
-	merr_t err = 0;
+	int rc = 0;
 
 	mpc_chunker_size = clamp_t(uint, mpc_chunker_size, 128, 1024);
 
 	mpc_rsvd_bios_max = clamp_t(uint, mpc_rsvd_bios_max, 1, 1024);
 
 #if HAVE_BIOSET_INIT
-	do {
-		int rc;
-
-		rc = bioset_init(&mpool_bioset, mpc_rsvd_bios_max, 0, BIOSET_NEED_BVECS);
-		if (rc)
-			err = merr(rc);
-	} while (0);
+	rc = bioset_init(&mpool_bioset, mpc_rsvd_bios_max, 0, BIOSET_NEED_BVECS);
 #elif HAVE_BIOSET_CREATE_3
 	mpool_bioset = bioset_create(mpc_rsvd_bios_max, 0, BIOSET_NEED_BVECS);
 	if (!mpool_bioset)
-		err = merr(ENOMEM);
+		rc = -ENOMEM;
 #else
 	mpool_bioset = bioset_create(mpc_rsvd_bios_max, 0);
 	if (!mpool_bioset)
-		err = merr(ENOMEM);
+		rc = -ENOMEM;
 #endif
-	if (err)
-		mp_pr_err("mpool bioset init failed", err);
+	if (rc)
+		mp_pr_err("mpool bioset init failed", rc);
 
-	return err;
+	return rc;
 }
 
 void pd_exit(void)

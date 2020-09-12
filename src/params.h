@@ -6,8 +6,6 @@
 #ifndef MPOOL_PARAMS_H
 #define MPOOL_PARAMS_H
 
-#include "merr.h"
-
 #define MPOOL_MDC_SET_SZ                16
 
 /* Mpool metadata container compaction retries; keep relatively small */

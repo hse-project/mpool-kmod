@@ -19,9 +19,9 @@
  * mlog_alloc_cmn() -
  *
  * Allocate mlog with specified parameters using new or specified objid.
- * Returns: 0 if successful, merr_t otherwise
+ * Returns: 0 if successful, -errno otherwise
  */
-static merr_t
+static int
 mlog_alloc_cmn(
 	struct mpool_descriptor *mp,
 	u64                      objid,
@@ -32,7 +32,7 @@ mlog_alloc_cmn(
 {
 	struct pmd_obj_capacity ocap;
 	struct pmd_layout      *layout;
-	merr_t                  err;
+	int rc;
 
 	layout = NULL;
 	*mlh = NULL;
@@ -41,37 +41,37 @@ mlog_alloc_cmn(
 	ocap.moc_spare  = capreq->lcp_spare;
 
 	if (!objid) {
-		err = pmd_obj_alloc(mp, OMF_OBJ_MLOG, &ocap, mclassp, &layout);
-		if (err || !layout) {
-			if (merr_errno(err) != ENOENT)
-				mp_pr_err("mpool %s, allocating mlog failed", err, mp->pds_name);
+		rc = pmd_obj_alloc(mp, OMF_OBJ_MLOG, &ocap, mclassp, &layout);
+		if (rc || !layout) {
+			if (rc != -ENOENT)
+				mp_pr_err("mpool %s, allocating mlog failed", rc, mp->pds_name);
 		}
 	} else {
-		err = pmd_obj_realloc(mp, objid, &ocap, mclassp, &layout);
-		if (err || !layout) {
-			if (merr_errno(err) != ENOENT)
+		rc = pmd_obj_realloc(mp, objid, &ocap, mclassp, &layout);
+		if (rc || !layout) {
+			if (rc != -ENOENT)
 				mp_pr_err("mpool %s, re-allocating mlog 0x%lx failed",
-					  err, mp->pds_name, (ulong)objid);
+					  rc, mp->pds_name, (ulong)objid);
 		}
 	}
-	if (err)
-		return err;
+	if (rc)
+		return rc;
 
 	/*
 	 * Mlogs rarely created and usually committed immediately so erase in-line;
 	 * mlog not committed so pmd_obj_erase() not needed to make atomic
 	 */
 	pmd_obj_wrlock(layout);
-	err = pmd_layout_erase(mp, layout);
-	if (!err)
+	rc = pmd_layout_erase(mp, layout);
+	if (!rc)
 		mlog_getprops_cmn(mp, layout, prop);
 	pmd_obj_wrunlock(layout);
 
-	if (err) {
+	if (rc) {
 		pmd_obj_abort(mp, layout);
 		mp_pr_err("mpool %s, mlog 0x%lx alloc, erase failed",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
+		return rc;
 	}
 
 	*mlh = layout2mlog(layout);
@@ -88,9 +88,9 @@ mlog_alloc_cmn(
  *
  * Note: mlog is not persistent until committed; allocation can be aborted.
  *
- * Returns: 0 if successful, merr_t otherwise
+ * Returns: 0 if successful, -errno otherwise
  */
-merr_t
+int
 mlog_alloc(
 	struct mpool_descriptor *mp,
 	struct mlog_capacity    *capreq,
@@ -108,11 +108,11 @@ mlog_alloc(
  * Allocate mlog with specified objid to support crash recovery; otherwise
  * is equivalent to mlog_alloc().
  *
- * Returns: 0 if successful, merr_t otherwise
- * One of the possible errno values in merr_t:
+ * Returns: 0 if successful, -errno otherwise
+ * One of the possible errno values:
  * EEXISTS - if objid exists
  */
-merr_t
+int
 mlog_realloc(
 	struct mpool_descriptor *mp,
 	u64                      objid,
@@ -122,7 +122,7 @@ mlog_realloc(
 	struct mlog_descriptor  **mlh)
 {
 	if (!mlog_objid(objid))
-		return merr(EINVAL);
+		return -EINVAL;
 
 	return mlog_alloc_cmn(mp, objid, capreq, mclassp, prop, mlh);
 }
@@ -132,9 +132,9 @@ mlog_realloc(
  *
  * Get handle and properties for existing mlog with specified objid.
  *
- * Returns: 0 if successful, merr_t otherwise
+ * Returns: 0 if successful, -errno otherwise
  */
-merr_t
+int
 mlog_find_get(
 	struct mpool_descriptor    *mp,
 	u64                         objid,
@@ -147,11 +147,11 @@ mlog_find_get(
 	*mlh = NULL;
 
 	if (!mlog_objid(objid))
-		return merr(EINVAL);
+		return -EINVAL;
 
 	layout = pmd_obj_find_get(mp, objid, which);
 	if (!layout)
-		return merr(ENOENT);
+		return -ENOENT;
 
 	if (prop) {
 		pmd_obj_rdlock(layout);
@@ -201,15 +201,15 @@ void mlog_lookup_rootids(u64 *id1, u64 *id2)
  * Make allocated mlog persistent; if fails mlog still exists in an
  * uncommitted state so can retry commit or abort.
  *
- * Returns: 0 if successful, merr_t otherwise
+ * Returns: 0 if successful, -errno otherwise
  */
-merr_t mlog_commit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
+int mlog_commit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
 	struct pmd_layout *layout;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	return pmd_obj_commit(mp, layout);
 }
@@ -219,15 +219,15 @@ merr_t mlog_commit(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
  *
  * Discard uncommitted mlog; if successful mlh is invalid after call.
  *
- * Returns: 0 if successful, merr_t otherwise
+ * Returns: 0 if successful, -errno otherwise
  */
-merr_t mlog_abort(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
+int mlog_abort(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
 	struct pmd_layout *layout;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	return pmd_obj_abort(mp, layout);
 }
@@ -238,15 +238,15 @@ merr_t mlog_abort(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
  * Delete committed mlog; if successful mlh is invalid after call; if fails
  * mlog is closed.
  *
- * Returns: 0 if successful, merr_t otherwise
+ * Returns: 0 if successful, -errno otherwise
  */
-merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
+int mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
 	struct pmd_layout *layout;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	/* Remove from open list and discard buffered log data */
 	pmd_obj_wrlock(layout);
@@ -268,32 +268,32 @@ merr_t mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
  * reflect valid markers found (if any).
  *
  * Returns:
- *   0 if successful; merr_t otherwise
+ *   0 if successful; -errno otherwise
  *
  *   In the output param, i.e., midrec, we store:
  *   1 if log records are valid and ended mid data record
  *   0 if log records are valid and did NOT end mid data record
  */
-static merr_t
+static int
 mlog_logrecs_validate(
 	struct mlog_stat   *lstat,
 	int                *midrec,
 	u16                 rbidx,
 	u16                 lbidx)
 {
-	merr_t                       err = 0;
-	u64                          recnum = 0;
-	int                          recoff;
 	struct omf_logrec_descriptor lrd;
-	char                        *rbuf;
-	u16                          sectsz = 0;
+	u64     recnum = 0;
+	int     recoff;
+	int     rc = 0;
+	char   *rbuf;
+	u16     sectsz = 0;
 
 	sectsz = MLOG_SECSZ(lstat);
 	rbuf   = lstat->lst_rbuf[rbidx] + lbidx * sectsz;
 
 	recoff = omf_logblock_header_len_le(rbuf);
 	if (recoff < 0)
-		return merr(ENODATA);
+		return -ENODATA;
 
 	while (sectsz - recoff >= OMF_LOGREC_DESC_PACKLEN) {
 		omf_logrec_desc_unpack_letoh(&lrd, &rbuf[recoff]);
@@ -302,88 +302,95 @@ mlog_logrecs_validate(
 
 		if (lrd.olr_rtype == OMF_LOGREC_CSTART) {
 			if (!lstat->lst_csem || lstat->lst_rsoff || recnum) {
+				rc = -ENODATA;
+
 				/* No compaction or not first rec in first log block */
-				err = merr(ENODATA);
 				mp_pr_err("no compact marker nor first rec %u %ld %u %u %lu",
-					  err, lstat->lst_csem, lstat->lst_rsoff,
+					  rc, lstat->lst_csem, lstat->lst_rsoff,
 					  rbidx, lbidx, (ulong)recnum);
-				return err;
+				return rc;
 			}
 			lstat->lst_cstart = 1;
 			*midrec = 0;
 		} else if (lrd.olr_rtype == OMF_LOGREC_CEND) {
 			if (!lstat->lst_csem || !lstat->lst_cstart || lstat->lst_cend || *midrec) {
-				/* No compaction or cend before cstart or more than one cend or
-				 * cend mid-record.
+				rc = -ENODATA;
+
+				/*
+				 * No compaction or cend before cstart or more than one cend
+				 * or cend mid-record.
 				 */
-				err = merr(ENODATA);
-				mp_pr_err("inconsistent compaction recs %u %u %u %d", err,
+				mp_pr_err("inconsistent compaction recs %u %u %u %d", rc,
 					  lstat->lst_csem, lstat->lst_cstart, lstat->lst_cend,
 					  *midrec);
-				return err;
+				return rc;
 			}
 			lstat->lst_cend = 1;
 		} else if (lrd.olr_rtype == OMF_LOGREC_EOLB) {
 			if (*midrec || !recnum) {
 				/* EOLB mid-record or first record. */
-				err = merr(ENODATA);
+				rc = -ENODATA;
 				mp_pr_err("end of log block marker at wrong place %d %lu",
-					  err, *midrec, (ulong)recnum);
-				return err;
+					  rc, *midrec, (ulong)recnum);
+				return rc;
 			}
 			/* No more records in log buffer */
 			break;
 		} else if (lrd.olr_rtype == OMF_LOGREC_DATAFULL) {
 			if (*midrec && recnum) {
+				rc = -ENODATA;
+
 				/*
 				 * Can occur mid data rec only if is first rec in log block
 				 * indicating partial data rec at end of last log block
 				 * which is a valid failure mode; otherwise is a logging
 				 * error.
 				 */
-				err = merr(ENODATA);
 				mp_pr_err("data full marker at wrong place %d %lu",
-					  err, *midrec, (ulong)recnum);
-				return err;
+					  rc, *midrec, (ulong)recnum);
+				return rc;
 			}
 			*midrec = 0;
 		} else if (lrd.olr_rtype == OMF_LOGREC_DATAFIRST) {
 			if (*midrec && recnum) {
+				rc = -ENODATA;
+
 				/* See comment for DATAFULL */
-				err = merr(ENODATA);
 				mp_pr_err("data first marker at wrong place %d %lu",
-					  err, *midrec, (ulong)recnum);
-				return err;
+					  rc, *midrec, (ulong)recnum);
+				return rc;
 			}
 			*midrec = 1;
 		} else if (lrd.olr_rtype == OMF_LOGREC_DATAMID) {
 			if (!*midrec) {
+				rc = -ENODATA;
+
 				/* Must occur mid data record. */
-				err = merr(ENODATA);
 				mp_pr_err("data mid marker at wrong place %d %lu",
-					  err, *midrec, (ulong)recnum);
-				return err;
+					  rc, *midrec, (ulong)recnum);
+				return rc;
 			}
 		} else if (lrd.olr_rtype == OMF_LOGREC_DATALAST) {
 			if (!(*midrec)) {
+				rc = -ENODATA;
+
 				/* Must occur mid data record */
-				err = merr(ENODATA);
 				mp_pr_err("data last marker at wrong place %d %lu",
-					  err, *midrec, (ulong)recnum);
-				return err;
+					  rc, *midrec, (ulong)recnum);
+				return rc;
 			}
 			*midrec = 0;
 		} else {
-			err = merr(ENODATA);
-			mp_pr_err("unknown record type %d %lu", err, lrd.olr_rtype, (ulong)recnum);
-			return err;
+			rc = -ENODATA;
+			mp_pr_err("unknown record type %d %lu", rc, lrd.olr_rtype, (ulong)recnum);
+			return rc;
 		}
 
 		recnum = recnum + 1;
 		recoff = recoff + OMF_LOGREC_DESC_PACKLEN + lrd.olr_rlen;
 	}
 
-	return err;
+	return rc;
 }
 
 static inline void
@@ -407,7 +414,7 @@ max_cfsetid(struct omf_logblock_header *lbh, struct pmd_layout *layout, u32 *fse
  * @fsetidmax:  maximum flush set ID found in the log (output)
  * @pfsetid:    previous flush set ID, if LEOL found (output)
  */
-static merr_t
+static int
 mlog_logpage_validate(
 	struct mlog_descriptor    *mlh,
 	struct mlog_stat          *lstat,
@@ -418,11 +425,10 @@ mlog_logpage_validate(
 	u32                       *fsetidmax,
 	u32                       *pfsetid)
 {
-	struct pmd_layout  *layout = mlog2layout(mlh);
-	merr_t              err = 0;
-	char               *rbuf;
-	u16                 lbidx;
-	u16                 sectsz;
+	struct pmd_layout *layout = mlog2layout(mlh);
+	char   *rbuf;
+	u16     lbidx;
+	u16     sectsz;
 
 	sectsz = MLOG_SECSZ(lstat);
 	rbuf   = lstat->lst_rbuf[rbidx];
@@ -430,6 +436,7 @@ mlog_logpage_validate(
 	/* Loop through nseclpg sectors in the log page @rbidx. */
 	for (lbidx = 0; lbidx < nseclpg; lbidx++) {
 		struct omf_logblock_header lbh;
+		int rc;
 
 		memset(&lbh, 0, sizeof(lbh));
 
@@ -474,12 +481,12 @@ mlog_logpage_validate(
 		*fsetidmax = lbh.olh_cfsetid;
 
 		/* Validate the log block at lbidx. */
-		err = mlog_logrecs_validate(lstat, midrec, rbidx, lbidx);
-		if (err) {
+		rc = mlog_logrecs_validate(lstat, midrec, rbidx, lbidx);
+		if (rc) {
 			mp_pr_err("mlog %p,, midrec %d, log pg idx %u, sector idx %u",
-				  err, mlh, *midrec, rbidx, lbidx);
+				  rc, mlh, *midrec, rbidx, lbidx);
 
-			return err;
+			return rc;
 		}
 
 		++lstat->lst_wsoff;
@@ -511,12 +518,10 @@ mlog_logpage_validate(
  * @layout: layout descriptor
  * @lempty: is the log empty? (output)
  */
-static merr_t
-mlog_read_and_validate(struct mpool_descriptor *mp, struct pmd_layout *layout, bool *lempty)
+static int mlog_read_and_validate(struct mpool_descriptor *mp, struct pmd_layout *layout, bool *lempty)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
 
-	merr_t err         = 0;
 	off_t  leol_off    = 0;
 	off_t  rsoff;
 	int    midrec      = 0;
@@ -530,6 +535,7 @@ mlog_read_and_validate(struct mpool_descriptor *mp, struct pmd_layout *layout, b
 	u16    nlpgs;
 	u16    nseclpg;
 	bool   skip_ser = false;
+	int    rc = 0;
 
 	remsec = MLOG_TOTSEC(lstat);
 	maxsec = MLOG_NSECMB(lstat);
@@ -541,10 +547,10 @@ mlog_read_and_validate(struct mpool_descriptor *mp, struct pmd_layout *layout, b
 		nseclpg = MLOG_NSECLPG(lstat);
 		nsecs   = min_t(u32, maxsec, remsec);
 
-		err = mlog_populate_rbuf(mp, layout, &nsecs, &rsoff, skip_ser);
-		if (err) {
+		rc = mlog_populate_rbuf(mp, layout, &nsecs, &rsoff, skip_ser);
+		if (rc) {
 			mp_pr_err("mpool %s, mlog 0x%lx validate failed, nsecs: %u, rsoff: 0x%lx",
-				  err, mp->pds_name, (ulong)layout->eld_objid, nsecs, rsoff);
+				  rc, mp->pds_name, (ulong)layout->eld_objid, nsecs, rsoff);
 
 			goto exit;
 		}
@@ -562,11 +568,11 @@ mlog_read_and_validate(struct mpool_descriptor *mp, struct pmd_layout *layout, b
 			}
 
 			/* Validate the log block(s) in the log page @rbidx. */
-			err = mlog_logpage_validate(layout2mlog(layout), lstat, rbidx, nseclpg,
-						    &midrec, &leol_found, &fsetidmax, &pfsetid);
-			if (err) {
+			rc = mlog_logpage_validate(layout2mlog(layout), lstat, rbidx, nseclpg,
+						   &midrec, &leol_found, &fsetidmax, &pfsetid);
+			if (rc) {
 				mp_pr_err("mpool %s, mlog 0x%lx rbuf validate failed, leol: %d, fsetidmax: %u, pfsetid: %u",
-					  err, mp->pds_name, (ulong)layout->eld_objid, leol_found,
+					  rc, mp->pds_name, (ulong)layout->eld_objid, leol_found,
 					  fsetidmax, pfsetid);
 
 				mlog_free_rbuf(lstat, rbidx, nlpgs - 1);
@@ -627,15 +633,15 @@ mlog_read_and_validate(struct mpool_descriptor *mp, struct pmd_layout *layout, b
 exit:
 	lstat->lst_rsoff = -1;
 
-	return err;
+	return rc;
 }
 
-merr_t mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 flags, u64 *gen)
+int mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 flags, u64 *gen)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
 	struct mlog_stat   *lstat;
 
-	merr_t  err    = 0;
+	int     rc = 0;
 	bool    lempty = false;
 	bool    csem   = false;
 	bool    skip_ser = false;
@@ -644,7 +650,7 @@ merr_t mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 fl
 	*gen = 0;
 
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	pmd_obj_wrlock(layout);
 
@@ -664,76 +670,76 @@ merr_t mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 fl
 			pmd_obj_wrunlock(layout);
 
 			/* Re-open has inconsistent csem flag */
-			err = merr(EINVAL);
+			rc = -EINVAL;
 			mp_pr_err("mpool %s, re-opening of mlog 0x%lx, inconsistent csem %u %u",
-				  err, mp->pds_name, (ulong)layout->eld_objid,
+				  rc, mp->pds_name, (ulong)layout->eld_objid,
 				  csem, lstat->lst_csem);
 		} else if (skip_ser && !(layout->eld_flags & MLOG_OF_SKIP_SER)) {
 			pmd_obj_wrunlock(layout);
 
 			/* Re-open has inconsistent seralization flag */
-			err = merr(EINVAL);
+			rc = -EINVAL;
 			mp_pr_err("mpool %s, re-opening of mlog 0x%lx, inconsistent ser %u %u",
-				  err, mp->pds_name, (ulong)layout->eld_objid, skip_ser,
+				  rc, mp->pds_name, (ulong)layout->eld_objid, skip_ser,
 				  layout->eld_flags & MLOG_OF_SKIP_SER);
 		} else {
 			*gen = layout->eld_gen;
 			pmd_obj_wrunlock(layout);
 		}
-		return err;
+		return rc;
 	}
 
 	if (!(layout->eld_state & PMD_LYT_COMMITTED)) {
 		*gen = 0;
 		pmd_obj_wrunlock(layout);
 
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("mpool %s, mlog 0x%lx, not committed",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
+		return rc;
 	}
 
 	if (skip_ser)
 		layout->eld_flags |= MLOG_OF_SKIP_SER;
 
-	err = mlog_stat_init(mp, mlh, csem);
-	if (err) {
+	rc = mlog_stat_init(mp, mlh, csem);
+	if (rc) {
 		*gen = 0;
 		pmd_obj_wrunlock(layout);
 
 		mp_pr_err("mpool %s, mlog 0x%lx, mlog status initialization failed",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
+		return rc;
 	}
 
 	lempty = true;
 
-	err = mlog_read_and_validate(mp, layout, &lempty);
-	if (err) {
+	rc = mlog_read_and_validate(mp, layout, &lempty);
+	if (rc) {
 		mlog_stat_free(layout);
 		pmd_obj_wrunlock(layout);
 
 		mp_pr_err("mpool %s, mlog 0x%lx, mlog content validation failed",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
+		return rc;
 	} else if (!lempty && csem) {
 		if (!lstat->lst_cstart) {
 			mlog_stat_free(layout);
 			pmd_obj_wrunlock(layout);
 
-			err = merr(ENODATA);
+			rc = -ENODATA;
 			mp_pr_err("mpool %s, mlog 0x%lx, compaction start missing",
-				  err, mp->pds_name, (ulong)layout->eld_objid);
-			return err;
+				  rc, mp->pds_name, (ulong)layout->eld_objid);
+			return rc;
 		} else if (!lstat->lst_cend) {
 			mlog_stat_free(layout);
 			pmd_obj_wrunlock(layout);
 
 			/* Incomplete compaction */
-			err = merr(EMSGSIZE);
+			rc = -EMSGSIZE;
 			mp_pr_err("mpool %s, mlog 0x%lx, incomplete compaction",
-				  err, mp->pds_name, (ulong)layout->eld_objid);
-			return err;
+				  rc, mp->pds_name, (ulong)layout->eld_objid);
+			return rc;
 		}
 	}
 
@@ -746,26 +752,23 @@ merr_t mlog_open(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u8 fl
 
 	pmd_obj_wrunlock(layout);
 
-	return err;
+	return rc;
 }
 
 /**
- * mlog_close()
+ * mlog_close() - Flush and close log and release resources; no op if log is not open.
  *
- * Flush and close log and release resources; no op if log is not open.
- *
- * Returns: 0 on success; merr_t otherwise
+ * Returns: 0 on success; -errno otherwise
  */
-merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
+int mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
 	struct mlog_stat   *lstat;
-
-	merr_t err  = 0;
-	bool   skip_ser = false;
+	bool skip_ser = false;
+	int rc = 0;
 
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	/*
 	 * Inform pre-compaction that there is no need to try to compact
@@ -784,11 +787,11 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 	/* Flush log if potentially dirty and remove layout from open list */
 	if (lstat->lst_abdirty) {
-		err = mlog_logblocks_flush(mp, layout, skip_ser);
+		rc = mlog_logblocks_flush(mp, layout, skip_ser);
 		lstat->lst_abdirty = false;
-		if (err)
+		if (rc)
 			mp_pr_err("mpool %s, mlog 0x%lx close, log block flush failed",
-				  err, mp->pds_name, (ulong)layout->eld_objid);
+				  rc, mp->pds_name, (ulong)layout->eld_objid);
 	}
 
 	oml_layout_lock(mp);
@@ -802,24 +805,22 @@ merr_t mlog_close(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 	pmd_obj_wrunlock(layout);
 
-	return err;
+	return rc;
 }
 
 /**
- * mlog_gen()
+ * mlog_gen() - Get generation number for log; log can be open or closed.
  *
- * Get generation number for log; log can be open or closed.
- *
- * Returns: 0 if successful; merr_t otherwise
+ * Returns: 0 if successful; -errno otherwise
  */
-merr_t mlog_gen(struct mlog_descriptor *mlh, u64 *gen)
+int mlog_gen(struct mlog_descriptor *mlh, u64 *gen)
 {
 	struct pmd_layout *layout = mlog2layout(mlh);
 
 	*gen = 0;
 
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	pmd_obj_rdlock(layout);
 	*gen = layout->eld_gen;
@@ -829,22 +830,20 @@ merr_t mlog_gen(struct mlog_descriptor *mlh, u64 *gen)
 }
 
 /**
- * mlog_empty()
+ * mlog_empty() - Determine if log is empty; log must be open.
  *
- * Determine if log is empty; log must be open.
- *
- * Returns: 0 if successful; merr_t otherwise
+ * Returns: 0 if successful; -errno otherwise
  */
-merr_t mlog_empty(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool *empty)
+int mlog_empty(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool *empty)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
 	struct mlog_stat   *lstat;
-	merr_t              err = 0;
+	int rc = 0;
 
 	*empty = false;
 
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	pmd_obj_rdlock(layout);
 
@@ -854,33 +853,31 @@ merr_t mlog_empty(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool
 		     (lstat->lst_aoff == OMF_LOGBLOCK_HDR_PACKLEN)))
 			*empty = true;
 	} else {
-		err = merr(ENOENT);
+		rc = -ENOENT;
 	}
 
 	pmd_obj_rdunlock(layout);
 
-	if (err)
+	if (rc)
 		mp_pr_err("mpool %s, mlog 0x%lx empty: no mlog status",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
 
-	return err;
+	return rc;
 }
 
 /**
- * mlog_len()
+ * mlog_len() - Returns the raw mlog bytes consumed. log must be open.
  *
- * Returns the raw mlog bytes consumed. log must be open.
- * Need to account for both metadata and user bytes while computing the
- * log length.
+ * Need to account for both metadata and user bytes while computing the log length.
  */
-static merr_t mlog_len(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *len)
+static int mlog_len(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 *len)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
 	struct mlog_stat   *lstat;
-	merr_t              err = 0;
+	int rc = 0;
 
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	pmd_obj_rdlock(layout);
 
@@ -888,35 +885,34 @@ static merr_t mlog_len(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
 	if (lstat->lst_abuf)
 		*len = ((u64) lstat->lst_wsoff * MLOG_SECSZ(lstat)) + lstat->lst_aoff;
 	else
-		err = merr(ENOENT);
+		rc = -ENOENT;
 
 	pmd_obj_rdunlock(layout);
 
-	if (err)
+	if (rc)
 		mp_pr_err("mpool %s, mlog 0x%lx bytes consumed: no mlog status",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
 
-	return err;
+	return rc;
 }
 
 /**
- * mlog_erase()
+ * mlog_erase() -Erase log setting generation number to max(current gen + 1, mingen).
  *
- * Erase log setting generation number to max(current gen + 1, mingen);
- * log can be open or closed, but must be committed; operation is idempotent
+ * Log can be open or closed, but must be committed; operation is idempotent
  * and can be retried if fails.
  *
- * Returns: 0 on success; merr_t otherwise
+ * Returns: 0 on success; -errno otherwise
  */
-merr_t mlog_erase(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 mingen)
+int mlog_erase(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 mingen)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
 	struct mlog_stat   *lstat = NULL;
-	u64                 newgen = 0;
-	merr_t              err = 0;
+	u64 newgen = 0;
+	int rc = 0;
 
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	pmd_obj_wrlock(layout);
 
@@ -924,33 +920,33 @@ merr_t mlog_erase(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 
 	if (!(layout->eld_state & PMD_LYT_COMMITTED)) {
 		pmd_obj_wrunlock(layout);
 
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("mpool %s, erasing mlog 0x%lx, mlog not committed",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
+		return rc;
 	}
 
 	newgen = max(layout->eld_gen + 1, mingen);
 
 	/* If successful updates state and gen in layout */
-	err = pmd_obj_erase(mp, layout, newgen);
-	if (err) {
+	rc = pmd_obj_erase(mp, layout, newgen);
+	if (rc) {
 		pmd_obj_wrunlock(layout);
 
 		mp_pr_err("mpool %s, erasing mlog 0x%lx, logging erase start failed",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
+		return rc;
 	}
 
-	err = pmd_layout_erase(mp, layout);
-	if (err) {
+	rc = pmd_layout_erase(mp, layout);
+	if (rc) {
 		/*
 		 * Log the failure as a debugging message, but ignore the
 		 * failure, since discarding blocks here is only advisory
 		 */
 		mp_pr_debug("mpool %s, erasing mlog 0x%lx, erase failed ",
-			    err, mp->pds_name, (ulong)layout->eld_objid);
-		err = 0;
+			    rc, mp->pds_name, (ulong)layout->eld_objid);
+		rc = 0;
 	}
 
 	/* If successful updates state in layout */
@@ -965,19 +961,17 @@ merr_t mlog_erase(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 
 
 	pmd_obj_wrunlock(layout);
 
-	return err;
+	return rc;
 }
 
 /**
- * mlog_append_marker()
+ * mlog_append_marker() - Append a marker (log rec with zero-length data field) of type mtype.
  *
- * Append a marker (log rec with zero-length data field) of type mtype.
- *
- * Returns: 0 on success; merr_t otherwise
- * One of the possible errno values in merr_t:
+ * Returns: 0 on success; -errno otherwise
+ * One of the possible errno values:
  * EFBIG - if no room in log
  */
-static merr_t
+static int
 mlog_append_marker(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *layout,
@@ -986,7 +980,7 @@ mlog_append_marker(
 	struct mlog_stat               *lstat = &layout->eld_lstat;
 	struct omf_logrec_descriptor    lrd;
 
-	merr_t err;
+	int    rc;
 	u16    sectsz;
 	u16    abidx;
 	u16    aoff;
@@ -1006,12 +1000,12 @@ mlog_append_marker(
 			lstat->lst_abdirty = false;
 		}
 
-		return merr(EFBIG);
+		return -EFBIG;
 	}
 
-	err = mlog_update_append_idx(mp, layout, skip_ser);
-	if (err)
-		return err;
+	rc = mlog_update_append_idx(mp, layout, skip_ser);
+	if (rc)
+		return rc;
 
 	abidx  = lstat->lst_abidx;
 	abuf   = lstat->lst_abuf[abidx];
@@ -1024,39 +1018,39 @@ mlog_append_marker(
 	lrd.olr_rtype = mtype;
 
 	assert(abuf != NULL);
-	err = omf_logrec_desc_pack_htole(&lrd, &abuf[lpgoff + aoff]);
-	if (!err) {
+
+	rc = omf_logrec_desc_pack_htole(&lrd, &abuf[lpgoff + aoff]);
+	if (!rc) {
 		lstat->lst_aoff = aoff + OMF_LOGREC_DESC_PACKLEN;
-		err = mlog_logblocks_flush(mp, layout, skip_ser);
+
+		rc = mlog_logblocks_flush(mp, layout, skip_ser);
 		lstat->lst_abdirty = false;
-		if (err)
+		if (rc)
 			mp_pr_err("mpool %s, mlog 0x%lx log block flush failed",
-				  err, mp->pds_name, (ulong)layout->eld_objid);
+				  rc, mp->pds_name, (ulong)layout->eld_objid);
 	} else {
 		mp_pr_err("mpool %s, mlog 0x%lx log record descriptor packing failed",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
 	}
 
-	return err;
+	return rc;
 }
 
 /**
- * mlog_append_cstart()
+ * mlog_append_cstart() - Append compaction start marker; log must be open with csem flag true.
  *
- * Append compaction start marker; log must be open with csem flag true.
- *
- * Returns: 0 on success; merr_t otherwise
- * One of the possible errno values in merr_t:
+ * Returns: 0 on success; -errno otherwise
+ * One of the possible errno values:
  * EFBIG - if no room in log
  */
-merr_t mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
+int mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
 	struct mlog_stat   *lstat;
-	merr_t              err = 0;
+	int rc = 0;
 
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	pmd_obj_wrlock(layout);
 
@@ -1064,28 +1058,29 @@ merr_t mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *m
 	if (!lstat->lst_abuf) {
 		pmd_obj_wrunlock(layout);
 
-		err = merr(ENOENT);
+		rc = -ENOENT;
 		mp_pr_err("mpool %s, in mlog 0x%lx, inconsistency: no mlog status",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
+		return rc;
 	}
 
 	if (!lstat->lst_csem || lstat->lst_cstart) {
 		pmd_obj_wrunlock(layout);
 
-		err = merr(EINVAL);
-		mp_pr_err("mpool %s, in mlog 0x%lx, inconsistent state %u %u", err, mp->pds_name,
+		rc = -EINVAL;
+		mp_pr_err("mpool %s, in mlog 0x%lx, inconsistent state %u %u",
+			  rc, mp->pds_name,
 			  (ulong)layout->eld_objid, lstat->lst_csem, lstat->lst_cstart);
-		return err;
+		return rc;
 	}
 
-	err = mlog_append_marker(mp, layout, OMF_LOGREC_CSTART);
-	if (err) {
+	rc = mlog_append_marker(mp, layout, OMF_LOGREC_CSTART);
+	if (rc) {
 		pmd_obj_wrunlock(layout);
 
 		mp_pr_err("mpool %s, in mlog 0x%lx, marker append failed",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
+		return rc;
 	}
 
 	lstat->lst_cstart = 1;
@@ -1095,22 +1090,20 @@ merr_t mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *m
 }
 
 /**
- * mlog_append_cend()
+ * mlog_append_cend() - Append compaction start marker; log must be open with csem flag true.
  *
- * Append compaction start marker; log must be open with csem flag true.
- *
- * Returns: 0 on success; merr_t otherwise
- * One of the possible errno values in merr_t:
+ * Returns: 0 on success; -errno otherwise
+ * One of the possible errno values:
  * EFBIG - if no room in log
  */
-merr_t mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
+int mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
 	struct pmd_layout  *layout = mlog2layout(mlh);
 	struct mlog_stat   *lstat;
-	merr_t              err = 0;
+	int rc = 0;
 
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	pmd_obj_wrlock(layout);
 
@@ -1118,29 +1111,29 @@ merr_t mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh
 	if (!lstat->lst_abuf) {
 		pmd_obj_wrunlock(layout);
 
-		err =  merr(ENOENT);
+		rc = -ENOENT;
 		mp_pr_err("mpool %s, mlog 0x%lx, inconsistency: no mlog status",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
+		return rc;
 	}
 
 	if (!lstat->lst_csem || !lstat->lst_cstart || lstat->lst_cend) {
 		pmd_obj_wrunlock(layout);
 
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("mpool %s, mlog 0x%lx, inconsistent state %u %u %u",
-			  err, mp->pds_name, (ulong)layout->eld_objid, lstat->lst_csem,
+			  rc, mp->pds_name, (ulong)layout->eld_objid, lstat->lst_csem,
 			  lstat->lst_cstart, lstat->lst_cend);
-		return err;
+		return rc;
 	}
 
-	err = mlog_append_marker(mp, layout, OMF_LOGREC_CEND);
-	if (err) {
+	rc = mlog_append_marker(mp, layout, OMF_LOGREC_CEND);
+	if (rc) {
 		pmd_obj_wrunlock(layout);
 
 		mp_pr_err("mpool %s, mlog 0x%lx, marker append failed",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
+		return rc;
 	}
 
 	lstat->lst_cend = 1;
@@ -1150,9 +1143,7 @@ merr_t mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh
 }
 
 /**
- * memcpy_from_iov - Moves contents from an iovec to one or more destination
- * buffers.
- *
+ * memcpy_from_iov() - Moves contents from an iovec to one or more destination buffers.
  * @iov    : One or more source buffers in the form of an iovec
  * @buf    : Destination buffer
  * @buflen : The length of either source or destination whichever is minimum
@@ -1190,10 +1181,7 @@ static void memcpy_from_iov(struct kvec *iov, char *buf, size_t buflen, int *nex
 }
 
 /**
- * mlog_append_data_internal() - Append data record with buflen data bytes
- * from buf; log must be open; if log opened with csem true then a compaction
- * start marker must be in place;
- *
+ * mlog_append_data_internal() - Append data record with buflen data bytes from buf.
  * @mp:       mpool descriptor
  * @mlh:      mlog descriptor
  * @iov:      iovec containing user data
@@ -1201,11 +1189,14 @@ static void memcpy_from_iov(struct kvec *iov, char *buf, size_t buflen, int *nex
  * @sync:     if true, then we do not return until data is on media
  * @skip_ser: client guarantees serialization
  *
- * Returns: 0 on success; merr_t otherwise
- * One of the possible errno values in merr_t:
+ * Log must be open; if log opened with csem true then a compaction
+ * start marker must be in place;
+ *
+ * Returns: 0 on success; -errno otherwise
+ * One of the possible errno values:
  * EFBIG - if no room in log
  */
-static merr_t
+static int
 mlog_append_data_internal(
 	struct mpool_descriptor *mp,
 	struct mlog_descriptor  *mlh,
@@ -1218,7 +1209,7 @@ mlog_append_data_internal(
 	struct mlog_stat               *lstat = &layout->eld_lstat;
 	struct omf_logrec_descriptor    lrd;
 
-	merr_t     err = 0;
+	int        rc = 0;
 	char      *abuf;
 	off_t      lpgoff;
 	int        dfirst;
@@ -1249,12 +1240,12 @@ mlog_append_data_internal(
 			mp_pr_warn("mpool %s, mlog 0x%lx append, mlog free space incorrect",
 				   mp->pds_name, (ulong)layout->eld_objid);
 
-			return merr(EFBIG);
+			return -EFBIG;
 		}
 
-		err = mlog_update_append_idx(mp, layout, skip_ser);
-		if (err)
-			return err;
+		rc = mlog_update_append_idx(mp, layout, skip_ser);
+		if (rc)
+			return rc;
 
 		abidx  = lstat->lst_abidx;
 		abuf   = lstat->lst_abuf[abidx];
@@ -1283,10 +1274,10 @@ mlog_append_data_internal(
 			}
 		}
 
-		err = omf_logrec_desc_pack_htole(&lrd, &abuf[lpgoff + aoff]);
-		if (err) {
+		rc = omf_logrec_desc_pack_htole(&lrd, &abuf[lpgoff + aoff]);
+		if (rc) {
 			mp_pr_err("mpool %s, mlog 0x%lx, log record packing failed",
-				  err, mp->pds_name, (ulong)layout->eld_objid);
+				  rc, mp->pds_name, (ulong)layout->eld_objid);
 			break;
 		}
 
@@ -1308,27 +1299,27 @@ mlog_append_data_internal(
 			(abidx == MLOG_NLPGMB(lstat) - 1 && asidx == nseclpg - 1 &&
 			 sectsz - aoff < OMF_LOGREC_DESC_PACKLEN)) {
 
-			err = mlog_logblocks_flush(mp, layout, skip_ser);
+			rc = mlog_logblocks_flush(mp, layout, skip_ser);
 			lstat->lst_abdirty = false;
-			if (err) {
+			if (rc) {
 				mp_pr_err("mpool %s, mlog 0x%lx, log block flush failed",
-					  err, mp->pds_name, (ulong)layout->eld_objid);
+					  rc, mp->pds_name, (ulong)layout->eld_objid);
 				break;
 			}
 		}
 
-		assert(err == 0);
+		assert(rc == 0);
 		if (bufoff == buflen)
 			break;
 	}
 
-	return err;
+	return rc;
 }
 
 /**
- * mlog_append_datav():
+ * mlog_append_datav() -
  */
-static merr_t
+static int
 mlog_append_datav(
 	struct mpool_descriptor *mp,
 	struct mlog_descriptor  *mlh,
@@ -1339,12 +1330,12 @@ mlog_append_datav(
 	struct pmd_layout  *layout = mlog2layout(mlh);
 	struct mlog_stat   *lstat;
 
-	merr_t err   = 0;
-	s64    dmax  = 0;
-	bool   skip_ser  = false;
+	s64    dmax = 0;
+	bool   skip_ser = false;
+	int    rc = 0;
 
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	if (layout->eld_flags & MLOG_OF_SKIP_SER)
 		skip_ser = true;
@@ -1354,19 +1345,19 @@ mlog_append_datav(
 
 	lstat = &layout->eld_lstat;
 	if (!lstat->lst_abuf) {
-		err = merr(ENOENT);
+		rc = -ENOENT;
 		mp_pr_err("mpool %s, mlog 0x%lx, inconsistency: no mlog status",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
 	} else if (lstat->lst_csem && !lstat->lst_cstart) {
-		err = merr(EINVAL);
-		mp_pr_err("mpool %s, mlog 0x%lx, inconsistent state %u %u", err, mp->pds_name,
+		rc = -EINVAL;
+		mp_pr_err("mpool %s, mlog 0x%lx, inconsistent state %u %u", rc, mp->pds_name,
 			  (ulong)layout->eld_objid, lstat->lst_csem, lstat->lst_cstart);
 	} else {
 		dmax = mlog_append_dmax(layout);
 		if (dmax < 0 || buflen > dmax) {
-			err = merr(EFBIG);
+			rc = -EFBIG;
 			mp_pr_debug("mpool %s, mlog 0x%lx mlog full %ld",
-				    err, mp->pds_name, (ulong)layout->eld_objid, (long)dmax);
+				    rc, mp->pds_name, (ulong)layout->eld_objid, (long)dmax);
 
 			/* Flush whatever we can. */
 			if (lstat->lst_abdirty) {
@@ -1376,16 +1367,16 @@ mlog_append_datav(
 		}
 	}
 
-	if (err) {
+	if (rc) {
 		if (!skip_ser)
 			pmd_obj_wrunlock(layout);
-		return err;
+		return rc;
 	}
 
-	err = mlog_append_data_internal(mp, mlh, iov, buflen, sync, skip_ser);
-	if (err) {
+	rc = mlog_append_data_internal(mp, mlh, iov, buflen, sync, skip_ser);
+	if (rc) {
 		mp_pr_err("mpool %s, mlog 0x%lx append failed",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
 
 		/* Flush whatever we can. */
 		if (lstat->lst_abdirty) {
@@ -1397,13 +1388,13 @@ mlog_append_datav(
 	if (!skip_ser)
 		pmd_obj_wrunlock(layout);
 
-	return err;
+	return rc;
 }
 
 /**
- * mlog_append_data()
+ * mlog_append_data() -
  */
-merr_t
+int
 mlog_append_data(
 	struct mpool_descriptor *mp,
 	struct mlog_descriptor  *mlh,
@@ -1420,28 +1411,27 @@ mlog_append_data(
 }
 
 /**
- * mlog_read_data_init()
+ * mlog_read_data_init() - Initialize iterator for reading data records from log.
  *
- * Initialize iterator for reading data records from log; log must be open;
- * skips non-data records (markers).
+ * Log must be open; skips non-data records (markers).
  *
  * Returns: 0 on success; merr_t otherwise
  */
-merr_t mlog_read_data_init(struct mlog_descriptor *mlh)
+int mlog_read_data_init(struct mlog_descriptor *mlh)
 {
 	struct pmd_layout      *layout = mlog2layout(mlh);
 	struct mlog_stat       *lstat;
 	struct mlog_read_iter  *lri;
-	merr_t                  err = 0;
+	int rc = 0;
 
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	pmd_obj_wrlock(layout);
 
 	lstat = &layout->eld_lstat;
 	if (!lstat->lst_abuf) {
-		err = merr(ENOENT);
+		rc = -ENOENT;
 	} else {
 		lri = &lstat->lst_citr;
 
@@ -1450,11 +1440,11 @@ merr_t mlog_read_data_init(struct mlog_descriptor *mlh)
 
 	pmd_obj_wrunlock(layout);
 
-	return err;
+	return rc;
 }
 
 /**
- * mlog_read_data_next_impl()
+ * mlog_read_data_next_impl() -
  * @mp:
  * @mlh:
  * @skip:
@@ -1463,10 +1453,10 @@ merr_t mlog_read_data_init(struct mlog_descriptor *mlh)
  * @rdlen:
  *
  * Return:
- *   EOVERFLOW: the caller must retry with a larger receive buffer,
+ *   -EOVERFLOW: the caller must retry with a larger receive buffer,
  *   the length of an adequate receive buffer is returned in "rdlen".
  */
-static merr_t
+static int
 mlog_read_data_next_impl(
 	struct mpool_descriptor *mp,
 	struct mlog_descriptor  *mlh,
@@ -1486,14 +1476,14 @@ mlog_read_data_next_impl(
 	char   *inbuf = NULL;
 	u32     sectsz = 0;
 	bool    skip_ser = false;
-	merr_t  err = 0;
+	int     rc = 0;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	if (!mlog_objid(layout->eld_objid))
-		return merr(EINVAL);
+		return -EINVAL;
 
 	if (layout->eld_flags & MLOG_OF_SKIP_SER)
 		skip_ser = true;
@@ -1513,42 +1503,42 @@ mlog_read_data_next_impl(
 			if (!skip_ser)
 				pmd_obj_wrunlock(layout);
 
-			err = merr(EINVAL);
+			rc = -EINVAL;
 			mp_pr_err("mpool %s, mlog 0x%lx, invalid iterator",
-				  err, mp->pds_name, (ulong)layout->eld_objid);
-			return err;
+				  rc, mp->pds_name, (ulong)layout->eld_objid);
+			return rc;
 		}
 	}
 
 	if (!lstat || !lri) {
-		err = merr(ENOENT);
+		rc = -ENOENT;
 		mp_pr_err("mpool %s, mlog 0x%lx, inconsistency: no mlog status",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
 	} else if (lri->lri_gen != layout->eld_gen ||
 		   lri->lri_soff > lstat->lst_wsoff ||
 		   (lri->lri_soff == lstat->lst_wsoff && lri->lri_roff > lstat->lst_aoff) ||
 		   lri->lri_roff > sectsz) {
 
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("mpool %s, mlog 0x%lx, invalid args gen %lu %lu offsets %ld %ld %u %u %u",
-			  err, mp->pds_name, (ulong)layout->eld_objid, (ulong)lri->lri_gen,
+			  rc, mp->pds_name, (ulong)layout->eld_objid, (ulong)lri->lri_gen,
 			  (ulong)layout->eld_gen, lri->lri_soff, lstat->lst_wsoff, lri->lri_roff,
 			  lstat->lst_aoff, sectsz);
 	} else if (lri->lri_soff == lstat->lst_wsoff && lri->lri_roff == lstat->lst_aoff) {
 		/* Hit end of log - do not error count */
-		err = merr(ENOMSG);
+		rc = -ENOMSG;
 	}
 
-	if (err) {
+	if (rc) {
 		if (!skip_ser)
 			pmd_obj_wrunlock(layout);
-		if (merr_errno(err) == ENOMSG) {
-			err = 0;
+		if (rc == -ENOMSG) {
+			rc = 0;
 			if (rdlen)
 				*rdlen = 0;
 		}
 
-		return err;
+		return rc;
 	}
 
 	bufoff = 0;
@@ -1556,20 +1546,20 @@ mlog_read_data_next_impl(
 
 	while (true) {
 		/* Get log block referenced by lri which can be accumulating buffer */
-		err = mlog_logblock_load(mp, lri, &inbuf, &recfirst);
-		if (err) {
-			if (merr_errno(err) == ENOMSG) {
+		rc = mlog_logblock_load(mp, lri, &inbuf, &recfirst);
+		if (rc) {
+			if (rc == -ENOMSG) {
 				if (!skip_ser)
 					pmd_obj_wrunlock(layout);
-				err = 0;
+				rc = 0;
 				if (rdlen)
 					*rdlen = 0;
 
-				return err;
+				return rc;
 			}
 
 			mp_pr_err("mpool %s, mlog 0x%lx, getting log block failed",
-				  err, mp->pds_name, (ulong)layout->eld_objid);
+				  rc, mp->pds_name, (ulong)layout->eld_objid);
 			break;
 		}
 
@@ -1588,7 +1578,7 @@ mlog_read_data_next_impl(
 				 * failure mode and must be ignored
 				 */
 				if (bufoff)
-					err = merr(ENODATA);
+					rc = -ENODATA;
 
 				bufoff = 0;	/* Force EOF on partials! */
 				break;
@@ -1603,7 +1593,7 @@ mlog_read_data_next_impl(
 			if (lrd.olr_rtype == OMF_LOGREC_DATAFULL ||
 			    lrd.olr_rtype == OMF_LOGREC_DATAFIRST) {
 				if (midrec && !recfirst) {
-					err = merr(ENODATA);
+					rc = -ENODATA;
 
 					/*
 					 * Can occur mid data rec only if is first rec in log
@@ -1612,7 +1602,7 @@ mlog_read_data_next_impl(
 					 * Otherwise is a logging error
 					 */
 					mp_pr_err("mpool %s, mlog 0x%lx, inconsistent 1 data rec",
-						  err, mp->pds_name, (ulong)layout->eld_objid);
+						  rc, mp->pds_name, (ulong)layout->eld_objid);
 					break;
 				}
 				/*
@@ -1623,11 +1613,11 @@ mlog_read_data_next_impl(
 			} else if (lrd.olr_rtype == OMF_LOGREC_DATAMID ||
 				   lrd.olr_rtype == OMF_LOGREC_DATALAST) {
 				if (!midrec) {
-					err = merr(ENODATA);
+					rc = -ENODATA;
 
 					/* Must occur mid data record. */
 					mp_pr_err("mpool %s, mlog 0x%lx, inconsistent 2 data rec",
-						  err, mp->pds_name, (ulong)layout->eld_objid);
+						  rc, mp->pds_name, (ulong)layout->eld_objid);
 					break;
 				}
 			}
@@ -1642,7 +1632,7 @@ mlog_read_data_next_impl(
 				if (rdlen)
 					*rdlen = lrd.olr_tlen;
 
-				err = merr(EOVERFLOW);
+				rc = -EOVERFLOW;
 				break;
 			}
 
@@ -1663,9 +1653,9 @@ mlog_read_data_next_impl(
 			 * Non data record; just skip unless midrec which is a logging error
 			 */
 			if (midrec) {
-				err = merr(ENODATA);
+				rc = -ENODATA;
 				mp_pr_err("mpool %s, mlog 0x%lx, inconsistent non-data record",
-					  err, mp->pds_name, (ulong)layout->eld_objid);
+					  rc, mp->pds_name, (ulong)layout->eld_objid);
 				break;
 			}
 			if (lrd.olr_rtype == OMF_LOGREC_EOLB)
@@ -1675,36 +1665,35 @@ mlog_read_data_next_impl(
 					lrd.olr_rlen;
 		}
 	}
-	if (!err && rdlen)
+	if (!rc && rdlen)
 		*rdlen = bufoff;
-	else if ((merr_errno(err) != EOVERFLOW) && (merr_errno(err) != ENOMEM))
+	else if (rc != -EOVERFLOW && rc != -ENOMEM)
 		/* Handle only remains valid if buffer too small */
 		lri->lri_valid = 0;
 
 	if (!skip_ser)
 		pmd_obj_wrunlock(layout);
 
-	return err;
+	return rc;
 }
 
 /**
- * mlog_read_data_next()
+ * mlog_read_data_next() - Read next data record into buffer buf of length buflen bytes.
  *
- * Read next data record into buffer buf of length buflen bytes; log must
- * be open; skips non-data records (markers).
+ * Log must be open; skips non-data records (markers).
  *
  * Iterator lri must be re-init if returns any error except ENOMEM
  * in merr_t
  *
  * Returns:
  *   0 on success; merr_t with the following errno values on failure:
- *   EOVERFLOW if buflen is insufficient to hold data record; can retry
+ *   -EOVERFLOW if buflen is insufficient to hold data record; can retry
  *   errno otherwise
  *
  *   Bytes read on success in the output param rdlen (can be 0 if appended a
  *   zero-length data record)
  */
-merr_t
+int
 mlog_read_data_next(
 	struct mpool_descriptor *mp,
 	struct mlog_descriptor  *mlh,
@@ -1716,19 +1705,17 @@ mlog_read_data_next(
 }
 
 /**
- * mlog_get_props()
- *
- * Return basic mlog properties in prop.
+ * mlog_get_props() - Return basic mlog properties in prop.
  *
  * Returns: 0 if successful; merr_t otherwise
  */
-static merr_t
-mlog_get_props(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, struct mlog_props *prop)
+static int mlog_get_props(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
+			  struct mlog_props *prop)
 {
 	struct pmd_layout *layout = mlog2layout(mlh);
 
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	pmd_obj_rdlock(layout);
 	mlog_getprops_cmn(mp, layout, prop);
@@ -1738,24 +1725,19 @@ mlog_get_props(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, struct 
 }
 
 /**
- * mlog_get_props_ex()
- *
- * Return extended mlog properties in prop.
+ * mlog_get_props_ex() - Return extended mlog properties in prop.
  *
  * Returns: 0 if successful; merr_t otherwise
  */
-merr_t
-mlog_get_props_ex(
-	struct mpool_descriptor *mp,
-	struct mlog_descriptor  *mlh,
-	struct mlog_props_ex    *prop)
+int mlog_get_props_ex(struct mpool_descriptor *mp, struct mlog_descriptor  *mlh,
+		      struct mlog_props_ex *prop)
 {
 	struct pmd_layout *layout;
 	struct pd_prop    *pdp;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	pdp = &mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_prop;
 
@@ -1773,16 +1755,15 @@ mlog_get_props_ex(
 void mlog_precompact_alsz(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
 	struct mlog_props prop;
+	u64 len;
+	int rc;
 
-	u64    len;
-	merr_t err;
-
-	err = mlog_get_props(mp, mlh, &prop);
-	if (err)
+	rc = mlog_get_props(mp, mlh, &prop);
+	if (rc)
 		return;
 
-	err = mlog_len(mp, mlh, &len);
-	if (err)
+	rc = mlog_len(mp, mlh, &len);
+	if (rc)
 		return;
 
 	pmd_precompact_alsz(mp, prop.lpr_objid, len, prop.lpr_alloc_cap);

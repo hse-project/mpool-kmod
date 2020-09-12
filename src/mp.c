@@ -15,7 +15,6 @@
 #include <crypto/hash.h>
 
 #include "assert.h"
-#include "merr.h"
 #include "mpool_printk.h"
 
 #include "sb.h"
@@ -30,7 +29,7 @@
  */
 static DEFINE_MUTEX(mpool_s_lock);
 
-merr_t
+int
 mpool_create(
 	const char             *mpname,
 	u32                     flags,
@@ -43,19 +42,19 @@ mpool_create(
 	struct omf_sb_descriptor   *sbmdc0;
 	struct mpool_descriptor    *mp;
 
-	bool    active, sbvalid;
-	u16     sidx;
-	merr_t  err;
+	bool active, sbvalid;
+	u16 sidx;
+	int err;
 
 	if (!mpname || !*mpname || !dpaths || !pd_prop)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	mdc01 = mdc02 = NULL;
 	active = sbvalid = false;
 
 	mp = mpool_desc_alloc();
 	if (!mp) {
-		err = merr(ENOMEM);
+		err = -ENOMEM;
 		mp_pr_err("mpool %s, alloc desc failed", err, mpname);
 		return err;
 	}
@@ -77,7 +76,7 @@ mpool_create(
 	 */
 	mp->pds_erase_wq = alloc_workqueue("mperasewq", WQ_HIGHPRI, 0);
 	if (!mp->pds_erase_wq) {
-		err = merr(ENOMEM);
+		err = -ENOMEM;
 		mp_pr_err("mpool %s, alloc per-mpool wq failed", err, mpname);
 		goto errout;
 	}
@@ -216,13 +215,13 @@ errout:
 		pmd_mpool_deactivate(mp);
 
 	if (err && sbvalid) {
-		struct mpool_dev_info  *pd;
-		merr_t                  err1;
+		struct mpool_dev_info *pd;
+		int err1;
 
 		/* Erase super blocks on the drives */
 		pd = &mp->pds_pdv[0];
 		if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
-			err1 = merr(EIO);
+			err1 = -EIO;
 			mp_pr_err("%s:%s unavailable or offline, status %d",
 				  err1, mp->pds_name, pd->pdi_name, mpool_pd_status_get(pd));
 		} else {
@@ -240,7 +239,7 @@ errout:
 	return err;
 }
 
-merr_t
+int
 mpool_activate(
 	u64                         dcnt,
 	char                      **dpaths,
@@ -255,7 +254,7 @@ mpool_activate(
 	struct pmd_layout          *mdc01 = NULL;
 	struct pmd_layout          *mdc02 = NULL;
 	struct media_class         *mcmeta;
-	merr_t                      err;
+	int err;
 
 	u64     mdcmax, mdcnum, mdcncap, mdc0cap;
 	bool    active;
@@ -268,7 +267,7 @@ mpool_activate(
 	*mpp = NULL;
 
 	if (dcnt > MPOOL_DRIVES_MAX) {
-		err = merr(EINVAL);
+		err = -EINVAL;
 		mp_pr_err("too many drives in input %lu, first drive path %s",
 			  err, (ulong)dcnt, dpaths[0]);
 		return err;
@@ -282,7 +281,7 @@ mpool_activate(
 		mp_pr_err("duplicate drive check failed", err);
 		return err;
 	} else if (dup) {
-		err = merr(EINVAL);
+		err = -EINVAL;
 		mp_pr_err("duplicate drive path %s", err, (doff == -1) ? "" : dpaths[doff]);
 		return err;
 	}
@@ -290,7 +289,7 @@ mpool_activate(
 	/* Alloc mpool descriptor and fill in device-indepdendent values */
 	mp = mpool_desc_alloc();
 	if (!mp) {
-		err = merr(ENOMEM);
+		err = -ENOMEM;
 		mp_pr_err("alloc mpool desc failed", err);
 		return err;
 	}
@@ -306,14 +305,14 @@ mpool_activate(
 
 	mp->pds_workq = alloc_workqueue("mpoolwq", WQ_UNBOUND, 0);
 	if (!mp->pds_workq) {
-		err = merr(ENOMEM);
+		err = -ENOMEM;
 		mp_pr_err("alloc mpoolwq failed, first drive path %s", err, dpaths[0]);
 		goto errout;
 	}
 
 	mp->pds_erase_wq = alloc_workqueue("mperasewq", WQ_HIGHPRI, 0);
 	if (!mp->pds_erase_wq) {
-		err = merr(ENOMEM);
+		err = -ENOMEM;
 		mp_pr_err("alloc mperasewq failed, first drive path %s", err, dpaths[0]);
 		goto errout;
 	}
@@ -337,7 +336,7 @@ mpool_activate(
 
 	mcmeta = &mp->pds_mc[mp->pds_mdparm.md_mclass];
 	if (mcmeta->mc_pdmc < 0) {
-		err = merr(ENODEV);
+		err = -ENODEV;
 		mp_pr_err("mpool %s, too many unavailable drives", err, mp->pds_name);
 		goto errout;
 	}
@@ -381,7 +380,7 @@ mpool_activate(
 
 		mc = &mp->pds_mc[i];
 		if (mc->mc_uacnt) {
-			err = merr(ENODEV);
+			err = -ENODEV;
 			mp_pr_err("mpool %s, unavailable drives present", err, mp->pds_name);
 			goto errout;
 		}
@@ -492,7 +491,7 @@ errout:
 	return err;
 }
 
-merr_t mpool_deactivate(struct mpool_descriptor *mp)
+int mpool_deactivate(struct mpool_descriptor *mp)
 {
 	pmd_precompact_stop(mp);
 	smap_wait_usage_done(mp);
@@ -509,23 +508,20 @@ merr_t mpool_deactivate(struct mpool_descriptor *mp)
 	return 0;
 }
 
-merr_t mpool_destroy(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags)
+int mpool_destroy(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags)
 {
-	struct omf_sb_descriptor   *sbmdc0;
-	struct mpool_descriptor    *mp;
-	merr_t                      err;
-
-	int     i;
-	int     dup;
-	int     doff;
+	struct omf_sb_descriptor *sbmdc0;
+	struct mpool_descriptor *mp;
+	int dup, doff;
+	int err, i;
 
 	if (dcnt > MPOOL_DRIVES_MAX) {
-		err = merr(EINVAL);
+		err = -EINVAL;
 		mp_pr_err("first pd %s, too many drives %lu %d",
 			  err, dpaths[0], (ulong)dcnt, MPOOL_DRIVES_MAX);
 		return err;
 	} else if (dcnt == 0) {
-		return merr(EINVAL);
+		return -EINVAL;
 	}
 
 	/*
@@ -536,21 +532,21 @@ merr_t mpool_destroy(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags
 		mp_pr_err("check_for_dups failed, dcnt %lu", err, (ulong)dcnt);
 		return err;
 	} else if (dup) {
-		err = merr(ENOMEM);
+		err = -ENOMEM;
 		mp_pr_err("duplicate drives found", err);
 		return err;
 	}
 
 	sbmdc0 = kzalloc(sizeof(*sbmdc0), GFP_KERNEL);
 	if (!sbmdc0) {
-		err = merr(ENOMEM);
+		err = -ENOMEM;
 		mp_pr_err("alloc sb %zu failed", err, sizeof(*sbmdc0));
 		return err;
 	}
 
 	mp = mpool_desc_alloc();
 	if (!mp) {
-		err = merr(ENOMEM);
+		err = -ENOMEM;
 		mp_pr_err("alloc mpool desc failed", err);
 		kfree(sbmdc0);
 		return err;
@@ -584,7 +580,7 @@ merr_t mpool_destroy(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags
 
 		pd = &mp->pds_pdv[i];
 		if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
-			err = merr(EIO);
+			err = -EIO;
 			mp_pr_err("pd %s unavailable or offline, status %d",
 				  err, pd->pdi_name, mpool_pd_status_get(pd));
 		} else {
@@ -607,7 +603,7 @@ errout:
 	return err;
 }
 
-merr_t
+int
 mpool_rename(
 	u64                         dcnt,
 	char                      **dpaths,
@@ -618,7 +614,7 @@ mpool_rename(
 	struct omf_sb_descriptor   *sb;
 	struct mpool_descriptor    *mp;
 	struct mpool_dev_info      *pd = NULL;
-	merr_t                      err = 0;
+	int err = 0;
 
 	u16    omf_ver = OMF_SB_DESC_UNDEF;
 	u8     pdh;
@@ -627,10 +623,10 @@ mpool_rename(
 	bool   force = ((flags & (1 << MP_FLAGS_FORCE)) != 0);
 
 	if (!mp_newname || dcnt == 0)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	if (dcnt > MPOOL_DRIVES_MAX) {
-		err = merr(EINVAL);
+		err = -EINVAL;
 		mp_pr_err("first pd %s, too many drives %lu %d",
 			  err, dpaths[0], (ulong)dcnt, MPOOL_DRIVES_MAX);
 		return err;
@@ -644,21 +640,21 @@ mpool_rename(
 		mp_pr_err("check_for_dups failed, dcnt %lu", err, (ulong)dcnt);
 		return err;
 	} else if (dup) {
-		err = merr(ENOMEM);
+		err = -ENOMEM;
 		mp_pr_err("duplicate drives found", err);
 		return err;
 	}
 
 	sb = kzalloc(sizeof(*sb), GFP_KERNEL);
 	if (!sb) {
-		err = merr(ENOMEM);
+		err = -ENOMEM;
 		mp_pr_err("alloc sb %zu failed", err, sizeof(*sb));
 		return err;
 	}
 
 	mp = mpool_desc_alloc();
 	if (!mp) {
-		err = merr(ENOMEM);
+		err = -ENOMEM;
 		mp_pr_err("alloc mpool desc failed", err);
 		kfree(sb);
 		return err;
@@ -683,7 +679,7 @@ mpool_rename(
 		pd = &mp->pds_pdv[pdh];
 
 		if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
-			err = merr(EIO);
+			err = -EIO;
 			mp_pr_err("pd %s unavailable or offline, status %d",
 				  err, pd->pdi_name, mpool_pd_status_get(pd));
 			goto errout;
@@ -701,7 +697,7 @@ mpool_rename(
 
 		if (omf_ver > OMF_SB_DESC_VER_LAST ||
 		    omf_ver < OMF_SB_DESC_VER_LAST) {
-			err = merr(EOPNOTSUPP);
+			err = -EOPNOTSUPP;
 			mp_pr_err("pd %s, invalid sb version %d %d",
 				  err, pd->pdi_name, omf_ver, OMF_SB_DESC_VER_LAST);
 			goto errout;
@@ -729,16 +725,15 @@ errout:
 	return err;
 }
 
-merr_t mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop *pd_prop)
+int mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop *pd_prop)
 {
 	struct mpool_dev_info  *pd;
 	struct mc_smap_parms    mcsp;
 
-	char  *dpathv[1] = { dpath };
-	merr_t err;
-	bool   smap = false;
-	bool   erase = false;
-
+	char *dpathv[1] = { dpath };
+	bool erase = false;
+	bool smap = false;
+	int err;
 	/*
 	 * All device list changes are serialized via mpool_s_lock so
 	 * don't need to acquire mp.pdvlock until ready to update mpool
@@ -751,7 +746,7 @@ merr_t mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop 
 
 		mp_pr_warn("%s: pd %s, too many drives %u %d",
 			   mp->pds_name, dpath, mp->pds_pdvcnt, MPOOL_DRIVES_MAX);
-		return merr(EINVAL);
+		return -EINVAL;
 	}
 
 	/*
@@ -877,9 +872,10 @@ errout:
 
 void mpool_mclass_get_cnt(struct mpool_descriptor *mp, u32 *cnt)
 {
-	int    i;
+	int i;
 
 	*cnt = 0;
+
 	down_read(&mp->pds_pdvlock);
 	for (i = 0; i < MP_MED_NUMBER; i++) {
 		struct media_class *mc;
@@ -891,12 +887,12 @@ void mpool_mclass_get_cnt(struct mpool_descriptor *mp, u32 *cnt)
 	up_read(&mp->pds_pdvlock);
 }
 
-merr_t mpool_mclass_get(struct mpool_descriptor *mp, u32 *mcxc, struct mpool_mclass_xprops *mcxv)
+int mpool_mclass_get(struct mpool_descriptor *mp, u32 *mcxc, struct mpool_mclass_xprops *mcxv)
 {
-	int    i, n;
+	int i, n;
 
 	if (!mp || !mcxc || !mcxv)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	mutex_lock(&mpool_s_lock);
 	down_read(&mp->pds_pdvlock);
@@ -930,15 +926,14 @@ merr_t mpool_mclass_get(struct mpool_descriptor *mp, u32 *mcxc, struct mpool_mcl
 	return 0;
 }
 
-merr_t
-mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8 drive_spares)
+int mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp,
+		       u8 drive_spares)
 {
 	struct media_class *mc;
-
-	merr_t   err;
+	int err;
 
 	if (!mclass_isvalid(mclassp) || drive_spares > 100) {
-		err = merr(EINVAL);
+		err = -EINVAL;
 		mp_pr_err("mpool %s, setting percent %u spare for drives in media class %d failed",
 			  err, mp->pds_name, drive_spares, mclassp);
 		return err;
@@ -953,7 +948,7 @@ mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8
 	up_read(&mp->pds_pdvlock);
 
 	if (mc->mc_pdmc < 0) {
-		err = merr(ENOENT);
+		err = -ENOENT;
 		goto skip_update;
 	}
 
@@ -1048,10 +1043,10 @@ void mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops)
 	xprops->ppx_params.mp_stat = ftmax ? MPOOL_STAT_FAULTED : MPOOL_STAT_OPTIMAL;
 }
 
-merr_t
-mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname, struct mpool_devprops *dprop)
+int mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname,
+			       struct mpool_devprops *dprop)
 {
-	int    i;
+	int i;
 
 	down_read(&mp->pds_pdvlock);
 
@@ -1092,12 +1087,12 @@ mpool_get_usage(
 		pmd_mpool_usage(mp, usage);
 }
 
-merr_t mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config *cfg)
+int mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config *cfg)
 {
-	merr_t err;
+	int err;
 
 	if (!mp || !cfg)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	mp->pds_cfg = *cfg;
 
@@ -1108,10 +1103,10 @@ merr_t mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config
 	return err;
 }
 
-merr_t mpool_config_fetch(struct mpool_descriptor *mp, struct mpool_config *cfg)
+int mpool_config_fetch(struct mpool_descriptor *mp, struct mpool_config *cfg)
 {
 	if (!mp || !cfg)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	*cfg = mp->pds_cfg;
 

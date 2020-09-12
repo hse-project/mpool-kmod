@@ -304,7 +304,7 @@ static bool mpc_lock_page_or_retry(struct page *page, struct mm_struct *mm, uint
 
 static int mpc_handle_page_error(struct page *page, struct vm_area_struct *vma)
 {
-	int     rc;
+	int rc;
 
 	ClearPageError(page);
 
@@ -412,7 +412,7 @@ static int mpc_readpage_impl(struct page *page, struct mpc_xvm *xvm)
 	struct kvec         iov[1];
 	off_t               offset;
 	uint                mbnum;
-	merr_t              err;
+	int                 rc;
 
 	offset  = page->index << PAGE_SHIFT;
 	offset %= (1ul << mpc_xvm_size_max);
@@ -434,10 +434,10 @@ static int mpc_readpage_impl(struct page *page, struct mpc_xvm *xvm)
 	iov[0].iov_base = page_address(page);
 	iov[0].iov_len = PAGE_SIZE;
 
-	err = mblock_read(xvm->xvm_mpdesc, mbinfo->mbdesc, iov, 1, offset, PAGE_SIZE);
-	if (err) {
+	rc = mblock_read(xvm->xvm_mpdesc, mbinfo->mbdesc, iov, 1, offset, PAGE_SIZE);
+	if (rc) {
 		unlock_page(page);
-		return -merr_errno(err);
+		return rc;
 	}
 
 	if (xvm->xvm_hcpagesp)
@@ -472,8 +472,7 @@ static void mpc_readpages_cb(struct work_struct *work)
 	struct readpage_work   *w;
 
 	size_t  argssz;
-	int     pagec, i;
-	merr_t  err;
+	int     pagec, rc, i;
 
 	w = container_of(work, struct readpage_work, w_work);
 
@@ -493,7 +492,7 @@ static void mpc_readpages_cb(struct work_struct *work)
 	 * mblock references while there are reads in progress.
 	 */
 	if (atomic_inc_return(&xvm->xvm_rabusy) > WQ_MAX_ACTIVE) {
-		err = merr(ENXIO);
+		rc = -ENXIO;
 		goto errout;
 	}
 
@@ -502,9 +501,9 @@ static void mpc_readpages_cb(struct work_struct *work)
 		iov[i].iov_len = PAGE_SIZE;
 	}
 
-	err = mblock_read(xvm->xvm_mpdesc, args->a_mbdesc, iov,
-			  pagec, args->a_mboffset, pagec << PAGE_SHIFT);
-	if (err)
+	rc = mblock_read(xvm->xvm_mpdesc, args->a_mbdesc, iov,
+			 pagec, args->a_mboffset, pagec << PAGE_SHIFT);
+	if (rc)
 		goto errout;
 
 	if (xvm->xvm_hcpagesp)
@@ -792,7 +791,7 @@ int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
  * @unit:
  * @arg:
  */
-merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, struct mpioc_vma *ioc)
+int mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, struct mpioc_vma *ioc)
 {
 	struct mpc_rgnmap          *rm;
 	struct mpc_mbinfo          *mbinfov;
@@ -802,17 +801,16 @@ merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, stru
 	u64     *mbidv;
 	size_t  largest, sz;
 	uint    mbidc, mult;
-	merr_t  err;
 	int     rc, i;
 
 	if (!unit || !unit->un_mapping || !ioc)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	if (ioc->im_mbidc < 1)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	if (ioc->im_advice > MPC_VMA_PINNED)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	mult = 1;
 	if (ioc->im_advice == MPC_VMA_WARM)
@@ -824,7 +822,7 @@ merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, stru
 
 	sz = sizeof(*xvm) + sizeof(*mbinfov) * mbidc;
 	if (sz > mpc_xvm_cachesz[1])
-		return merr(EINVAL);
+		return -EINVAL;
 	else if (sz > mpc_xvm_cachesz[0])
 		cache = mpc_xvm_cache[1];
 	else
@@ -834,18 +832,18 @@ merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, stru
 
 	mbidv = kmalloc(sz, GFP_KERNEL);
 	if (!mbidv)
-		return merr(ENOMEM);
+		return -ENOMEM;
 
 	rc = copy_from_user(mbidv, ioc->im_mbidv, sz);
 	if (rc) {
 		kfree(mbidv);
-		return merr(EFAULT);
+		return -EFAULT;
 	}
 
 	xvm = kmem_cache_zalloc(cache, GFP_KERNEL);
 	if (!xvm) {
 		kfree(mbidv);
-		return merr(ENOMEM);
+		return -ENOMEM;
 	}
 
 	xvm->xvm_magic = (u32)(uintptr_t)xvm;
@@ -866,7 +864,6 @@ merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, stru
 	atomic_set(&xvm->xvm_rabusy, 0);
 
 	largest = 0;
-	err = 0;
 
 	mbinfov = xvm->xvm_mbinfov;
 
@@ -874,8 +871,8 @@ merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, stru
 		struct mpc_mbinfo *mbinfo = mbinfov + i;
 		struct mblock_props props;
 
-		err = mblock_find_get(mp, mbidv[i], 1, &props, &mbinfo->mbdesc);
-		if (err) {
+		rc = mblock_find_get(mp, mbidv[i], 1, &props, &mbinfo->mbdesc);
+		if (rc) {
 			mbidc = i;
 			goto errout;
 		}
@@ -890,7 +887,7 @@ merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, stru
 	xvm->xvm_bktsz = roundup_pow_of_two(largest);
 
 	if (xvm->xvm_bktsz * mbidc > (1ul << mpc_xvm_size_max)) {
-		err = merr(E2BIG);
+		rc = -E2BIG;
 		goto errout;
 	}
 
@@ -901,7 +898,7 @@ merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, stru
 	if (xvm->xvm_rgn < 1) {
 		mutex_unlock(&rm->rm_lock);
 
-		err = merr(xvm->xvm_rgn ?: EINVAL);
+		rc = xvm->xvm_rgn ?: -EINVAL;
 		goto errout;
 	}
 
@@ -916,7 +913,7 @@ merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, stru
 	mutex_unlock(&rm->rm_lock);
 
 errout:
-	if (err) {
+	if (rc) {
 		for (i = 0; i < mbidc; ++i)
 			mblock_put(mbinfov[i].mbdesc);
 		kmem_cache_free(cache, xvm);
@@ -924,7 +921,7 @@ errout:
 
 	kfree(mbidv);
 
-	return err;
+	return rc;
 }
 
 /**
@@ -932,14 +929,14 @@ errout:
  * @unit:
  * @arg:
  */
-merr_t mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
+int mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
 	struct mpc_rgnmap  *rm;
 	struct mpc_xvm     *xvm;
 	u64                 rgn;
 
 	if (!unit || !ioc)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	rgn = ioc->im_offset >> mpc_xvm_size_max;
 	rm = &unit->un_rgnmap;
@@ -958,19 +955,19 @@ merr_t mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	return 0;
 }
 
-merr_t mpioc_xvm_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
+int mpioc_xvm_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
 	struct mpc_xvm *xvm;
 	u64             rgn;
 
 	if (!unit || !ioc)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	rgn = ioc->im_offset >> mpc_xvm_size_max;
 
 	xvm = mpc_xvm_lookup(&unit->un_rgnmap, rgn);
 	if (!xvm)
-		return merr(ENOENT);
+		return -ENOENT;
 
 	mpc_reap_xvm_evict(xvm);
 
@@ -979,19 +976,19 @@ merr_t mpioc_xvm_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	return 0;
 }
 
-merr_t mpioc_xvm_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc)
+int mpioc_xvm_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
 	struct mpc_xvm *xvm;
 	u64             rgn;
 
 	if (!unit || !ioc)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	rgn = ioc->im_offset >> mpc_xvm_size_max;
 
 	xvm = mpc_xvm_lookup(&unit->un_rgnmap, rgn);
 	if (!xvm)
-		return merr(ENOENT);
+		return -ENOENT;
 
 	ioc->im_vssp = mpc_xvm_pglen(xvm);
 	ioc->im_rssp = atomic64_read(&xvm->xvm_nrpages);
@@ -1001,11 +998,10 @@ merr_t mpioc_xvm_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	return 0;
 }
 
-merr_t mcache_init(void)
+int mcache_init(void)
 {
-	size_t      sz;
-	merr_t      err;
-	int         i;
+	size_t  sz;
+	int     rc, i;
 
 	mpc_xvm_max = clamp_t(uint, mpc_xvm_max, 1024, 1u << 30);
 	mpc_xvm_size_max = clamp_t(ulong, mpc_xvm_size_max, 27, 32);
@@ -1016,9 +1012,9 @@ merr_t mcache_init(void)
 	mpc_xvm_cache[0] = kmem_cache_create("mpool_xvm_0", mpc_xvm_cachesz[0], 0,
 					     SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 	if (!mpc_xvm_cache[0]) {
-		err = merr(ENOMEM);
-		mp_pr_err("mpc xvm cache 0 create failed", err);
-		return err;
+		rc = -ENOMEM;
+		mp_pr_err("mpc xvm cache 0 create failed", rc);
+		return rc;
 	}
 
 	sz = sizeof(struct mpc_mbinfo) * 32;
@@ -1027,21 +1023,21 @@ merr_t mcache_init(void)
 	mpc_xvm_cache[1] = kmem_cache_create("mpool_xvm_1", mpc_xvm_cachesz[1], 0,
 					     SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 	if (!mpc_xvm_cache[1]) {
-		err = merr(ENOMEM);
-		mp_pr_err("mpc xvm cache 1 create failed", err);
+		rc = -ENOMEM;
+		mp_pr_err("mpc xvm cache 1 create failed", rc);
 		goto errout;
 	}
 
 	mpc_wq_trunc = alloc_workqueue("mpc_wq_trunc", WQ_UNBOUND, 16);
 	if (!mpc_wq_trunc) {
-		err = merr(ENOMEM);
-		mp_pr_err("trunc workqueue alloc failed", err);
+		rc = -ENOMEM;
+		mp_pr_err("trunc workqueue alloc failed", rc);
 		goto errout;
 	}
 
-	err = mpc_reap_create(&mpc_reap);
-	if (err) {
-		mp_pr_err("reap create failed", err);
+	rc = mpc_reap_create(&mpc_reap);
+	if (rc) {
+		mp_pr_err("reap create failed", rc);
 		goto errout;
 	}
 
@@ -1053,8 +1049,8 @@ merr_t mcache_init(void)
 
 		mpc_wq_rav[i] = alloc_workqueue(name, 0, maxactive);
 		if (!mpc_wq_rav[i]) {
-			err = merr(ENOMEM);
-			mp_pr_err("mpctl ra workqueue alloc failed", err);
+			rc = -ENOMEM;
+			mp_pr_err("mpctl ra workqueue alloc failed", rc);
 			goto errout;
 		}
 	}
@@ -1063,12 +1059,12 @@ merr_t mcache_init(void)
 
 errout:
 	mcache_exit();
-	return err;
+	return rc;
 }
 
 void mcache_exit(void)
 {
-	int    i;
+	int i;
 
 	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
 		if (mpc_wq_rav[i])

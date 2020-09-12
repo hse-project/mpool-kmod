@@ -6,8 +6,6 @@
 #ifndef MPOOL_REAPER_H
 #define MPOOL_REAPER_H
 
-#include "merr.h"
-
 #define MPC_REAP_PARAMS_CNT    3
 
 struct mpc_reap;
@@ -17,9 +15,9 @@ struct mpc_xvm;
  * mpc_reap_create() - Allocate and initialize reap data strctures
  * @reapp: Ptr to initialized reap structure.
  *
- * Return: ENOMEM if the allocaiton fails.
+ * Return: -ENOMEM if the allocaiton fails.
  */
-merr_t mpc_reap_create(struct mpc_reap **reapp);
+int mpc_reap_create(struct mpc_reap **reapp);
 
 /**
  * mpc_reap_destroy() - Destroy the given reaper

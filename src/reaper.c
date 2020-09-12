@@ -489,9 +489,9 @@ static void mpc_reap_mempct_init(struct mpc_reap *reap)
  * mpc_reap_create() - Allocate and initialize reap data strctures
  * @reapout: Initialized reap structure.
  *
- * Returns ENOMEM if the allocation fails.
+ * Returns -ENOMEM if the allocation fails.
  */
-merr_t mpc_reap_create(struct mpc_reap **reapp)
+int mpc_reap_create(struct mpc_reap **reapp)
 {
 	struct mpc_reap_elem   *elem;
 	struct mpc_reap        *reap;
@@ -503,12 +503,12 @@ merr_t mpc_reap_create(struct mpc_reap **reapp)
 
 	reap = kzalloc(roundup_pow_of_two(sizeof(*reap)), GFP_KERNEL);
 	if (!reap)
-		return merr(ENOMEM);
+		return -ENOMEM;
 
 	reap->reap_wq = alloc_workqueue("mpc_reap", flags, REAP_ELEM_MAX + 1);
 	if (!reap->reap_wq) {
 		kfree(reap);
-		return merr(ENOMEM);
+		return -ENOMEM;
 	}
 
 	atomic_set(&reap->reap_lwm, 0);

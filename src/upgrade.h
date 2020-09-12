@@ -76,8 +76,8 @@
  */
 struct upgrade_history {
 	size_t                      uh_size;
-	merr_t (*uh_unpack)(void *out, const char *inbuf);
-	merr_t (*uh_conv)(const void *pre, void *cur);
+	int (*uh_unpack)(void *out, const char *inbuf);
+	int (*uh_conv)(const void *pre, void *cur);
 	enum sb_descriptor_ver_omf  uh_sbver;
 	struct omf_mdcver          uh_mdcver;
 };

@@ -9,8 +9,6 @@
 #include <linux/uio.h>
 
 #include "uuid.h"
-#include "merr.h"
-
 #include "mpool_ioctl.h"
 
 /* Returns PD length in bytes. */
@@ -148,19 +146,19 @@ _Static_assert((PD_DEV_STATE_LAST < 256), "enum pd_state must fit in uint8_t");
  *
  * Return:
  */
-merr_t pd_dev_open(const char *path, struct pd_dev_parm *dparm, struct pd_prop *pd_prop);
+int pd_dev_open(const char *path, struct pd_dev_parm *dparm, struct pd_prop *pd_prop);
 
 /**
  * pd_dev_close() -
  * @pd:
  */
-merr_t pd_dev_close(struct pd_dev_parm *dparm);
+int pd_dev_close(struct pd_dev_parm *dparm);
 
 /**
  * pd_dev_flush() -
  * @pd:
  */
-merr_t pd_dev_flush(struct pd_dev_parm *dparm);
+int pd_dev_flush(struct pd_dev_parm *dparm);
 
 /**
  * pd_bio_erase() -
@@ -171,7 +169,7 @@ merr_t pd_dev_flush(struct pd_dev_parm *dparm);
  *
  * Return:
  */
-merr_t pd_zone_erase(struct pd_dev_parm *dparm, u64 zaddr, u32 zonecnt, bool reads_erased);
+int pd_zone_erase(struct pd_dev_parm *dparm, u64 zaddr, u32 zonecnt, bool reads_erased);
 
 /*
  * pd API functions - device dependent operations
@@ -188,14 +186,8 @@ merr_t pd_zone_erase(struct pd_dev_parm *dparm, u64 zaddr, u32 zonecnt, bool rea
  *
  * Return:
  */
-merr_t
-pd_zone_pwritev(
-	struct pd_dev_parm     *dparm,
-	const struct kvec      *iov,
-	int                     iovcnt,
-	u64                     zaddr,
-	loff_t                  boff,
-	int                     opflags);
+int pd_zone_pwritev(struct pd_dev_parm *dparm, const struct kvec *iov,
+		    int iovcnt, u64 zaddr, loff_t boff, int opflags);
 
 /**
  * pd_zone_pwritev_sync() -
@@ -207,13 +199,8 @@ pd_zone_pwritev(
  *
  * Return:
  */
-merr_t
-pd_zone_pwritev_sync(
-	struct pd_dev_parm     *dparm,
-	const struct kvec      *iov,
-	int                     iovcnt,
-	u64                     zaddr,
-	loff_t                  boff);
+int pd_zone_pwritev_sync(struct pd_dev_parm *dparm, const struct kvec *iov,
+			 int iovcnt, u64 zaddr, loff_t boff);
 
 /**
  * pd_zone_preadv() -
@@ -225,13 +212,8 @@ pd_zone_pwritev_sync(
  *
  * Return:
  */
-merr_t
-pd_zone_preadv(
-	struct pd_dev_parm     *dparm,
-	const struct kvec      *iov,
-	int                     iovcnt,
-	u64                     zaddr,
-	loff_t                  boff);
+int pd_zone_preadv(struct pd_dev_parm *dparm, const struct kvec *iov,
+		   int iovcnt, u64 zaddr, loff_t boff);
 
 /**
  * pd_dev_set_unavail() -
@@ -242,8 +224,7 @@ pd_zone_preadv(
  */
 void pd_dev_set_unavail(struct pd_dev_parm *dparm, struct omf_devparm_descriptor *omf_devparm);
 
-merr_t pd_init(void);
-
-void pd_exit(void);
+int pd_init(void) __cold;
+void pd_exit(void) __cold;
 
 #endif /* MPOOL_PD_H */

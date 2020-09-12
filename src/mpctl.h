@@ -53,8 +53,7 @@ static inline struct mpc_reap *dev_to_reap(struct device *dev)
 	return dev_to_unit(dev)->un_ds_reap;
 }
 
-merr_t mpctl_init(void);
-
-void mpctl_exit(void);
+int mpctl_init(void) __cold;
+void mpctl_exit(void) __cold;
 
 #endif /* MPOOL_MPCTL_H */

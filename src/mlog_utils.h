@@ -12,8 +12,6 @@
 #include <linux/uio.h>
 #include <linux/mutex.h>
 
-#include "merr.h"
-
 struct pmd_layout;
 struct pmd_layout_mlpriv;
 struct mpool_descriptor;
@@ -43,7 +41,7 @@ mlog_extract_fsetparms(
 	u16                *nsecmb,
 	u16                *nseclpg);
 
-merr_t mlog_stat_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool csem);
+int mlog_stat_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool csem);
 
 void mlog_stat_free(struct pmd_layout *layout);
 
@@ -52,7 +50,7 @@ mlog_read_iter_init(struct pmd_layout *layout, struct mlog_stat *lstat, struct m
 
 void mlog_stat_init_common(struct pmd_layout *layout, struct mlog_stat *lstat);
 
-merr_t
+int
 mlog_populate_rbuf(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *layout,
@@ -63,14 +61,14 @@ mlog_populate_rbuf(
 void
 mlog_getprops_cmn(struct mpool_descriptor *mp, struct pmd_layout *layout, struct mlog_props *prop);
 
-merr_t mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser);
+int mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser);
 
 s64 mlog_append_dmax(struct pmd_layout *layout);
 
-merr_t
+int
 mlog_update_append_idx(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser);
 
-merr_t
+int
 mlog_logblock_load(
 	struct mpool_descriptor     *mp,
 	struct mlog_read_iter       *lri,

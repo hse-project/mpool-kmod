@@ -6,7 +6,6 @@
 #ifndef MPOOL_SB_PRIV_H
 #define MPOOL_SB_PRIV_H
 
-#include "merr.h"
 #include "mpool_ioctl.h"
 
 struct pd_dev_parm;
@@ -62,9 +61,9 @@ int sb_magic_check(struct pd_dev_parm *dparm);
  *
  * Note: only pd.status and pd.parm must be set; no other pd fields accessed.
  *
- * Return: 0 if successful; merr_t otherwise
+ * Return: 0 if successful; -errno otherwise
  */
-merr_t sb_write_new(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb);
+int sb_write_new(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb);
 
 /**
  * sb_write_update() - update superblock
@@ -77,9 +76,9 @@ merr_t sb_write_new(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb);
  *
  * Note: only pd.status and pd.parm must be set; no other pd fields accessed.
  *
- * Return: 0 if successful; merr_t otherwise
+ * Return: 0 if successful; -errno otherwise
  */
-merr_t sb_write_update(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb);
+int sb_write_update(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb);
 
 /**
  * sb_erase() - erase superblock
@@ -89,9 +88,9 @@ merr_t sb_write_update(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb);
  *
  * Note: only pd.status and pd.parm must be set; no other pd fields accessed.
  *
- * Return: 0 if successful; merr_t otherwise
+ * Return: 0 if successful; -errno otherwise
  */
-merr_t sb_erase(struct pd_dev_parm *dparm);
+int sb_erase(struct pd_dev_parm *dparm);
 
 /**
  * sb_read() - read superblock
@@ -103,9 +102,9 @@ merr_t sb_erase(struct pd_dev_parm *dparm);
  *
  * Note: only pd.status and pd.parm must be set; no other pd fields accessed.
  *
- * Return: 0 if successful; merr_t otherwise
+ * Return: 0 if successful; -errno otherwise
  */
-merr_t sb_read(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb, u16 *omf_ver, bool force);
+int sb_read(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb, u16 *omf_ver, bool force);
 
 /**
  * sbutil_mdc0_clear() - clear mdc0 of superblock
@@ -145,10 +144,6 @@ void sbutil_mdc0_copy(struct omf_sb_descriptor *tgtsb, struct omf_sb_descriptor 
  */
 int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb);
 
-merr_t sb_init(void);
-
-void sb_exit(void);
-
 /**
  * sb_zones_for_sbs() - compute how many zones are needed to contain the superblocks.
  * @pd_prop:
@@ -161,5 +156,8 @@ static inline u32 sb_zones_for_sbs(struct pd_prop *pd_prop)
 
 	return (2 * (SB_AREA_SZ + MDC0MD_AREA_SZ) + (zonebyte - 1)) / zonebyte;
 }
+
+int sb_init(void) __cold;
+void sb_exit(void) __cold;
 
 #endif /* MPOOL_SB_PRIV_H */

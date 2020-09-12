@@ -12,9 +12,7 @@
 #include <linux/rwsem.h>
 #include <linux/workqueue.h>
 
-#include "merr.h"
 #include "uuid.h"
-
 #include "mpool_ioctl.h"
 #include "omf_if.h"
 #include "mlog.h"
@@ -235,15 +233,11 @@ struct mdc_credit_set {
  * Note:
  * Object is not persistent until committed; allocation can be aborted.
  *
- * Return: %0 if successful, merr_t otherwise
+ * Return: %0 if successful, -errno otherwise
  */
-merr_t
-pmd_obj_alloc(
-	struct mpool_descriptor    *mp,
-	enum obj_type_omf           otype,
-	struct pmd_obj_capacity    *ocap,
-	enum mp_media_classp        mclassp,
-	struct pmd_layout         **layoutp);
+int pmd_obj_alloc(struct mpool_descriptor *mp, enum obj_type_omf otype,
+		  struct pmd_obj_capacity *ocap, enum mp_media_classp mclassp,
+		  struct pmd_layout **layoutp);
 
 
 /**
@@ -260,15 +254,10 @@ pmd_obj_alloc(
  * Note:
  * Object is not persistent until committed; allocation can be aborted.
  *
- * Return: %0 if successful; merr_t otherwise
+ * Return: %0 if successful; -errno otherwise
  */
-merr_t
-pmd_obj_realloc(
-	struct mpool_descriptor    *mp,
-	u64                         objid,
-	struct pmd_obj_capacity    *ocap,
-	enum mp_media_classp        mclassp,
-	struct pmd_layout         **layoutp);
+int pmd_obj_realloc(struct mpool_descriptor *mp, u64 objid, struct pmd_obj_capacity *ocap,
+		    enum mp_media_classp mclassp, struct pmd_layout **layoutp);
 
 
 /**
@@ -280,9 +269,9 @@ pmd_obj_realloc(
  * can retry commit or abort; object cannot be committed while in erasing or
  * aborting state; caller MUST NOT hold pmd_obj_*lock() on layout.
  *
- * Return: %0 if successful, merr_t otherwise
+ * Return: %0 if successful, -errno otherwise
  */
-merr_t pmd_obj_commit(struct mpool_descriptor *mp, struct pmd_layout *layout);
+int pmd_obj_commit(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 /**
  * pmd_obj_abort() - Discard un-committed object.
@@ -292,9 +281,9 @@ merr_t pmd_obj_commit(struct mpool_descriptor *mp, struct pmd_layout *layout);
  * Discard uncommitted object; caller MUST NOT hold pmd_obj_*lock() on
  * layout; if successful layout is invalid after call.
  *
- * Return: %0 if successful; merr_t otherwise
+ * Return: %0 if successful; -errno otherwise
  */
-merr_t pmd_obj_abort(struct mpool_descriptor *mp, struct pmd_layout *layout);
+int pmd_obj_abort(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 /**
  * pmd_obj_delete() - Delete committed object.
@@ -304,9 +293,9 @@ merr_t pmd_obj_abort(struct mpool_descriptor *mp, struct pmd_layout *layout);
  * Delete committed object; caller MUST NOT hold pmd_obj_*lock() on layout;
  * if successful layout is invalid.
  *
- * Return: %0 if successful, merr_t otherwise
+ * Return: %0 if successful, -errno otherwise
  */
-merr_t pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout);
+int pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 /**
  * pmd_obj_erase() -
@@ -318,9 +307,9 @@ merr_t pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout);
  * in layout accordingly; object must be in committed state; caller MUST hold
  * pmd_obj_wrlock() on layout.
  *
- * Return: %0 if successful, merr_t otherwise
+ * Return: %0 if successful, -errno otherwise
  */
-merr_t pmd_obj_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, u64 gen);
+int pmd_obj_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, u64 gen);
 
 /**
  * pmd_obj_find_get() - Get a reference for a layout for objid.
@@ -420,39 +409,21 @@ pmd_layout_alloc(
  */
 void pmd_layout_release(struct kref *refp);
 
-merr_t
-pmd_layout_rw(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	const struct kvec          *iov,
-	int                         iovcnt,
-	u64                         boff,
-	int                         flags,
-	u8                          rw);
+int pmd_layout_rw(struct mpool_descriptor *mp, struct pmd_layout *layout,
+		  const struct kvec *iov, int iovcnt, u64 boff, int flags, u8 rw);
 
 struct mpool_dev_info *pmd_layout_pd_get(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 u64 pmd_layout_cap_get(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
-merr_t pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout);
+int pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
-merr_t
-pmd_obj_alloc_cmn(
-	struct mpool_descriptor    *mp,
-	u64                         objid,
-	enum obj_type_omf           otype,
-	struct pmd_obj_capacity    *ocap,
-	enum mp_media_classp        mclass,
-	int                         realloc,
-	bool                        needref,
-	struct pmd_layout         **layoutp);
+int pmd_obj_alloc_cmn(struct mpool_descriptor *mp, u64 objid, enum obj_type_omf otype,
+		      struct pmd_obj_capacity *ocap, enum mp_media_classp mclass,
+		      int realloc, bool needref, struct pmd_layout **layoutp);
 
-void
-pmd_update_obj_stats(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	struct pmd_mdc_info        *cinfo,
-	enum pmd_obj_op             op);
+void pmd_update_obj_stats(struct mpool_descriptor *mp, struct pmd_layout *layout,
+			  struct pmd_mdc_info *cinfo, enum pmd_obj_op op);
 
 void pmd_obj_rdlock(struct pmd_layout *layout);
 
@@ -472,11 +443,10 @@ struct pmd_layout *pmd_co_insert(struct pmd_mdc_info *cinfo, struct pmd_layout *
 
 struct pmd_layout *pmd_co_remove(struct pmd_mdc_info *cinfo, struct pmd_layout *layout);
 
-merr_t pmd_smap_insert(struct mpool_descriptor *mp, struct pmd_layout *layout);
+int pmd_smap_insert(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
-merr_t pmd_init(void);
-
-void pmd_exit(void);
+int pmd_init(void) __cold;
+void pmd_exit(void) __cold;
 
 static inline bool objtype_user(enum obj_type_omf otype)
 {

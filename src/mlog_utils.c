@@ -285,19 +285,18 @@ void mlog_stat_init_common(struct pmd_layout *layout, struct mlog_stat *lstat)
 }
 
 /**
- * mlog_rw_raw:
- *
- * Called by mpctl kernel for mlog IO. The scatter-gather buffer must contain
- * framed mlog data (this is done in user space for user space mlogs).
- *
+ * mlog_rw_raw() - Called by mpctl kernel for mlog IO.
  * @mp:    mpool descriptor
  * @mlh:   mlog descriptor
  * iov:    iovec
  * iovcnt: iov cnt
  * boff:   IO offset
  * rw:     MPOOL_OP_READ or MPOOL_OP_WRITE
+ *
+ * The scatter-gather buffer must contain
+ * framed mlog data (this is done in user space for user space mlogs).
  */
-merr_t
+int
 mlog_rw_raw(
 	struct mpool_descriptor    *mp,
 	struct mlog_descriptor     *mlh,
@@ -306,26 +305,25 @@ mlog_rw_raw(
 	u64                         boff,
 	u8                          rw)
 {
-	struct pmd_layout  *layout;
-	merr_t              err;
-	int                 flags;
+	struct pmd_layout *layout;
+	int flags;
+	int rc;
 
 	layout = mlog2layout(mlh);
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	flags = (rw == MPOOL_OP_WRITE) ? REQ_FUA : 0;
 
 	pmd_obj_wrlock(layout);
-	err = pmd_layout_rw(mp, layout, iov, iovcnt, boff, flags, rw);
+	rc = pmd_layout_rw(mp, layout, iov, iovcnt, boff, flags, rw);
 	pmd_obj_wrunlock(layout);
 
-	return err;
+	return rc;
 }
 
 /**
- * mlog_rw:
- *
+ * mlog_rw() -
  * @mp:      mpool descriptor
  * @mlh:     mlog descriptor
  * iov:      iovec
@@ -334,7 +332,7 @@ mlog_rw_raw(
  * rw:       MPOOL_OP_READ or MPOOL_OP_WRITE
  * skip_ser: client guarantees serialization
  */
-static merr_t
+static int
 mlog_rw(
 	struct mpool_descriptor *mp,
 	struct mlog_descriptor  *mlh,
@@ -348,10 +346,10 @@ mlog_rw(
 
 	layout = mlog2layout(mlh);
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	if (!skip_ser) {
-		int    flags = (rw == MPOOL_OP_WRITE) ? REQ_FUA : 0;
+		int flags = (rw == MPOOL_OP_WRITE) ? REQ_FUA : 0;
 
 		return pmd_layout_rw(mp, layout, iov, iovcnt, boff, flags, rw);
 	}
@@ -360,22 +358,20 @@ mlog_rw(
 }
 
 /**
- * mlog_stat_init()
+ * mlog_stat_init() - Allocate and init log stat struct for mlog layout.
  *
- * Allocate and init log stat struct for mlog layout.
- *
- * Returns: 0 if successful, merr_t otherwise
+ * Returns: 0 if successful, -errno otherwise
  */
-merr_t mlog_stat_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool csem)
+int mlog_stat_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool csem)
 {
 	struct pmd_layout      *layout = mlog2layout(mlh);
 	struct mlog_stat       *lstat;
 	struct mlog_fsetparms   mfp;
 	size_t                  bufsz;
-	merr_t                  err;
+	int rc;
 
 	if (!layout)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	lstat = &layout->eld_lstat;
 
@@ -386,10 +382,10 @@ merr_t mlog_stat_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, 
 
 	lstat->lst_abuf = kzalloc(bufsz, GFP_KERNEL);
 	if (!lstat->lst_abuf) {
-		err = merr(ENOMEM);
+		rc = -ENOMEM;
 		mp_pr_err("mpool %s, allocating mlog 0x%lx status failed %zu",
-			  err, mp->pds_name, (ulong)layout->eld_objid, bufsz);
-		return err;
+			  rc, mp->pds_name, (ulong)layout->eld_objid, bufsz);
+		return rc;
 	}
 
 	lstat->lst_rbuf = lstat->lst_abuf + mfp.mfp_nlpgmb;
@@ -400,19 +396,17 @@ merr_t mlog_stat_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, 
 }
 
 /**
- * mlog_setup_buf()
- *
- * Build an iovec list to read into an mlog read buffer, or write from
- * an mlog append buffer.  In the read case, the read buffer pages will be
- * allocated if not already populated.
- *
+ * mlog_setup_buf() - Build an iovec list to read into an mlog read buffer, or write from
+ * an mlog append buffer.
  * @lstat:   mlog_stat
  * @riov:    iovec (output)
  * @iovcnt:  number of iovecs
  * @l_iolen: IO length for the last log page in the buffer
  * @op:      MPOOL_OP_READ or MPOOL_OP_WRITE
+ *
+ * In the read case, the read buffer pages will be allocated if not already populated.
  */
-static merr_t
+static int
 mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u32 l_iolen, u8 op)
 {
 	struct kvec    *iov = *riov;
@@ -430,7 +424,7 @@ mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u32 l_io
 
 		iov = kcalloc(iovcnt, sizeof(*iov), GFP_KERNEL);
 		if (!iov)
-			return merr(ENOMEM);
+			return -ENOMEM;
 
 		alloc_iov = true;
 		*riov = iov;
@@ -481,7 +475,7 @@ mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u32 l_io
 				*riov = NULL;
 			}
 
-			return merr(ENOMEM);
+			return -ENOMEM;
 		}
 
 		/*
@@ -500,6 +494,11 @@ mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u32 l_io
 /**
  * mlog_populate_abuf() - Makes append offset page-aligned and performs the
  * read operation in the read-modify-write cycle.
+ * @mp:       mpool descriptor
+ * @layout:   layout descriptor
+ * @soff:     sector/LB offset
+ * @buf:      buffer to populate. Size of this buffer must be MLOG_LPGSZ(lstat).
+ * @skip_ser: client guarantees serialization
  *
  * This is to ensure that IO-requests to the device are always 4K-aligned.
  * The read-modify-write cycle happens *only* if the first append post mlog
@@ -507,14 +506,8 @@ mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u32 l_io
  * read-modify-write cycle doesn't happen, as the 4k-aligned version of the
  * flush set algorithm ensures 4k-alignment of sector offsets at the start
  * of each log page.
- *
- * @mp:       mpool descriptor
- * @layout:   layout descriptor
- * @soff:     sector/LB offset
- * @buf:      buffer to populate. Size of this buffer must be MLOG_LPGSZ(lstat).
- * @skip_ser: client guarantees serialization
  */
-static merr_t
+static int
 mlog_populate_abuf(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *layout,
@@ -525,7 +518,7 @@ mlog_populate_abuf(
 	struct mlog_stat   *lstat = &layout->eld_lstat;
 	struct kvec         iov;
 
-	merr_t err;
+	int    rc;
 	off_t  off;
 	u32    leadb;
 	u16    sectsz;
@@ -549,12 +542,12 @@ mlog_populate_abuf(
 	off = *soff * sectsz;
 	assert(IS_ALIGNED(off, MLOG_LPGSZ(lstat)));
 
-	err = mlog_rw(mp, layout2mlog(layout), &iov, iovcnt, off, MPOOL_OP_READ, skip_ser);
-	if (err) {
+	rc = mlog_rw(mp, layout2mlog(layout), &iov, iovcnt, off, MPOOL_OP_READ, skip_ser);
+	if (rc) {
 		mp_pr_err("mpool %s, mlog 0x%lx, read IO failed, iovcnt: %u, off: 0x%lx",
-			  err, mp->pds_name, (ulong)layout->eld_objid, iovcnt, off);
+			  rc, mp->pds_name, (ulong)layout->eld_objid, iovcnt, off);
 
-		return err;
+		return rc;
 	}
 
 	memset(&buf[leadb], 0, MLOG_LPGSZ(lstat) - leadb);
@@ -564,22 +557,23 @@ mlog_populate_abuf(
 
 /**
  * mlog_populate_rbuf() - Fill the read buffer after aligning the read offset
- * to page boundary. Having the read offsets page-aligned avoids unnecessary
+ * to page boundary.
+ * @mp:       mpool descriptor
+ * @layout:   layout descriptor
+ * @nsec:     number of sectors to populate
+ * @soff:     start sector/LB offset
+ * @skip_ser: client guarantees serialization
+ *
+ * Having the read offsets page-aligned avoids unnecessary
  * complexity at the pd layer.
  *
  * In the worst case, for 512 byte sectors, we would end up reading 7
  * additional sectors, which is acceptable. There won't be any overhead for
  * 4 KiB sectors as they are naturally page-aligned.
  *
- * Caller must hold the write lock on the layout
- *
- * @mp:       mpool descriptor
- * @layout:   layout descriptor
- * @nsec:     number of sectors to populate
- * @soff:     start sector/LB offset
- * @skip_ser: client guarantees serialization
+ * Caller must hold the write lock on the layout.
  */
-merr_t
+int
 mlog_populate_rbuf(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *layout,
@@ -590,7 +584,7 @@ mlog_populate_rbuf(
 	struct mlog_stat   *lstat = &layout->eld_lstat;
 	struct kvec        *iov = NULL;
 
-	merr_t err;
+	int    rc;
 	off_t  off;
 	u32    l_iolen;
 	u16    maxsec;
@@ -610,26 +604,26 @@ mlog_populate_rbuf(
 	iovcnt  = (*nsec + nseclpg - 1) / nseclpg;
 	l_iolen = MLOG_LPGSZ(lstat);
 
-	err = mlog_setup_buf(lstat, &iov, iovcnt, l_iolen, MPOOL_OP_READ);
-	if (err) {
+	rc = mlog_setup_buf(lstat, &iov, iovcnt, l_iolen, MPOOL_OP_READ);
+	if (rc) {
 		mp_pr_err("mpool %s, mlog 0x%lx setup failed, iovcnt: %u, last iolen: %u",
-			  err, mp->pds_name, (ulong)layout->eld_objid, iovcnt, l_iolen);
+			  rc, mp->pds_name, (ulong)layout->eld_objid, iovcnt, l_iolen);
 
-		return err;
+		return rc;
 	}
 
 	off = *soff * sectsz;
 	assert(IS_ALIGNED(off, MLOG_LPGSZ(lstat)));
 
-	err = mlog_rw(mp, layout2mlog(layout), iov, iovcnt, off, MPOOL_OP_READ, skip_ser);
-	if (err) {
+	rc = mlog_rw(mp, layout2mlog(layout), iov, iovcnt, off, MPOOL_OP_READ, skip_ser);
+	if (rc) {
 		mp_pr_err("mpool %s, mlog 0x%lx populate rbuf, IO failed iovcnt: %u, off: 0x%lx",
-			  err, mp->pds_name, (ulong)layout->eld_objid, iovcnt, off);
+			  rc, mp->pds_name, (ulong)layout->eld_objid, iovcnt, off);
 
 		mlog_free_rbuf(lstat, 0, MLOG_NLPGMB(lstat) - 1);
 		kfree(iov);
 
-		return err;
+		return rc;
 	}
 
 	/*
@@ -646,16 +640,16 @@ mlog_populate_rbuf(
 
 /**
  * mlog_alloc_abufpg() - Allocate a log page at append buffer index 'abidx'.
- * If the sector size is 512B AND 4K-alignment is forced AND the append offset
- * at buffer index '0' is not 4K-aligned, then call mlog_populate_abuf().
- *
  * @mp:       mpool descriptor
  * @layout:   layout descriptor
  * @abidx:    allocate log page at index 'abidx'.
  * @skip_ser: client guarantees serialization
+ *
+ * If the sector size is 512B AND 4K-alignment is forced AND the append offset
+ * at buffer index '0' is not 4K-aligned, then call mlog_populate_abuf().
  */
-static merr_t
-mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *layout, u16 abidx, bool skip_ser)
+static int mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *layout,
+			     u16 abidx, bool skip_ser)
 {
 	struct mlog_stat   *lstat = &layout->eld_lstat;
 	char               *abuf;
@@ -664,18 +658,18 @@ mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *layout, u16 ab
 
 	abuf = (char *)get_zeroed_page(GFP_KERNEL);
 	if (!abuf)
-		return merr(ENOMEM);
+		return -ENOMEM;
 
 	assert(PAGE_ALIGNED(abuf));
 
 	lstat->lst_abuf[abidx] = abuf;
 
 	if (abidx == 0) {
-		merr_t err;
 		off_t  asoff;
 		off_t  wsoff;
 		u16    aoff;
 		u16    sectsz;
+		int    rc;
 
 		/* This path is taken *only* for the first append following an mlog_open(). */
 		sectsz = MLOG_SECSZ(lstat);
@@ -695,13 +689,13 @@ mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *layout, u16 ab
 		 *   first append post mlog_open.
 		 */
 		asoff = wsoff;
-		err = mlog_populate_abuf(mp, layout, &asoff, abuf, skip_ser);
-		if (err) {
+		rc = mlog_populate_abuf(mp, layout, &asoff, abuf, skip_ser);
+		if (rc) {
 			mlog_free_abuf(lstat, abidx, abidx);
 			mp_pr_err("mpool %s, mlog 0x%lx, making write offset %ld 4K-aligned failed",
-				  err, mp->pds_name, (ulong)layout->eld_objid, wsoff);
+				  rc, mp->pds_name, (ulong)layout->eld_objid, wsoff);
 
-			return err;
+			return rc;
 		}
 
 		assert(asoff <= wsoff);
@@ -715,19 +709,18 @@ mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *layout, u16 ab
 
 /**
  * mlog_flush_abuf() - Set up iovec and flush the append buffer to media.
- *
  * @mp:       mpool descriptor
  * @layout:   layout descriptor
  * @skip_ser: client guarantees serialization
  */
-static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser)
+static int mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser)
 {
 	struct mlog_stat   *lstat = &layout->eld_lstat;
 	struct kvec        *iov = NULL;
 
-	merr_t err;
 	off_t  off;
 	u32    l_iolen;
+	int    rc;
 	u16    abidx;
 	u16    sectsz;
 	u16    nseclpg;
@@ -737,12 +730,12 @@ static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
 	abidx   = lstat->lst_abidx;
 	l_iolen = MLOG_LPGSZ(lstat);
 
-	err = mlog_setup_buf(lstat, &iov, abidx + 1, l_iolen, MPOOL_OP_WRITE);
-	if (err) {
+	rc = mlog_setup_buf(lstat, &iov, abidx + 1, l_iolen, MPOOL_OP_WRITE);
+	if (rc) {
 		mp_pr_err("mpool %s, mlog 0x%lx flush, buf setup failed, iovcnt: %u, iolen: %u",
-			  err, mp->pds_name, (ulong)layout->eld_objid, abidx + 1, l_iolen);
+			  rc, mp->pds_name, (ulong)layout->eld_objid, abidx + 1, l_iolen);
 
-		return err;
+		return rc;
 	}
 
 	off = lstat->lst_asoff * sectsz;
@@ -750,13 +743,13 @@ static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
 	assert((IS_ALIGNED(off, MLOG_LPGSZ(lstat))) ||
 		(IS_SECPGA(lstat) && IS_ALIGNED(off, MLOG_SECSZ(lstat))));
 
-	err = mlog_rw(mp, layout2mlog(layout), iov, abidx + 1, off, MPOOL_OP_WRITE, skip_ser);
-	if (err) {
+	rc = mlog_rw(mp, layout2mlog(layout), iov, abidx + 1, off, MPOOL_OP_WRITE, skip_ser);
+	if (rc) {
 		mp_pr_err("mpool %s, mlog 0x%lx flush append buf, IO failed iovcnt %u, off 0x%lx",
-			  err, mp->pds_name, (ulong)layout->eld_objid, abidx + 1, off);
+			  rc, mp->pds_name, (ulong)layout->eld_objid, abidx + 1, off);
 		kfree(iov);
 
-		return err;
+		return rc;
 	}
 
 	kfree(iov);
@@ -765,9 +758,7 @@ static merr_t mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
 }
 
 /**
- * mlog_flush_posthdlr_4ka() - Handles both successful and failed flush for
- * 512B sectors with 4K-Alignment.
- *
+ * mlog_flush_posthdlr_4ka() - Handles both successful and failed flush for 512B sectors with 4K-Alignment.
  * @layout: layout descriptor
  * @fsucc:  flush status
  */
@@ -938,26 +929,22 @@ exit2:
 }
 
 /**
- * mlog_logblocks_hdrpack() - Called prior to CFS flush to pack log
- * block header in all log blocks in the append buffer.
- *
+ * mlog_logblocks_hdrpack() -  Pack log block header in all log blocks in the append buffer.
  * @layout: object layout
+ *
+ * Called prior to CFS flush
  */
-static merr_t mlog_logblocks_hdrpack(struct pmd_layout *layout)
+static int mlog_logblocks_hdrpack(struct pmd_layout *layout)
 {
 	struct omf_logblock_header lbh;
 	struct mlog_stat          *lstat = &layout->eld_lstat;
 
-	merr_t err;
 	off_t  lpgoff;
 	u32    pfsetid;
 	u32    cfsetid;
-	u16    idx;
-	u16    abidx;
-	u16    sectsz;
-	u16    nseclpg;
-	u16    sec;
-	u16    start;
+	u16    idx, abidx;
+	u16    sectsz, nseclpg;
+	u16    sec, start;
 
 	sectsz  = MLOG_SECSZ(lstat);
 	nseclpg = MLOG_NSECLPG(lstat);
@@ -977,6 +964,8 @@ static merr_t mlog_logblocks_hdrpack(struct pmd_layout *layout)
 			nseclpg = lstat->lst_wsoff - (nseclpg * abidx + lstat->lst_asoff) + 1;
 
 		for (sec = start; sec < nseclpg; sec++) {
+			int rc;
+
 			lbh.olh_pfsetid = pfsetid;
 			lbh.olh_cfsetid = cfsetid;
 			mpool_uuid_copy(&lbh.olh_magic, &layout->eld_uuid);
@@ -984,12 +973,12 @@ static merr_t mlog_logblocks_hdrpack(struct pmd_layout *layout)
 			lpgoff = sec * sectsz;
 
 			/* Pack the log block header. */
-			err = omf_logblock_header_pack_htole(&lbh, &lstat->lst_abuf[idx][lpgoff]);
-			if (err) {
+			rc = omf_logblock_header_pack_htole(&lbh, &lstat->lst_abuf[idx][lpgoff]);
+			if (rc) {
 				mp_pr_err("mlog packing lbh failed, log pg idx %u, vers %u failed",
-					  err, idx, lbh.olh_vers);
+					  rc, idx, lbh.olh_vers);
 
-				return err;
+				return rc;
 			}
 
 			/* If there's more than one sector to flush, pfsetid is set to cfsetid. */
@@ -1001,18 +990,16 @@ static merr_t mlog_logblocks_hdrpack(struct pmd_layout *layout)
 }
 
 /**
- * mlog_logblocks_flush() - Flush CFS and handle both successful and
- * failed flush.
- *
+ * mlog_logblocks_flush() - Flush CFS and handle both successful and failed flush.
  * @mp:       mpool descriptor
  * @layout:   layout descriptor
  * @skip_ser: client guarantees serialization
  */
-merr_t mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser)
+int mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
 
-	merr_t err;
+	int    rc;
 	bool   fsucc = true;
 	int    start;
 	int    end;
@@ -1021,19 +1008,19 @@ merr_t mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layo
 	abidx = lstat->lst_abidx;
 
 	/* Pack log block header in all the log blocks. */
-	err = mlog_logblocks_hdrpack(layout);
-	if (err) {
+	rc = mlog_logblocks_hdrpack(layout);
+	if (rc) {
 		mp_pr_err("mpool %s, mlog 0x%lx packing header failed",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
 
 	} else {
-		err = mlog_flush_abuf(mp, layout, skip_ser);
-		if (err)
+		rc = mlog_flush_abuf(mp, layout, skip_ser);
+		if (rc)
 			mp_pr_err("mpool %s, mlog 0x%lx log block flush failed",
-				  err, mp->pds_name, (ulong)layout->eld_objid);
+				  rc, mp->pds_name, (ulong)layout->eld_objid);
 	}
 
-	if (err) {
+	if (rc) {
 		/* If flush failed, free all log pages except the first one. */
 		start = 1;
 		end   = abidx;
@@ -1057,7 +1044,7 @@ merr_t mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layo
 	else
 		mlog_flush_posthdlr(layout, fsucc);
 
-	return err;
+	return rc;
 }
 
 /**
@@ -1101,18 +1088,18 @@ s64 mlog_append_dmax(struct pmd_layout *layout)
 }
 
 /**
- * mlog_update_append_idx()
+ * mlog_update_append_idx() -
  *
  * Check whether the active log block is full and update the append offsets
  * accordingly.
  *
- * Returns: 0 on success; merr_t otherwise
+ * Returns: 0 on success; -errno otherwise
  */
-merr_t mlog_update_append_idx(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser)
+int mlog_update_append_idx(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
 
-	merr_t err;
+	int    rc;
 	u16    sectsz;
 	u16    abidx;
 	u16    asidx;
@@ -1134,24 +1121,22 @@ merr_t mlog_update_append_idx(struct mpool_descriptor *mp, struct pmd_layout *la
 	abidx = lstat->lst_abidx;
 	if (!lstat->lst_abuf[abidx]) {
 		/* Allocate a log page at 'abidx' */
-		err = mlog_alloc_abufpg(mp, layout, abidx, skip_ser);
-		if (err)
-			return err;
+		rc = mlog_alloc_abufpg(mp, layout, abidx, skip_ser);
+		if (rc)
+			return rc;
 	}
 
 	return 0;
 }
 
 /**
- * mlog_logblocks_load_media() - Read log blocks from media, upto a maximum
- * of 1 MiB.
- *
+ * mlog_logblocks_load_media() - Read log blocks from media, upto a maximum of 1 MiB.
  * @mp:    mpool descriptor
  * @lri:   read iterator
  * @inbuf: buffer to into (output)
  */
-static merr_t
-mlog_logblocks_load_media(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char **inbuf)
+static int mlog_logblocks_load_media(struct mpool_descriptor *mp, struct mlog_read_iter *lri,
+				     char **inbuf)
 {
 	struct pmd_layout  *layout = lri->lri_layout;
 	struct mlog_stat   *lstat = &layout->eld_lstat;
@@ -1159,8 +1144,8 @@ mlog_logblocks_load_media(struct mpool_descriptor *mp, struct mlog_read_iter *lr
 	off_t  rsoff;
 	int    remsec;
 	u16    maxsec, nsecs, sectsz;
-	merr_t err;
 	bool   skip_ser = false;
+	int    rc;
 
 	mlog_extract_fsetparms(lstat, &sectsz, NULL, &maxsec, NULL);
 
@@ -1174,10 +1159,10 @@ mlog_logblocks_load_media(struct mpool_descriptor *mp, struct mlog_read_iter *lr
 		remsec = lstat->lst_asoff;
 
 	if (remsec == 0) {
-		err = merr(EBUG);
+		rc = -ENOTRECOVERABLE;
 		mp_pr_err("mpool %s, objid 0x%lx, mlog read cannot be served from read buffer",
-			  err, mp->pds_name, (ulong)lri->lri_layout->eld_objid);
-		return err;
+			  rc, mp->pds_name, (ulong)lri->lri_layout->eld_objid);
+		return rc;
 	}
 
 	lri->lri_rbidx = 0;
@@ -1191,14 +1176,14 @@ mlog_logblocks_load_media(struct mpool_descriptor *mp, struct mlog_read_iter *lr
 	if (layout->eld_flags & MLOG_OF_SKIP_SER)
 		skip_ser = true;
 
-	err = mlog_populate_rbuf(mp, lri->lri_layout, &nsecs, &rsoff, skip_ser);
-	if (err) {
+	rc = mlog_populate_rbuf(mp, lri->lri_layout, &nsecs, &rsoff, skip_ser);
+	if (rc) {
 		mp_pr_err("mpool %s, objid 0x%lx, mlog read failed, nsecs: %u, rsoff: 0x%lx",
-			  err, mp->pds_name, (ulong)lri->lri_layout->eld_objid, nsecs, rsoff);
+			  rc, mp->pds_name, (ulong)lri->lri_layout->eld_objid, nsecs, rsoff);
 
 		lstat->lst_rsoff = lstat->lst_rseoff = -1;
 
-		return err;
+		return rc;
 	}
 
 	/*
@@ -1217,19 +1202,16 @@ mlog_logblocks_load_media(struct mpool_descriptor *mp, struct mlog_read_iter *lr
 }
 
 /**
- * mlog_logblock_load_internal() - Read log blocks from either the read
- * buffer or media.
- *
+ * mlog_logblock_load_internal() - Read log blocks from either the read buffer or media.
  * @mp:    mpool descriptor
  * @lri:   read iterator
  * @inbuf: buffer to load into (output)
  */
-static merr_t
-mlog_logblock_load_internal(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char **inbuf)
+static int mlog_logblock_load_internal(struct mpool_descriptor *mp, struct mlog_read_iter *lri,
+				       char **inbuf)
 {
 	struct mlog_stat       *lstat;
 
-	merr_t err = 0;
 	off_t  rsoff;
 	off_t  rseoff;
 	off_t  soff;
@@ -1238,6 +1220,7 @@ mlog_logblock_load_internal(struct mpool_descriptor *mp, struct mlog_read_iter *
 	u16    nlpgs;
 	u16    nseclpg;
 	u16    rsidx;
+	int    rc;
 
 	lstat = &lri->lri_layout->eld_lstat;
 
@@ -1299,19 +1282,19 @@ mlog_logblock_load_internal(struct mpool_descriptor *mp, struct mlog_read_iter *
 	return 0;
 
 media_read:
-	err = mlog_logblocks_load_media(mp, lri, inbuf);
-	if (err) {
+	rc = mlog_logblocks_load_media(mp, lri, inbuf);
+	if (rc) {
 		mp_pr_err("mpool %s, objid 0x%lx, mlog new read failed",
-			  err, mp->pds_name, (ulong)lri->lri_layout->eld_objid);
+			  rc, mp->pds_name, (ulong)lri->lri_layout->eld_objid);
 
-		return err;
+		return rc;
 	}
 
 	return 0;
 }
 
 /**
- * mlog_loopback_load()
+ * mlog_loopback_load() - Load log block referenced by lri into lstat.
  *
  * Load log block referenced by lri into lstat, update lri if first read
  * from this log block, and return a pointer to the log block and a flag
@@ -1319,16 +1302,16 @@ media_read:
  *
  * Note: lri can reference the log block currently accumulating in lstat
  *
- * Returns: 0 on success; merr_t otherwise
- * One of the possible errno values in merr_t:
- * ENOMSG - if at end of log -- NB: requires an API change to signal without
+ * Returns: 0 on success; -errno otherwise
+ * One of the possible errno values:
+ * -ENOMSG - if at end of log -- NB: requires an API change to signal without
  */
-merr_t
-mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char **buf, bool *first)
+int mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri,
+		       char **buf, bool *first)
 {
-	merr_t             err    = 0;
-	struct mlog_stat  *lstat  = NULL;
-	int                lbhlen = 0;
+	struct mlog_stat *lstat = NULL;
+	int lbhlen = 0;
+	int rc = 0;
 
 	*buf = NULL;
 	*first = false;
@@ -1336,9 +1319,9 @@ mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char
 
 	if (!lri->lri_valid || lri->lri_soff > lstat->lst_wsoff) {
 		/* lri is invalid; prior checks should prevent this */
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("mpool %s, invalid offset %u %ld %ld",
-			  err, mp->pds_name, lri->lri_valid, lri->lri_soff, lstat->lst_wsoff);
+			  rc, mp->pds_name, lri->lri_valid, lri->lri_soff, lstat->lst_wsoff);
 	} else if ((lri->lri_soff == lstat->lst_wsoff) || (lstat->lst_asoff > -1 &&
 			lri->lri_soff >= lstat->lst_asoff &&
 			lri->lri_soff <= lstat->lst_wsoff)) {
@@ -1357,13 +1340,13 @@ mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char
 
 		if (lri->lri_soff == lstat->lst_wsoff && lri->lri_roff > lstat->lst_aoff) {
 			/* lri is invalid; prior checks should prevent this */
-			err = merr(EINVAL);
+			rc = -EINVAL;
 			mp_pr_err("mpool %s, invalid next offset %u %u",
-				  err, mp->pds_name, lri->lri_roff, lstat->lst_aoff);
+				  rc, mp->pds_name, lri->lri_roff, lstat->lst_aoff);
 			goto out;
 		} else if (lri->lri_soff == lstat->lst_wsoff && lri->lri_roff == lstat->lst_aoff) {
 			/* Hit end of log */
-			err = merr(ENOMSG);
+			rc = -ENOMSG;
 			goto out;
 		} else if (lri->lri_roff == OMF_LOGBLOCK_HDR_PACKLEN)
 			*first = true;
@@ -1377,8 +1360,8 @@ mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char
 		*buf = &lstat->lst_abuf[abidx][asidx * sectsz];
 	} else {
 		/* lri refers to an existing log block; fetch it if not cached. */
-		err = mlog_logblock_load_internal(mp, lri, buf);
-		if (!err) {
+		rc = mlog_logblock_load_internal(mp, lri, buf);
+		if (!rc) {
 			/*
 			 * NOTE: log block header length must be based
 			 * on version since not guaranteed to be the latest
@@ -1386,9 +1369,9 @@ mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char
 			lbhlen = omf_logblock_header_len_le(*buf);
 
 			if (lbhlen < 0) {
-				err = merr(ENODATA);
+				rc = -ENODATA;
 				mp_pr_err("mpool %s, getting header length failed %ld",
-					  err, mp->pds_name, (long)lbhlen);
+					  rc, mp->pds_name, (long)lbhlen);
 			} else {
 				if (!lri->lri_roff)
 					/* First read with handle from this log block. */
@@ -1401,19 +1384,18 @@ mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri, char
 	}
 
 out:
-	if (err) {
+	if (rc) {
 		*buf = NULL;
 		*first = false;
 	}
 
-	return err;
+	return rc;
 }
 
 /**
- * mlogutil_closeall() -
+ * mlogutil_closeall() - Close all open user (non-mdc) mlogs in mpool and release resources.
  *
- * Close all open user (non-mdc) mlogs in mpool and release resources;
- * this is an mpool deactivation utility and not part of the mlog user API.
+ * This is an mpool deactivation utility and not part of the mlog user API.
  */
 void mlogutil_closeall(struct mpool_descriptor *mp)
 {

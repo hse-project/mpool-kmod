@@ -6,9 +6,7 @@
 #include <linux/slab.h>
 #include <linux/string.h>
 
-#include "merr.h"
 #include "mpool_printk.h"
-
 #include "mpool_ioctl.h"
 #include "mpcore.h"
 #include "mp.h"
@@ -31,22 +29,23 @@
  * @mlh: MDC handle
  * @rw:  read/append?
  */
-static inline merr_t mdc_acquire(struct mp_mdc *mdc, bool rw)
+static inline int mdc_acquire(struct mp_mdc *mdc, bool rw)
 {
 	if (!mdc || mdc->mdc_magic != MPC_MDC_MAGIC || !mdc->mdc_valid)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	if (rw && (mdc->mdc_flags & MDC_OF_SKIP_SER))
 		return 0;
 
-	/* Validate again after acquiring lock */
 	mutex_lock(&mdc->mdc_lock);
-	if (mdc->mdc_valid)
-		return 0;
 
-	mutex_unlock(&mdc->mdc_lock);
+	/* Validate again after acquiring lock */
+	if (!mdc->mdc_valid) {
+		mutex_unlock(&mdc->mdc_lock);
+		return -EINVAL;
+	}
 
-	return merr(EINVAL);
+	return 0;
 }
 
 /**
@@ -80,10 +79,10 @@ static inline void mdc_invalidate(struct mp_mdc *mdc)
  * @mpname: buffer to store the mpool name (output)
  * @mplen:  buffer len
  */
-static merr_t mdc_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
+static int mdc_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
 {
 	if (!mp || !mpname)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	return mpool_get_mpname(mp, mpname, mplen);
 }
@@ -91,14 +90,8 @@ static merr_t mdc_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t m
 /**
  * mdc_find_get() - Wrapper around get for mlog pair.
  */
-static void
-mdc_find_get(
-	struct mpool_descriptor     *mp,
-	u64                         *logid,
-	bool                         do_put,
-	struct mlog_props           *props,
-	struct mlog_descriptor     **mlh,
-	merr_t                      *ferr)
+static void mdc_find_get(struct mpool_descriptor *mp, u64 *logid, bool do_put,
+			 struct mlog_props *props, struct mlog_descriptor **mlh, int *ferr)
 {
 	int i;
 
@@ -116,34 +109,33 @@ mdc_find_get(
 /**
  * mdc_put() - Wrapper around put for mlog pair.
  */
-static void
-mdc_put(struct mlog_descriptor *mlh1, struct mlog_descriptor *mlh2)
+static void mdc_put(struct mlog_descriptor *mlh1, struct mlog_descriptor *mlh2)
 {
 	mlog_put(mlh1);
 	mlog_put(mlh2);
 }
 
-uint64_t
-mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struct mp_mdc **mdc_out)
+uint64_t mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags,
+		     struct mp_mdc **mdc_out)
 {
 	struct mlog_props          *props = NULL;
 	struct mlog_descriptor     *mlh[2];
 	struct mp_mdc              *mdc;
 
-	merr_t  err = 0, err1 = 0, err2 = 0;
+	int     err = 0, err1 = 0, err2 = 0;
+	int     ferr[2] = {0};
 	u64     gen1 = 0, gen2 = 0;
-	merr_t  ferr[2] = {0};
 	bool    empty = false;
 	u8      mlflags = 0;
 	u64     id[2];
 	char   *mpname;
 
 	if (!mp || !mdc_out)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	mdc = kzalloc(sizeof(*mdc), GFP_KERNEL);
 	if (!mdc)
-		return merr(ENOMEM);
+		return -ENOMEM;
 
 	mdc->mdc_valid = 0;
 	mdc->mdc_mp    = mp;
@@ -152,13 +144,13 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 	mpname = mdc->mdc_mpname;
 
 	if (logid1 == logid2) {
-		err = merr(EINVAL);
+		err = -EINVAL;
 		goto exit;
 	}
 
 	props = kcalloc(2, sizeof(*props), GFP_KERNEL);
 	if (!props) {
-		err = merr(ENOMEM);
+		err = -ENOMEM;
 		goto exit;
 	}
 
@@ -184,18 +176,18 @@ mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struc
 	err1 = mlog_open(mp, mdc->mdc_logh1, mlflags, &gen1);
 	err2 = mlog_open(mp, mdc->mdc_logh2, mlflags, &gen2);
 
-	if (err1 && merr_errno(err1) != EMSGSIZE && merr_errno(err1) != EBUSY) {
+	if (err1 && err1 != -EMSGSIZE && err1 != -EBUSY) {
 		err = err1;
-	} else if (err2 && merr_errno(err2) != EMSGSIZE && merr_errno(err2) != EBUSY) {
+	} else if (err2 && err2 != -EMSGSIZE && err2 != -EBUSY) {
 		err = err2;
 	} else if ((err1 && err2) || (!err1 && !err2 && gen1 && gen1 == gen2)) {
 
-		err = merr(EINVAL);
+		err = -EINVAL;
 
 		/* Bad pair; both have failed erases/compactions or equal non-0 gens. */
 		mp_pr_err("mpool %s, mdc open, bad mlog handle, mlog1 %p logid1 0x%lx errno %d gen1 %lu, mlog2 %p logid2 0x%lx errno %d gen2 %lu",
-			err, mpname, mdc->mdc_logh1, (ulong)logid1, merr_errno(err1), (ulong)gen1,
-			mdc->mdc_logh2, (ulong)logid2, merr_errno(err2), (ulong)gen2);
+			err, mpname, mdc->mdc_logh1, (ulong)logid1, err1, (ulong)gen1,
+			mdc->mdc_logh2, (ulong)logid2, err2, (ulong)gen2);
 	} else {
 		/* Active log is valid log with smallest gen */
 		if (err1 || (!err2 && gen2 < gen1)) {
@@ -306,16 +298,15 @@ uint64_t mp_mdc_cstart(struct mp_mdc *mdc)
 {
 	struct mpool_descriptor    *mp;
 	struct mlog_descriptor     *tgth = NULL;
-
-	merr_t err;
-	bool   rw = false;
+	bool rw = false;
+	int rc;
 
 	if (!mdc)
-		return merr(EINVAL);
+		return -EINVAL;
 
-	err = mdc_acquire(mdc, rw);
-	if (err)
-		return err;
+	rc = mdc_acquire(mdc, rw);
+	if (rc)
+		return rc;
 
 	mp = mdc->mdc_mp;
 
@@ -324,23 +315,22 @@ uint64_t mp_mdc_cstart(struct mp_mdc *mdc)
 	else
 		tgth = mdc->mdc_logh1;
 
-	err = mlog_append_cstart(mp, tgth);
-	if (!err) {
-		mdc->mdc_alogh = tgth;
-	} else {
+	rc = mlog_append_cstart(mp, tgth);
+	if (rc) {
 		mdc_release(mdc, rw);
 
 		mp_pr_err("mpool %s, mdc %p cstart failed, mlog %p",
-			  err, mdc->mdc_mpname, mdc, tgth);
+			  rc, mdc->mdc_mpname, mdc, tgth);
 
 		(void)mp_mdc_close(mdc);
 
-		return err;
+		return rc;
 	}
 
+	mdc->mdc_alogh = tgth;
 	mdc_release(mdc, rw);
 
-	return err;
+	return 0;
 }
 
 uint64_t mp_mdc_cend(struct mp_mdc *mdc)
@@ -348,17 +338,16 @@ uint64_t mp_mdc_cend(struct mp_mdc *mdc)
 	struct mpool_descriptor    *mp;
 	struct mlog_descriptor     *srch = NULL;
 	struct mlog_descriptor     *tgth = NULL;
-
-	merr_t err;
 	u64    gentgt = 0;
 	bool   rw = false;
+	int    rc;
 
 	if (!mdc)
-		return merr(EINVAL);
+		return -EINVAL;
 
-	err = mdc_acquire(mdc, rw);
-	if (err)
-		return err;
+	rc = mdc_acquire(mdc, rw);
+	if (rc)
+		return rc;
 
 	mp = mdc->mdc_mp;
 
@@ -370,60 +359,58 @@ uint64_t mp_mdc_cend(struct mp_mdc *mdc)
 		srch = mdc->mdc_logh1;
 	}
 
-	err = mlog_append_cend(mp, tgth);
-	if (!err) {
-		err = mlog_gen(tgth, &gentgt);
-		if (!err)
-			err = mlog_erase(mp, srch, gentgt + 1);
+	rc = mlog_append_cend(mp, tgth);
+	if (!rc) {
+		rc = mlog_gen(tgth, &gentgt);
+		if (!rc)
+			rc = mlog_erase(mp, srch, gentgt + 1);
 	}
 
-	if (err) {
+	if (rc) {
 		mdc_release(mdc, rw);
 
 		mp_pr_err("mpool %s, mdc %p cend failed, mlog %p",
-			  err, mdc->mdc_mpname, mdc, tgth);
+			  rc, mdc->mdc_mpname, mdc, tgth);
 
 		mp_mdc_close(mdc);
 
-		return err;
+		return rc;
 	}
 
 	mdc_release(mdc, rw);
 
-	return err;
+	return rc;
 }
 
 uint64_t mp_mdc_close(struct mp_mdc *mdc)
 {
 	struct mpool_descriptor   *mp;
-
-	merr_t err = 0;
-	merr_t rval = 0;
-	bool   rw = false;
+	int rval = 0, rc;
+	bool rw = false;
 
 	if (!mdc)
-		return merr(EINVAL);
+		return -EINVAL;
 
-	err = mdc_acquire(mdc, rw);
-	if (err)
-		return err;
+	rc = mdc_acquire(mdc, rw);
+	if (rc)
+		return rc;
 
 	mp = mdc->mdc_mp;
 
 	mdc->mdc_valid = 0;
 
-	err = mlog_close(mp, mdc->mdc_logh1);
-	if (err) {
+	rc = mlog_close(mp, mdc->mdc_logh1);
+	if (rc) {
 		mp_pr_err("mpool %s, mdc %p close failed, mlog1 %p",
-			  err, mdc->mdc_mpname, mdc, mdc->mdc_logh1);
-		rval = err;
+			  rc, mdc->mdc_mpname, mdc, mdc->mdc_logh1);
+		rval = rc;
 	}
 
-	err = mlog_close(mp, mdc->mdc_logh2);
-	if (err) {
+	rc = mlog_close(mp, mdc->mdc_logh2);
+	if (rc) {
 		mp_pr_err("mpool %s, mdc %p close failed, mlog2 %p",
-			  err, mdc->mdc_mpname, mdc, mdc->mdc_logh2);
-		rval = err;
+			  rc, mdc->mdc_mpname, mdc, mdc->mdc_logh2);
+		rval = rc;
 	}
 
 	mdc_put(mdc->mdc_logh1, mdc->mdc_logh2);
@@ -438,66 +425,66 @@ uint64_t mp_mdc_close(struct mp_mdc *mdc)
 
 uint64_t mp_mdc_rewind(struct mp_mdc *mdc)
 {
-	merr_t err;
-	bool   rw = false;
+	bool rw = false;
+	int rc;
 
 	if (!mdc)
-		return merr(EINVAL);
+		return -EINVAL;
 
-	err = mdc_acquire(mdc, rw);
-	if (err)
-		return err;
+	rc = mdc_acquire(mdc, rw);
+	if (rc)
+		return rc;
 
-	err = mlog_read_data_init(mdc->mdc_alogh);
-	if (err)
+	rc = mlog_read_data_init(mdc->mdc_alogh);
+	if (rc)
 		mp_pr_err("mpool %s, mdc %p rewind failed, mlog %p",
-			  err, mdc->mdc_mpname, mdc, mdc->mdc_alogh);
+			  rc, mdc->mdc_mpname, mdc, mdc->mdc_alogh);
 
 	mdc_release(mdc, rw);
 
-	return err;
+	return rc;
 }
 
 uint64_t mp_mdc_read(struct mp_mdc *mdc, void *data, size_t len, size_t *rdlen)
 {
-	merr_t err;
-	bool   rw = true;
+	bool rw = true;
+	int rc;
 
 	if (!mdc || !data)
-		return merr(EINVAL);
+		return -EINVAL;
 
-	err = mdc_acquire(mdc, rw);
-	if (err)
-		return err;
+	rc = mdc_acquire(mdc, rw);
+	if (rc)
+		return rc;
 
-	err = mlog_read_data_next(mdc->mdc_mp, mdc->mdc_alogh, data, (u64)len, (u64 *)rdlen);
-	if (err && (merr_errno(err) != EOVERFLOW))
+	rc = mlog_read_data_next(mdc->mdc_mp, mdc->mdc_alogh, data, (u64)len, (u64 *)rdlen);
+	if (rc && rc != -EOVERFLOW)
 		mp_pr_err("mpool %s, mdc %p read failed, mlog %p len %lu",
-			  err, mdc->mdc_mpname, mdc, mdc->mdc_alogh, len);
+			  rc, mdc->mdc_mpname, mdc, mdc->mdc_alogh, len);
 
 	mdc_release(mdc, rw);
 
-	return err;
+	return rc;
 }
 
 uint64_t mp_mdc_append(struct mp_mdc *mdc, void *data, ssize_t len, bool sync)
 {
-	merr_t err;
-	bool   rw = true;
+	bool rw = true;
+	int rc;
 
 	if (!mdc || !data)
-		return merr(EINVAL);
+		return -EINVAL;
 
-	err = mdc_acquire(mdc, rw);
-	if (err)
-		return err;
+	rc = mdc_acquire(mdc, rw);
+	if (rc)
+		return rc;
 
-	err = mlog_append_data(mdc->mdc_mp, mdc->mdc_alogh, data, (u64)len, sync);
-	if (err)
+	rc = mlog_append_data(mdc->mdc_mp, mdc->mdc_alogh, data, (u64)len, sync);
+	if (rc)
 		mp_pr_rl("mpool %s, mdc %p append failed, mlog %p, len %lu sync %d",
-			  err, mdc->mdc_mpname, mdc, mdc->mdc_alogh, len, sync);
+			 rc, mdc->mdc_mpname, mdc, mdc->mdc_alogh, len, sync);
 
 	mdc_release(mdc, rw);
 
-	return err;
+	return rc;
 }

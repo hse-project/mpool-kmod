@@ -249,9 +249,9 @@ static inline bool objtype_valid(enum obj_type_omf otype)
  *
  * Pack superblock into outbuf little-endian computing specified checksum.
  *
- * Return: 0 if successful, merr_t(EINVAL) otherwise
+ * Return: 0 if successful, -EINVAL otherwise
  */
-merr_t omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf);
+int omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf);
 
 /**
  * omf_sb_unpack_letoh() - unpack superblock
@@ -260,9 +260,9 @@ merr_t omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf);
  * @omf_ver: on-media-format superblock version
  * Unpack little-endian superblock from inbuf into sb verifying checksum.
  *
- * Return: 0 if successful, merr_t otherwise
+ * Return: 0 if successful, -errno otherwise
  */
-merr_t omf_sb_unpack_letoh(struct omf_sb_descriptor *sb, const char *inbuf, u16 *omf_ver);
+int omf_sb_unpack_letoh(struct omf_sb_descriptor *sb, const char *inbuf, u16 *omf_ver);
 
 /**
  * omf_sb_has_magic_le() - Determine if buffer has superblock magic value
@@ -282,9 +282,9 @@ bool omf_sb_has_magic_le(const char *inbuf);
  *
  * Pack header into little-endian log block buffer lbuf, ex-checksum.
  *
- * Return: 0 if successful, merr_t otherwise
+ * Return: 0 if successful, -errno otherwise
  */
-merr_t omf_logblock_header_pack_htole(struct omf_logblock_header *lbh, char *lbuf);
+int omf_logblock_header_pack_htole(struct omf_logblock_header *lbh, char *lbuf);
 
 /**
  * omf_logblock_header_len_le() - Determine header length of log block
@@ -304,9 +304,9 @@ int omf_logblock_header_len_le(char *lbuf);
  * Unpack little-endian log block header from lbuf into lbh; does not
  * verify checksum.
  *
- * Return: 0 if successful, merr_t (EINVAL) if invalid log block header vers
+ * Return: 0 if successful, -EINVAL if invalid log block header vers
  */
-merr_t omf_logblock_header_unpack_letoh(struct omf_logblock_header *lbh, const char *inbuf);
+int omf_logblock_header_unpack_letoh(struct omf_logblock_header *lbh, const char *inbuf);
 
 /**
  * omf_logrec_desc_pack_htole() - pack log record descriptor
@@ -315,9 +315,9 @@ merr_t omf_logblock_header_unpack_letoh(struct omf_logblock_header *lbh, const c
  *
  * Pack log record descriptor into outbuf little-endian.
  *
- * Return: 0 if successful, merr_t (EINVAL) if invalid log rec type
+ * Return: 0 if successful, -EINVAL if invalid log rec type
  */
-merr_t omf_logrec_desc_pack_htole(struct omf_logrec_descriptor *lrd, char *outbuf);
+int omf_logrec_desc_pack_htole(struct omf_logrec_descriptor *lrd, char *outbuf);
 
 /**
  * omf_logrec_desc_unpack_letoh() - unpack log record descriptor
@@ -351,9 +351,9 @@ int omf_mdcrec_pack_htole(struct mpool_descriptor *mp, struct omf_mdcrec_data *c
  *
  * Unpack little-endian mdc record from inbuf into cdr.
  *
- * Return: 0 if successful, merr_t on error
+ * Return: 0 if successful, -errno on error
  */
-merr_t
+int
 omf_mdcrec_unpack_letoh(
 	struct omf_mdcver          *mdcver,
 	struct mpool_descriptor    *mp,
@@ -397,8 +397,7 @@ bool logrec_type_datarec(enum logrec_type_omf rtype);
  */
 struct omf_mdcver *omf_sbver_to_mdcver(enum sb_descriptor_ver_omf sbver);
 
-merr_t omf_init(void);
-
-void omf_exit(void);
+int omf_init(void) __cold;
+void omf_exit(void) __cold;
 
 #endif /* MPOOL_OMF_IF_H */
