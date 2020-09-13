@@ -33,46 +33,31 @@ void mlog_free_abuf(struct mlog_stat *lstat, int start, int end);
 
 void mlog_free_rbuf(struct mlog_stat *lstat, int start, int end);
 
-void
-mlog_extract_fsetparms(
-	struct mlog_stat   *lstat,
-	u16                *sectsz,
-	u32                *totsec,
-	u16                *nsecmb,
-	u16                *nseclpg);
+void mlog_extract_fsetparms(struct mlog_stat *lstat, u16 *sectsz, u32 *totsec,
+			    u16 *nsecmb, u16 *nseclpg);
 
 int mlog_stat_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool csem);
 
 void mlog_stat_free(struct pmd_layout *layout);
 
-void
-mlog_read_iter_init(struct pmd_layout *layout, struct mlog_stat *lstat, struct mlog_read_iter *lri);
+void mlog_read_iter_init(struct pmd_layout *layout, struct mlog_stat *lstat,
+			 struct mlog_read_iter *lri);
 
 void mlog_stat_init_common(struct pmd_layout *layout, struct mlog_stat *lstat);
 
-int
-mlog_populate_rbuf(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	u16                        *nsec,
-	off_t                      *soff,
-	bool                        skip_ser);
+int mlog_populate_rbuf(struct mpool_descriptor *mp, struct pmd_layout *layout,
+		       u16 *nsec, off_t *soff, bool skip_ser);
 
-void
-mlog_getprops_cmn(struct mpool_descriptor *mp, struct pmd_layout *layout, struct mlog_props *prop);
+void mlog_getprops_cmn(struct mpool_descriptor *mp, struct pmd_layout *layout,
+		       struct mlog_props *prop);
 
 int mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser);
 
 s64 mlog_append_dmax(struct pmd_layout *layout);
 
-int
-mlog_update_append_idx(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser);
+int mlog_update_append_idx(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser);
 
-int
-mlog_logblock_load(
-	struct mpool_descriptor     *mp,
-	struct mlog_read_iter       *lri,
-	char                       **buf,
-	bool                        *first);
+int mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri,
+		       char **buf, bool *first);
 
 #endif /* MPOOL_MLOG_UTILS_H */

@@ -73,8 +73,8 @@ static void mpc_xvm_put(struct mpc_xvm *xvm);
 static int mpc_readpage_impl(struct page *page, struct mpc_xvm *map);
 
 /* The following structures are initialized at the end of this file. */
-static const struct vm_operations_struct       mpc_vops_default;
-const struct address_space_operations   mpc_aops_default;
+static const struct vm_operations_struct mpc_vops_default;
+const struct address_space_operations mpc_aops_default;
 
 static struct workqueue_struct *mpc_wq_trunc __read_mostly;
 static struct workqueue_struct *mpc_wq_rav[4] __read_mostly;
@@ -91,7 +91,7 @@ static struct workqueue_struct *mpc_rgn2wq(uint rgn)
 static int mpc_rgnmap_isorphan(int rgn, void *item, void *data)
 {
 	struct mpc_xvm *xvm = item;
-	void          **headp = data;
+	void **headp = data;
 
 	if (xvm && kref_read(&xvm->xvm_ref) == 1 && !atomic_read(&xvm->xvm_opened)) {
 		idr_replace(&xvm->xvm_rgnmap->rm_root, NULL, rgn);
@@ -239,10 +239,10 @@ static void mpc_vm_close(struct vm_area_struct *vma)
 
 static int mpc_alloc_and_readpage(struct vm_area_struct *vma, pgoff_t offset, gfp_t gfp)
 {
-	struct file            *file;
-	struct page            *page;
-	struct address_space   *mapping;
-	int                     rc;
+	struct address_space *mapping;
+	struct file *file;
+	struct page *page;
+	int rc;
 
 	page = __page_cache_alloc(gfp | __GFP_NOWARN);
 	if (!page)
@@ -322,12 +322,12 @@ static int mpc_handle_page_error(struct page *page, struct vm_area_struct *vma)
 
 static vm_fault_t mpc_vm_fault_impl(struct vm_area_struct *vma, struct vm_fault *vmf)
 {
-	struct address_space   *mapping;
-	struct inode           *inode;
-	vm_fault_t              vmfrc;
-	pgoff_t                 offset;
-	loff_t                  size;
-	struct page            *page;
+	struct address_space *mapping;
+	struct inode *inode;
+	struct page *page;
+	vm_fault_t vmfrc;
+	pgoff_t offset;
+	loff_t size;
 
 	mapping = vma->vm_file->f_mapping;
 	inode   = mapping->host;
@@ -408,11 +408,11 @@ static vm_fault_t mpc_vm_fault(struct vm_area_struct *vma, struct vm_fault *vmf)
 
 static int mpc_readpage_impl(struct page *page, struct mpc_xvm *xvm)
 {
-	struct mpc_mbinfo  *mbinfo;
-	struct kvec         iov[1];
-	off_t               offset;
-	uint                mbnum;
-	int                 rc;
+	struct mpc_mbinfo *mbinfo;
+	struct kvec iov[1];
+	off_t offset;
+	uint mbnum;
+	int rc;
 
 	offset  = page->index << PAGE_SHIFT;
 	offset %= (1ul << mpc_xvm_size_max);
@@ -464,15 +464,14 @@ static int mpc_readpage_impl(struct page *page, struct mpc_xvm *xvm)
  */
 static void mpc_readpages_cb(struct work_struct *work)
 {
-	char                    argsbuf[MPC_RPARGSBUFSZ];
-	struct readpage_args   *args = (void *)argsbuf;
-	struct kvec             iovbuf[MPC_RA_IOV_MAX];
-	struct kvec            *iov = iovbuf;
-	struct mpc_xvm         *xvm;
-	struct readpage_work   *w;
-
-	size_t  argssz;
-	int     pagec, rc, i;
+	struct kvec iovbuf[MPC_RA_IOV_MAX];
+	char argsbuf[MPC_RPARGSBUFSZ];
+	struct readpage_args *args = (void *)argsbuf;
+	struct readpage_work *w;
+	struct mpc_xvm *xvm;
+	struct kvec *iov = iovbuf;
+	size_t argssz;
+	int pagec, rc, i;
 
 	w = container_of(work, struct readpage_work, w_work);
 
@@ -533,28 +532,23 @@ errout:
 	}
 }
 
-static int
-mpc_readpages(
-	struct file            *file,
-	struct address_space   *mapping,
-	struct list_head       *pages,
-	uint                    nr_pages)
+static int mpc_readpages(struct file *file, struct address_space *mapping,
+			 struct list_head *pages, uint nr_pages)
 {
-	struct workqueue_struct    *wq;
-	struct readpage_work       *w;
-	struct work_struct         *work;
-	struct mpc_mbinfo          *mbinfo;
-	struct mpc_unit            *unit;
-	struct mpc_xvm             *xvm;
-	struct page                *page;
-
-	off_t   offset, mbend;
-	uint    mbnum, iovmax, i;
-	uint    ra_pages_max;
-	ulong   index;
-	gfp_t   gfp;
-	u32     key;
-	int     rc;
+	struct workqueue_struct *wq;
+	struct readpage_work *w;
+	struct work_struct *work;
+	struct mpc_mbinfo *mbinfo;
+	struct mpc_unit *unit;
+	struct mpc_xvm *xvm;
+	struct page *page;
+	off_t offset, mbend;
+	uint mbnum, iovmax, i;
+	uint ra_pages_max;
+	ulong index;
+	gfp_t gfp;
+	u32 key;
+	int rc;
 
 	unit = file->private_data;
 
@@ -723,12 +717,8 @@ static void mpc_invalidatepage(struct page *page, ulong offset)
  * callback is added to deal with uncertainties around migration. The migration
  * will be declined so long as the page is private and it belongs to mpctl.
  */
-static int
-mpc_migratepage(
-	struct address_space   *mapping,
-	struct page            *newpage,
-	struct page            *page,
-	enum migrate_mode       mode)
+static int mpc_migratepage(struct address_space *mapping, struct page *newpage,
+			   struct page *page, enum migrate_mode mode)
 {
 	if (page_has_private(page) &&
 	    !try_to_release_page(page, GFP_KERNEL))
@@ -741,12 +731,11 @@ mpc_migratepage(
 
 int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 {
-	struct mpc_unit    *unit = fp->private_data;
-	struct mpc_xvm     *xvm;
-
-	off_t   off;
-	ulong   len;
-	u32     key;
+	struct mpc_unit *unit = fp->private_data;
+	struct mpc_xvm *xvm;
+	off_t off;
+	ulong len;
+	u32 key;
 
 	off = vma->vm_pgoff << PAGE_SHIFT;
 	len = vma->vm_end - vma->vm_start - 1;
@@ -793,10 +782,10 @@ int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
  */
 int mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, struct mpioc_vma *ioc)
 {
-	struct mpc_rgnmap          *rm;
-	struct mpc_mbinfo          *mbinfov;
-	struct kmem_cache          *cache;
-	struct mpc_xvm             *xvm;
+	struct mpc_rgnmap *rm;
+	struct mpc_mbinfo *mbinfov;
+	struct kmem_cache *cache;
+	struct mpc_xvm *xvm;
 
 	u64     *mbidv;
 	size_t  largest, sz;
@@ -931,9 +920,9 @@ errout:
  */
 int mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
-	struct mpc_rgnmap  *rm;
-	struct mpc_xvm     *xvm;
-	u64                 rgn;
+	struct mpc_rgnmap *rm;
+	struct mpc_xvm *xvm;
+	u64 rgn;
 
 	if (!unit || !ioc)
 		return -EINVAL;
@@ -958,7 +947,7 @@ int mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
 int mpioc_xvm_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
 	struct mpc_xvm *xvm;
-	u64             rgn;
+	u64 rgn;
 
 	if (!unit || !ioc)
 		return -EINVAL;
@@ -979,7 +968,7 @@ int mpioc_xvm_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
 int mpioc_xvm_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc)
 {
 	struct mpc_xvm *xvm;
-	u64             rgn;
+	u64 rgn;
 
 	if (!unit || !ioc)
 		return -EINVAL;
@@ -1000,8 +989,8 @@ int mpioc_xvm_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc)
 
 int mcache_init(void)
 {
-	size_t  sz;
-	int     rc, i;
+	size_t sz;
+	int rc, i;
 
 	mpc_xvm_max = clamp_t(uint, mpc_xvm_max, 1024, 1u << 30);
 	mpc_xvm_size_max = clamp_t(ulong, mpc_xvm_size_max, 27, 32);

@@ -195,9 +195,9 @@ static void smap_calc_znstats(struct mpool_dev_info *pd, struct smap_dev_znstats
  */
 int smap_drive_usage(struct mpool_descriptor *mp, u16 pdh, struct mpool_devprops *dprop)
 {
+	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
 	struct smap_dev_znstats zones;
-	struct mpool_dev_info   *pd = &mp->pds_pdv[pdh];
-	u32                      zonepg = 0;
+	u32 zonepg = 0;
 
 	zonepg = pd->pdi_parm.dpr_zonepg;
 
@@ -254,7 +254,7 @@ int smap_drive_init(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16
 void smap_drive_free(struct mpool_descriptor *mp, u16 pdh)
 {
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
-	u8                     rgn = 0;
+	u8 rgn = 0;
 
 	if (pd->pdi_rmbktv) {
 		struct media_class     *mc;
@@ -290,9 +290,8 @@ void smap_drive_free(struct mpool_descriptor *mp, u16 pdh)
 static bool smap_alloccheck(struct mpool_dev_info *pd, u64 zonecnt, enum smap_space_type sapolicy)
 {
 	struct smap_dev_alloc *ds;
-
-	u64   zoneextra;
-	bool  alloced = false;
+	bool alloced = false;
+	u64 zoneextra;
 
 	ds = &pd->pdi_ds;
 
@@ -356,30 +355,21 @@ static bool smap_alloccheck(struct mpool_dev_info *pd, u64 zonecnt, enum smap_sp
 /**
  * See smap.h.
  */
-int
-smap_alloc(
-	struct mpool_descriptor *mp,
-	u16                      pdh,
-	u64                      zonecnt,
-	enum smap_space_type     sapolicy,
-	u64                     *zoneaddr,
-	u64                      align)
+int smap_alloc(struct mpool_descriptor *mp, u16 pdh, u64 zonecnt,
+	       enum smap_space_type sapolicy, u64 *zoneaddr, u64 align)
 {
+	struct mc_smap_parms mcsp;
 	struct mpool_dev_info *pd;
 	struct smap_dev_alloc *ds;
-	struct mutex          *rmlock = NULL;
-	struct rb_root        *rmap = NULL;
-	struct smap_zone  *elem = NULL;
-	struct media_class    *mc;
-	struct mc_smap_parms   mcsp;
+	struct smap_zone *elem = NULL;
+	struct rb_root *rmap = NULL;
+	struct mutex *rmlock = NULL;
+	struct media_class *mc;
+	u64 fsoff = 0, fslen = 0, ualen = 0;
+	u8 rgn = 0, rgnc;
+	s8 rgnleft;
 	bool res;
 	int rc;
-	u64 fsoff = 0;
-	u64 fslen = 0;
-	u64 ualen = 0;
-	s8 rgnleft;
-	u8 rgn = 0;
-	u8 rgnc;
 
 	*zoneaddr = 0;
 	pd = &mp->pds_pdv[pdh];
@@ -607,10 +597,10 @@ static int smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh)
 
 void smap_mclass_usage(struct mpool_descriptor *mp, u8 mclass, struct mpool_usage *usage)
 {
-	struct media_class         *mc;
-	struct smap_dev_znstats     zones;
-	struct mpool_dev_info      *pd;
-	u32                         zonepg = 0;
+	struct smap_dev_znstats zones;
+	struct mpool_dev_info *pd;
+	struct media_class *mc;
+	u32 zonepg = 0;
 
 	mc = &mp->pds_mc[mclass];
 	if (mc->mc_pdmc < 0)
@@ -1003,10 +993,10 @@ void smap_wait_usage_done(struct mpool_descriptor *mp)
 
 void smap_log_mpool_usage(struct work_struct *ws)
 {
-	struct smap_usage_work     *smapu;
-	struct mpool_descriptor    *mp;
-	int                         last, cur, delta;
-	struct mpool_usage          usage;
+	struct smap_usage_work *smapu;
+	struct mpool_descriptor *mp;
+	struct mpool_usage usage;
+	int last, cur, delta;
 
 	smapu = container_of(ws, struct smap_usage_work, smapu_wstruct.work);
 	mp = smapu->smapu_mp;

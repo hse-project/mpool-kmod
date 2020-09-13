@@ -162,13 +162,8 @@ void pmd_obj_wrunlock(struct pmd_layout *layout)
  *
  * Returns NULL if allocation fails.
  */
-struct pmd_layout *
-pmd_layout_alloc(
-	struct mpool_uuid          *uuid,
-	u64                         objid,
-	u64                         gen,
-	u64                         mblen,
-	u32                         zcnt)
+struct pmd_layout *pmd_layout_alloc(struct mpool_uuid *uuid, u64 objid,
+				    u64 gen, u64 mblen, u32 zcnt)
 {
 	struct kmem_cache *cache = pmd_layout_cache;
 	struct pmd_layout *layout;
@@ -289,16 +284,10 @@ static void pmd_layout_unprovision(struct mpool_descriptor *mp, struct pmd_layou
  * @zcnt:
  * @otype:
  */
-static void
-pmd_layout_calculate(
-	struct mpool_descriptor   *mp,
-	struct pmd_obj_capacity   *ocap,
-	struct media_class        *mc,
-	u64                       *zcnt)
+static void pmd_layout_calculate(struct mpool_descriptor *mp, struct pmd_obj_capacity *ocap,
+				 struct media_class *mc, u64 *zcnt)
 {
-	u32    zonepg;
-
-	zonepg = mp->pds_pdv[mc->mc_pdmc].pdi_parm.dpr_zonepg;
+	u32 zonepg;
 
 	if (!ocap->moc_captgt) {
 		/* Obj capacity not specified; use one zone. */
@@ -306,6 +295,7 @@ pmd_layout_calculate(
 		return;
 	}
 
+	zonepg = mp->pds_pdv[mc->mc_pdmc].pdi_parm.dpr_zonepg;
 	*zcnt = 1 + ((ocap->moc_captgt - 1) / (zonepg << PAGE_SHIFT));
 }
 
@@ -318,19 +308,13 @@ pmd_layout_calculate(
  * @mc:		media class
  * @zcnt:
  */
-static int
-pmd_layout_provision(
-	struct mpool_descriptor    *mp,
-	struct pmd_obj_capacity    *ocap,
-	struct pmd_layout          *layout,
-	struct media_class         *mc,
-	u64                         zcnt)
+static int pmd_layout_provision(struct mpool_descriptor *mp, struct pmd_obj_capacity *ocap,
+				struct pmd_layout *layout, struct media_class *mc, u64 zcnt)
 {
-	enum smap_space_type    spctype;
-	struct mc_smap_parms    mcsp;
-
+	enum smap_space_type spctype;
+	struct mc_smap_parms mcsp;
 	u64 zoneaddr, align;
-	u8   pdh;
+	u8 pdh;
 	int rc;
 
 	spctype = SMAP_SPC_USABLE_ONLY;
@@ -356,15 +340,8 @@ pmd_layout_provision(
 	return 0;
 }
 
-int
-pmd_layout_rw(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	const struct kvec          *iov,
-	int                         iovcnt,
-	u64                         boff,
-	int                         flags,
-	u8                          rw)
+int pmd_layout_rw(struct mpool_descriptor *mp, struct pmd_layout *layout,
+		  const struct kvec *iov, int iovcnt, u64 boff, int flags, u8 rw)
 {
 	struct mpool_dev_info *pd;
 	u64 zaddr;
@@ -418,7 +395,6 @@ int pmd_layout_erase(struct mpool_descriptor *mp, struct pmd_layout *layout)
 u64 pmd_layout_cap_get(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
 	enum obj_type_omf otype = pmd_objid_type(layout->eld_objid);
-
 	u32 zonepg;
 
 	switch (otype) {
@@ -461,9 +437,9 @@ int pmd_smap_insert(struct mpool_descriptor *mp, struct pmd_layout *layout)
 
 struct pmd_layout *pmd_obj_find_get(struct mpool_descriptor *mp, u64 objid, int which)
 {
-	struct pmd_mdc_info    *cinfo;
-	struct pmd_layout      *found;
-	u8                      cslot;
+	struct pmd_mdc_info *cinfo;
+	struct pmd_layout *found;
+	u8 cslot;
 
 	if (!objtype_user(objid_type(objid)))
 		return NULL;
@@ -496,24 +472,15 @@ struct pmd_layout *pmd_obj_find_get(struct mpool_descriptor *mp, u64 objid, int 
 	return found;
 }
 
-int
-pmd_obj_alloc(
-	struct mpool_descriptor    *mp,
-	enum obj_type_omf           otype,
-	struct pmd_obj_capacity    *ocap,
-	enum mp_media_classp        mclassp,
-	struct pmd_layout         **layoutp)
+int pmd_obj_alloc(struct mpool_descriptor *mp, enum obj_type_omf otype,
+		  struct pmd_obj_capacity *ocap, enum mp_media_classp mclassp,
+		  struct pmd_layout **layoutp)
 {
 	return pmd_obj_alloc_cmn(mp, 0, otype, ocap, mclassp, 0, true, layoutp);
 }
 
-int
-pmd_obj_realloc(
-	struct mpool_descriptor    *mp,
-	u64                         objid,
-	struct pmd_obj_capacity    *ocap,
-	enum mp_media_classp        mclassp,
-	struct pmd_layout         **layoutp)
+int pmd_obj_realloc(struct mpool_descriptor *mp, u64 objid, struct pmd_obj_capacity *ocap,
+		    enum mp_media_classp mclassp, struct pmd_layout **layoutp)
 {
 	if (!pmd_objid_isuser(objid)) {
 		*layoutp = NULL;
@@ -604,9 +571,9 @@ int pmd_obj_commit(struct mpool_descriptor *mp, struct pmd_layout *layout)
 
 static void pmd_obj_erase_cb(struct work_struct *work)
 {
-	struct pmd_obj_erase_work  *oef;
-	struct mpool_descriptor    *mp;
-	struct pmd_layout          *layout;
+	struct pmd_obj_erase_work *oef;
+	struct mpool_descriptor *mp;
+	struct pmd_layout *layout;
 
 	oef = container_of(work, struct pmd_obj_erase_work, oef_wqstruct);
 	mp = oef->oef_mp;
@@ -622,8 +589,8 @@ static void pmd_obj_erase_cb(struct work_struct *work)
 
 static void pmd_obj_erase_start(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
-	struct pmd_obj_erase_work   oefbuf, *oef;
-	bool                        async = true;
+	struct pmd_obj_erase_work oefbuf, *oef;
+	bool async = true;
 
 	oef = kmem_cache_zalloc(pmd_obj_erase_work_cache, GFP_KERNEL);
 	if (!oef) {
@@ -645,10 +612,10 @@ static void pmd_obj_erase_start(struct mpool_descriptor *mp, struct pmd_layout *
 
 int pmd_obj_abort(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
-	struct pmd_mdc_info    *cinfo;
-	struct pmd_layout      *found;
-	long                    refcnt;
-	u8                      cslot;
+	struct pmd_mdc_info *cinfo;
+	struct pmd_layout *found;
+	long refcnt;
+	u8 cslot;
 
 	if (!objtype_user(objid_type(layout->eld_objid)))
 		return -EINVAL;
@@ -684,9 +651,8 @@ int pmd_obj_abort(struct mpool_descriptor *mp, struct pmd_layout *layout)
 
 int pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
-	struct pmd_mdc_info    *cinfo;
-	struct pmd_layout      *found;
-
+	struct pmd_mdc_info *cinfo;
+	struct pmd_layout *found;
 	long refcnt;
 	u64 objid;
 	u8 cslot;
@@ -959,22 +925,14 @@ static int pmd_alloc_argcheck(struct mpool_descriptor *mp, u64 objid,
 	return 0;
 }
 
-int
-pmd_obj_alloc_cmn(
-	struct mpool_descriptor    *mp,
-	u64                         objid,
-	enum obj_type_omf           otype,
-	struct pmd_obj_capacity    *ocap,
-	enum mp_media_classp        mclass,
-	int                         realloc,
-	bool                        needref,
-	struct pmd_layout         **layoutp)
+int pmd_obj_alloc_cmn(struct mpool_descriptor *mp, u64 objid, enum obj_type_omf otype,
+		      struct pmd_obj_capacity *ocap, enum mp_media_classp mclass,
+		      int realloc, bool needref, struct pmd_layout **layoutp)
 {
-	struct mpool_uuid       uuid;
-	struct pmd_mdc_info    *cinfo;
-	struct pmd_layout      *layout;
-	struct media_class     *mc;
-
+	struct pmd_mdc_info *cinfo;
+	struct media_class *mc;
+	struct pmd_layout *layout;
+	struct mpool_uuid uuid;
 	int retries, flush, rc;
 	u64 zcnt = 0;
 	u8  cslot;
@@ -1104,8 +1062,8 @@ retry:
 
 void pmd_mpool_usage(struct mpool_descriptor *mp, struct mpool_usage *usage)
 {
-	int    sidx;
-	u16    slotvcnt;
+	int sidx;
+	u16 slotvcnt;
 
 	/*
 	 * Get a local copy of MDC count (slotvcnt), and then drop the lock
@@ -1157,9 +1115,9 @@ void pmd_mpool_usage(struct mpool_descriptor *mp, struct mpool_usage *usage)
  */
 static int pmd_mdc0_meta_update(struct mpool_descriptor *mp, struct pmd_layout *layout)
 {
-	struct omf_sb_descriptor   *sb;
-	struct mpool_dev_info      *pd;
-	struct mc_parms             mc_parms;
+	struct omf_sb_descriptor *sb;
+	struct mpool_dev_info *pd;
+	struct mc_parms mc_parms;
 	int rc;
 
 	pd = &(mp->pds_pdv[layout->eld_ld.ol_pdh]);
@@ -1217,16 +1175,12 @@ static int pmd_mdc0_meta_update(struct mpool_descriptor *mp, struct pmd_layout *
  * @cinfo:
  * @op: object opcode
  */
-void
-pmd_update_obj_stats(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	struct pmd_mdc_info        *cinfo,
-	enum pmd_obj_op             op)
+void pmd_update_obj_stats(struct mpool_descriptor *mp, struct pmd_layout *layout,
+			  struct pmd_mdc_info *cinfo, enum pmd_obj_op op)
 {
-	struct pmd_mdc_stats   *pms;
-	enum obj_type_omf       otype;
-	u64                     cap;
+	struct pmd_mdc_stats *pms;
+	enum obj_type_omf otype;
+	u64 cap;
 
 	otype = pmd_objid_type(layout->eld_objid);
 
@@ -1323,11 +1277,10 @@ static int pmd_compare_free_space(const void *first, const void *second)
  */
 static void pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slotnum)
 {
-	struct mdc_credit_set  *cset, *cs;
-	struct pmd_mdc_info    *cinfo;
-
-	u8     csidx, csmidx, num_cset, i;
-	u16    refcredit, neededcredit, tidx, totalcredit = 0;
+	struct mdc_credit_set *cset, *cs;
+	struct pmd_mdc_info *cinfo;
+	u16 refcredit, neededcredit, tidx, totalcredit = 0;
+	u8 csidx, csmidx, num_cset, i;
 
 	cset = kcalloc(num_mdc, sizeof(*cset), GFP_KERNEL);
 	if (!cset)
@@ -1423,15 +1376,14 @@ static void pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slot
  */
 void pmd_update_credit(struct mpool_descriptor *mp)
 {
-	struct pmd_mdc_info        *cinfo;
-	struct pre_compact_ctrs    *pco_cnt;
-
-	u64      cap, used, free, nmtoc;
-	u16      credit, cslot;
-	u8       sidx, nidx, num_mdc;
-	u8      *slotnum;
-	void   **sarray = mp->pds_mda.mdi_sel.mds_smdc;
-	u32      nbnoalloc = (u32)mp->pds_params.mp_pconbnoalloc;
+	struct pre_compact_ctrs *pco_cnt;
+	struct pmd_mdc_info *cinfo;
+	u64 cap, used, free, nmtoc;
+	u16 credit, cslot;
+	u8 sidx, nidx, num_mdc;
+	u8 *slotnum;
+	void **sarray = mp->pds_mda.mdi_sel.mds_smdc;
+	u32 nbnoalloc = (u32)mp->pds_params.mp_pconbnoalloc;
 
 	if (mp->pds_mda.mdi_slotvcnt < 2) {
 		mp_pr_warn("Not enough MDCn %u", mp->pds_mda.mdi_slotvcnt - 1);
@@ -1558,11 +1510,10 @@ static int pmd_mlogid2cslot(u64 mlogid)
 
 void pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 cap)
 {
-	struct pre_compact_ctrs    *pco_cnt;
-	struct pmd_mdc_info        *cinfo;
-
-	int    ret;
-	u8     cslot;
+	struct pre_compact_ctrs *pco_cnt;
+	struct pmd_mdc_info *cinfo;
+	int ret;
+	u8 cslot;
 
 	ret = pmd_mlogid2cslot(objid);
 	if (ret <= 0)

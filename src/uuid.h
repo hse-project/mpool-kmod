@@ -48,7 +48,7 @@ static inline void mpool_uuid_clear(struct mpool_uuid *uuid)
 
 static inline int mpool_uuid_is_null(const struct mpool_uuid *uuid)
 {
-	const struct mpool_uuid   zero = { };
+	const struct mpool_uuid zero = { };
 
 	return !memcmp(&zero, uuid, sizeof(zero));
 }

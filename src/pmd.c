@@ -166,15 +166,14 @@ static int pmd_mdc0_init(struct mpool_descriptor *mp, struct pmd_layout *mdc01,
  */
 static int pmd_mdc0_validate(struct mpool_descriptor *mp, int activation)
 {
-	u8                     *lcnt;
-	struct pmd_mdc_info    *cinfo;
-	struct pmd_layout      *layout;
-	struct rb_node         *node;
-	int                     err = 0, err1, err2;
-	u64                     mdcn, mdcmax = 0;
-	u64                     logid1, logid2;
-	u16                     slotvcnt;
-	int                     i;
+	struct pmd_mdc_info *cinfo;
+	struct pmd_layout *layout;
+	struct rb_node *node;
+	int err = 0, err1, err2, i;
+	u64 mdcn, mdcmax = 0;
+	u64 logid1, logid2;
+	u16 slotvcnt;
+	u8 *lcnt;
 
 	/*
 	 * Activation is single-threaded and mdc alloc is serialized
@@ -324,15 +323,14 @@ exit:
 int pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter)
 {
 	struct pmd_obj_capacity ocap;
-	enum mp_media_classp    mclassp;
-	struct pmd_mdc_info    *cinfo, *cinew;
-	struct pmd_layout      *layout1, *layout2;
-	const char             *msg = "(no detail)";
-
+	enum mp_media_classp mclassp;
+	struct pmd_mdc_info *cinfo, *cinew;
+	struct pmd_layout *layout1, *layout2;
+	const char *msg = "(no detail)";
 	u64 mdcslot, logid1, logid2;
+	bool reverse = false;
 	u32 pdcnt;
 	int err;
-	bool reverse = false;
 
 	/*
 	 * serialize to prevent gap in mdc slot space in event of failure
@@ -606,10 +604,9 @@ static void pmd_mdc_alloc_set(struct mpool_descriptor *mp)
 static int pmd_cmp_drv_mdc0(struct mpool_descriptor *mp, u8 pdh,
 			    struct omf_devparm_descriptor *omd)
 {
-	const char            *msg __maybe_unused;
+	struct mc_parms mcp_mdc0list, mcp_pd;
 	struct mpool_dev_info *pd;
-	struct mc_parms        mcp_pd;
-	struct mc_parms        mcp_mdc0list;
+	const char *msg __maybe_unused;
 
 	pd = &mp->pds_pdv[pdh];
 
@@ -641,15 +638,15 @@ static const char *msg_unavail2 __maybe_unused =
 
 static int pmd_props_load(struct mpool_descriptor *mp)
 {
-	struct omf_mdcrec_data         *cdr;
-	struct pmd_mdc_info            *cinfo = NULL;
-	struct omf_devparm_descriptor   netdev[MP_MED_NUMBER] = { };
-	enum mp_media_classp            mclassp;
-	struct media_class             *mc;
+	struct omf_devparm_descriptor netdev[MP_MED_NUMBER] = { };
+	struct omf_mdcrec_data *cdr;
+	enum mp_media_classp mclassp;
+	struct pmd_mdc_info *cinfo;
+	struct media_class *mc;
+	bool zombie[MPOOL_DRIVES_MAX];
+	int spzone[MP_MED_NUMBER], i;
 	size_t rlen = 0;
 	u64 pdh, buflen;
-	int spzone[MP_MED_NUMBER], i;
-	bool zombie[MPOOL_DRIVES_MAX];
 	int err;
 
 	cinfo = &mp->pds_mda.mdi_slotv[0];
@@ -850,10 +847,10 @@ static int pmd_props_load(struct mpool_descriptor *mp)
 
 static int pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 {
-	u64                         argv[2] = { 0 };
-	struct omf_mdcrec_data     *cdr = NULL;
-	struct pmd_mdc_info        *cinfo;
-	struct rb_node             *node;
+	struct omf_mdcrec_data *cdr = NULL;
+	struct pmd_mdc_info *cinfo;
+	struct rb_node *node;
+	u64 argv[2] = { 0 };
 	const char *msg;
 	size_t recbufsz;
 	char *recbuf;
@@ -1187,8 +1184,7 @@ static void pmd_objs_load_worker(struct work_struct *ws)
  */
 static int pmd_objs_load_parallel(struct mpool_descriptor *mp)
 {
-	struct pmd_obj_load_work   *olwv;
-
+	struct pmd_obj_load_work *olwv;
 	atomic_t err = ATOMIC_INIT(0);
 	atomic_t progress = ATOMIC_INIT(1);
 	uint njobs, inc, cpu, i;
@@ -1240,8 +1236,8 @@ static int pmd_objs_load_parallel(struct mpool_descriptor *mp)
 static int pmd_mdc_append(struct mpool_descriptor *mp, u8 cslot,
 			  struct omf_mdcrec_data *cdr, int sync)
 {
-	struct pmd_mdc_info    *cinfo = &mp->pds_mda.mdi_slotv[cslot];
-	s64                     plen;
+	struct pmd_mdc_info *cinfo = &mp->pds_mda.mdi_slotv[cslot];
+	s64 plen;
 
 	plen = omf_mdcrec_pack_htole(mp, cdr, cinfo->mmi_recbuf);
 	if (plen < 0) {
@@ -1262,9 +1258,9 @@ static int pmd_mdc_append(struct mpool_descriptor *mp, u8 cslot,
 static int pmd_log_all_mdc_cobjs(struct mpool_descriptor *mp, u8 cslot,
 				 struct omf_mdcrec_data *cdr, u32 *compacted, u32 *total)
 {
-	struct pmd_mdc_info    *cinfo;
-	struct pmd_layout      *layout;
-	struct rb_node         *node;
+	struct pmd_mdc_info *cinfo;
+	struct pmd_layout *layout;
+	struct rb_node *node;
 	int rc;
 
 	cinfo = &mp->pds_mda.mdi_slotv[cslot];
@@ -1371,7 +1367,7 @@ static int pmd_log_non_mdc0_cobjs(struct mpool_descriptor *mp, u8 cslot,
  */
 static void pmd_pre_compact_reset(struct pmd_mdc_info *cinfo, u32 compacted)
 {
-	struct pre_compact_ctrs    *pco_cnt;
+	struct pre_compact_ctrs *pco_cnt;
 
 	pco_cnt = &cinfo->mmi_pco_cnt;
 	assert(pco_cnt->pcc_cobj.counter == compacted);
@@ -1403,9 +1399,9 @@ static void pmd_pre_compact_reset(struct pmd_mdc_info *cinfo, u32 compacted)
  */
 static int pmd_mdc_compact(struct mpool_descriptor *mp, u8 cslot)
 {
-	u64                     logid1 = logid_make(2 * cslot, 0);
-	u64                     logid2 = logid_make(2 * cslot + 1, 0);
-	struct pmd_mdc_info    *cinfo = &mp->pds_mda.mdi_slotv[cslot];
+	struct pmd_mdc_info *cinfo = &mp->pds_mda.mdi_slotv[cslot];
+	u64 logid1 = logid_make(2 * cslot, 0);
+	u64 logid2 = logid_make(2 * cslot + 1, 0);
 	struct omf_mdcrec_data *cdr;
 	int retry = 0, rc = 0;
 
@@ -1512,8 +1508,8 @@ static int pmd_mdc_addrec(struct mpool_descriptor *mp, u8 cslot, struct omf_mdcr
 
 int pmd_mdc_addrec_version(struct mpool_descriptor *mp, u8 cslot)
 {
-	struct omf_mdcrec_data  cdr;
-	struct omf_mdcver      *ver;
+	struct omf_mdcrec_data cdr;
+	struct omf_mdcver *ver;
 
 	cdr.omd_rtype = OMF_MDR_VERSION;
 
@@ -1525,8 +1521,8 @@ int pmd_mdc_addrec_version(struct mpool_descriptor *mp, u8 cslot)
 
 int pmd_prop_mcconfig(struct mpool_descriptor *mp, struct mpool_dev_info *pd, bool compacting)
 {
-	struct omf_mdcrec_data  cdr;
-	struct mc_parms		mc_parms;
+	struct omf_mdcrec_data cdr;
+	struct mc_parms mc_parms;
 
 	cdr.omd_rtype = OMF_MDR_MCCONFIG;
 	mpool_uuid_copy(&cdr.u.dev.omd_parm.odp_devid, &pd->pdi_devid);
@@ -1635,11 +1631,10 @@ int pmd_prop_mpconfig(struct mpool_descriptor *mp, const struct mpool_config *cf
  */
 static bool pmd_need_compact(struct mpool_descriptor *mp, u8 cslot, char *msgbuf, size_t msgsz)
 {
-	struct pre_compact_ctrs    *pco_cnt;
-	struct pmd_mdc_info        *cinfo;
-
-	u64    rec, cobj, len, cap;
-	u32    garbage, pct;
+	struct pre_compact_ctrs *pco_cnt;
+	struct pmd_mdc_info *cinfo;
+	u64 rec, cobj, len, cap;
+	u32 garbage, pct;
 
 	assert(cslot > 0);
 
@@ -1704,12 +1699,11 @@ static bool pmd_need_compact(struct mpool_descriptor *mp, u8 cslot, char *msgbuf
  */
 static bool pmd_mdc_needed(struct mpool_descriptor *mp)
 {
-	struct pmd_mdc_info        *cinfo;
-	struct pre_compact_ctrs    *pco_cnt;
-
-	u64    cap, tcap, used, garbage, record, rec, cobj;
-	u32    pct, pctg, mdccnt;
-	u16    cslot;
+	struct pre_compact_ctrs *pco_cnt;
+	struct pmd_mdc_info *cinfo;
+	u64 cap, tcap, used, garbage, record, rec, cobj;
+	u32 pct, pctg, mdccnt;
+	u16 cslot;
 
 	cap = used = garbage = record = pctg = 0;
 
@@ -1781,14 +1775,13 @@ static bool pmd_mdc_needed(struct mpool_descriptor *mp)
  */
 static void pmd_precompact(struct work_struct *work)
 {
-	struct pre_compact_ctrl    *pco;
-	struct mpool_descriptor    *mp;
-	struct pmd_mdc_info        *cinfo;
-
-	char    msgbuf[128];
-	uint    nmtoc, delay;
-	bool    compact;
-	u8      cslot;
+	struct pre_compact_ctrl *pco;
+	struct mpool_descriptor *mp;
+	struct pmd_mdc_info *cinfo;
+	char msgbuf[128];
+	uint nmtoc, delay;
+	bool compact;
+	u8 cslot;
 
 	pco = container_of(work, typeof(*pco), pco_dwork.work);
 	mp = pco->pco_mp;
@@ -1854,9 +1847,7 @@ void pmd_precompact_stop(struct mpool_descriptor *mp)
 
 static int pmd_write_meta_to_latest_version(struct mpool_descriptor *mp, bool permitted)
 {
-	struct pmd_mdc_info *cinfo;
-	struct pmd_mdc_info *cinfo_converted = NULL;
-
+	struct pmd_mdc_info *cinfo_converted = NULL, *cinfo;
 	char buf1[MAX_MDCVERSTR] __maybe_unused;
 	char buf2[MAX_MDCVERSTR] __maybe_unused;
 	u32 cslot;
@@ -1913,12 +1904,12 @@ static int pmd_write_meta_to_latest_version(struct mpool_descriptor *mp, bool pe
 
 void pmd_mdc_cap(struct mpool_descriptor *mp, u64 *mdcmax, u64 *mdccap, u64 *mdc0cap)
 {
-	struct pmd_mdc_info    *cinfo = NULL;
-	struct pmd_layout      *layout = NULL;
-	struct rb_node         *node = NULL;
-	u64                     mlogsz;
-	u32                     zonepg = 0;
-	u16                     mdcn = 0;
+	struct pmd_mdc_info *cinfo = NULL;
+	struct pmd_layout *layout = NULL;
+	struct rb_node *node = NULL;
+	u64 mlogsz;
+	u32 zonepg = 0;
+	u16 mdcn = 0;
 
 	if (!mdcmax || !mdccap || !mdc0cap)
 		return;

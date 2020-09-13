@@ -94,8 +94,7 @@ static u64 sb_idx2woff(u32 idx)
 static bool sb_parm_valid(struct pd_dev_parm *dparm)
 {
 	struct pd_prop *pd_prop = &dparm->dpr_prop;
-
-	u32    cnt;
+	u32 cnt;
 
 	if (SB_AREA_SZ < OMF_SB_DESC_PACKLEN) {
 		/* Guarantee that the SB area is large enough to hold an SB */
@@ -369,9 +368,9 @@ int sb_erase(struct pd_dev_parm *dparm)
 
 static int sb_reconcile(struct omf_sb_descriptor *sb, struct pd_dev_parm *dparm, bool force)
 {
-	struct pd_prop                 *pd_prop = &dparm->dpr_prop;
-	struct omf_devparm_descriptor  *sb_parm = &(sb->osb_parm);
-	struct mc_parms		        mc_parms;
+	struct omf_devparm_descriptor *sb_parm = &sb->osb_parm;
+	struct pd_prop *pd_prop = &dparm->dpr_prop;
+	struct mc_parms mc_parms;
 	int rc;
 
 	pd_prop->pdp_mclassp = sb_parm->odp_mclassp;

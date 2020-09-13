@@ -155,17 +155,11 @@ static struct upgrade_history mdcrec_data_ocreate_table[]
  *
  */
 static struct upgrade_history *
-omf_find_upgrade_hist(
-	struct upgrade_history     *uhtab,
-	size_t                      tabsz,
-	enum sb_descriptor_ver_omf  sbver,
-	struct omf_mdcver          *mdcver)
+omf_find_upgrade_hist(struct upgrade_history *uhtab, size_t tabsz,
+		      enum sb_descriptor_ver_omf sbver, struct omf_mdcver *mdcver)
 {
 	struct upgrade_history *cur = NULL;
-
-	int    beg = 0;
-	int    end = tabsz;
-	int    mid;
+	int beg = 0, end = tabsz, mid;
 
 	while (beg < end) {
 		mid = (beg + end) / 2;
@@ -215,19 +209,13 @@ omf_find_upgrade_hist(
  * mdcv2 to NULL, if caller wants to use superblock versions
  */
 static __maybe_unused int
-omf_upgrade_convert_only(
-	void                       *out,
-	const void                 *in,
-	struct upgrade_history     *uhtab,
-	size_t                      tabsz,
-	enum sb_descriptor_ver_omf  sbv1,
-	enum sb_descriptor_ver_omf  sbv2,
-	struct omf_mdcver          *mdcv1,
-	struct omf_mdcver          *mdcv2)
+omf_upgrade_convert_only(void *out, const void *in, struct upgrade_history *uhtab,
+			 size_t tabsz, enum sb_descriptor_ver_omf sbv1,
+			 enum sb_descriptor_ver_omf sbv2,
+			 struct omf_mdcver *mdcv1, struct omf_mdcver *mdcv2)
 {
 	struct upgrade_history *v1, *v2, *cur;
-
-	void   *new, *old;
+	void *new, *old;
 	size_t newsz;
 
 	v1 = omf_find_upgrade_hist(uhtab, tabsz, sbv1, mdcv1);
@@ -292,14 +280,9 @@ omf_upgrade_convert_only(
  * @sbver:   superblock version
  * @mdcver: mpool MDC content version
  */
-static int
-omf_upgrade_unpack_only(
-	void                       *out,
-	const char                 *inbuf,
-	struct upgrade_history     *uhtab,
-	size_t                      tabsz,
-	enum sb_descriptor_ver_omf  sbver,
-	struct omf_mdcver          *mdcver)
+static int omf_upgrade_unpack_only(void *out, const char *inbuf, struct upgrade_history *uhtab,
+				   size_t tabsz, enum sb_descriptor_ver_omf sbver,
+				   struct omf_mdcver *mdcver)
 {
 	struct upgrade_history *res;
 
@@ -322,21 +305,15 @@ omf_upgrade_unpack_only(
  * @mdcver: mdc version. if set to NULL, use sbver to find the corresponding
  *          nested structure upgrade table
  */
-static int
-omf_unpack_letoh_and_convert(
-	void                       *out,
-	size_t                      outsz,
-	const char                 *inbuf,
-	struct upgrade_history     *uhtab,
-	size_t                      tabsz,
-	enum sb_descriptor_ver_omf  sbver,
-	struct omf_mdcver          *mdcver)
+static int omf_unpack_letoh_and_convert(void *out, size_t outsz, const char *inbuf,
+					struct upgrade_history *uhtab,
+					size_t tabsz, enum sb_descriptor_ver_omf sbver,
+					struct omf_mdcver *mdcver)
 {
 	struct upgrade_history *cur, *omf;
-
-	void   *old, *new;
-	size_t  newsz;
-	int     rc;
+	void *old, *new;
+	size_t newsz;
+	int rc;
 
 	omf = omf_find_upgrade_hist(uhtab, tabsz, sbver, mdcver);
 	assert(omf);
@@ -388,7 +365,7 @@ omf_unpack_letoh_and_convert(
  */
 static void omf_dparm_pack_htole(struct omf_devparm_descriptor *dp, char *outbuf)
 {
-	struct devparm_descriptor_omf  *dp_omf;
+	struct devparm_descriptor_omf *dp_omf;
 
 	dp_omf = (struct devparm_descriptor_omf *)outbuf;
 	assert(MPOOL_UUID_SIZE == OMF_UUID_PACKLEN);
@@ -411,8 +388,8 @@ static void omf_dparm_pack_htole(struct omf_devparm_descriptor *dp, char *outbuf
  */
 static int omf_dparm_unpack_letoh_v1(void *out, const char *inbuf)
 {
-	struct devparm_descriptor_omf  *dp_omf;
-	struct omf_devparm_descriptor  *dp;
+	struct devparm_descriptor_omf *dp_omf;
+	struct omf_devparm_descriptor *dp;
 
 	dp_omf = (struct devparm_descriptor_omf *)inbuf;
 	dp = (struct omf_devparm_descriptor *)out;
@@ -431,13 +408,10 @@ static int omf_dparm_unpack_letoh_v1(void *out, const char *inbuf)
 	return 0;
 }
 
-static int
-omf_dparm_unpack_letoh(
-	struct omf_devparm_descriptor  *dp,
-	const char                     *inbuf,
-	enum sb_descriptor_ver_omf      sbver,
-	struct omf_mdcver              *mdcver,
-	enum unpack_only                unpackonly)
+static int omf_dparm_unpack_letoh(struct omf_devparm_descriptor *dp, const char *inbuf,
+				  enum sb_descriptor_ver_omf sbver,
+				  struct omf_mdcver *mdcver,
+				  enum unpack_only unpackonly)
 {
 	const size_t sz = ARRAY_SIZE(layout_descriptor_table);
 	int rc;
@@ -458,7 +432,7 @@ omf_dparm_unpack_letoh(
  */
 static void omf_layout_pack_htole(const struct omf_layout_descriptor *ld, char *outbuf)
 {
-	struct layout_descriptor_omf   *ld_omf;
+	struct layout_descriptor_omf *ld_omf;
 
 	ld_omf = (struct layout_descriptor_omf *)outbuf;
 	omf_set_pol_zcnt(ld_omf, ld->ol_zcnt);
@@ -472,8 +446,8 @@ static void omf_layout_pack_htole(const struct omf_layout_descriptor *ld, char *
  */
 int omf_layout_unpack_letoh_v1(void *out, const char *inbuf)
 {
-	struct omf_layout_descriptor   *ld;
-	struct layout_descriptor_omf   *ld_omf;
+	struct omf_layout_descriptor *ld;
+	struct layout_descriptor_omf *ld_omf;
 
 	ld = (struct omf_layout_descriptor *)out;
 	ld_omf = (struct layout_descriptor_omf *)inbuf;
@@ -484,13 +458,10 @@ int omf_layout_unpack_letoh_v1(void *out, const char *inbuf)
 	return 0;
 }
 
-static int
-omf_layout_unpack_letoh(
-	struct omf_layout_descriptor   *ld,
-	const char                     *inbuf,
-	enum sb_descriptor_ver_omf      sbver,
-	struct omf_mdcver              *mdcver,
-	enum unpack_only                unpackonly)
+static int omf_layout_unpack_letoh(struct omf_layout_descriptor *ld, const char *inbuf,
+				   enum sb_descriptor_ver_omf sbver,
+				   struct omf_mdcver *mdcver,
+				   enum unpack_only unpackonly)
 {
 	const size_t sz = ARRAY_SIZE(layout_descriptor_table);
 	int rc;
@@ -508,15 +479,10 @@ omf_layout_unpack_letoh(
 /*
  * pmd_layout
  */
-static int
-omf_pmd_layout_pack_htole(
-	const struct mpool_descriptor  *mp,
-	u8                              rtype,
-	struct pmd_layout              *ecl,
-	char                           *outbuf)
+static int omf_pmd_layout_pack_htole(const struct mpool_descriptor *mp, u8 rtype,
+				     struct pmd_layout *ecl, char *outbuf)
 {
 	struct mdcrec_data_ocreate_omf *ocre_omf;
-
 	int data_rec_sz;
 
 	if (rtype != OMF_MDR_OCREATE && rtype != OMF_MDR_OUPDATE) {
@@ -558,8 +524,7 @@ omf_pmd_layout_pack_htole(
 static int omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf)
 {
 	struct mdcrec_data_ocreate_omf *ocre_omf;
-	struct omf_mdcrec_data         *cdr = out;
-
+	struct omf_mdcrec_data *cdr = out;
 	int rc;
 
 	ocre_omf = (struct mdcrec_data_ocreate_omf *)inbuf;
@@ -587,14 +552,14 @@ static int omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf)
 
 
 /**
- * omf_pmd_layout_unpack_letoh() - Unpack little-endian mdc obj record and
- *	optional obj layout from inbuf.
- *	Allocate object layout.
- * For version 1 of OMF_MDR_OCREATE record (strut layout_descriptor_omf)
+ * omf_pmd_layout_unpack_letoh() - Unpack little-endian mdc obj record and optional obj layout from inbuf.
  * @mp:
  * @mdcver: version of the mpool MDC content being unpacked.
  * @cdr: output
  * @inbuf:
+ *
+ * Allocate object layout.
+ * For version 1 of OMF_MDR_OCREATE record (strut layout_descriptor_omf)
  *
  * Return:
  *   0 if successful
@@ -602,12 +567,8 @@ static int omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf)
  *   -ENOMEM if cannot alloc memory to return an object layout
  *   -ENOENT if cannot convert a devid to a device handle (pdh)
  */
-static int
-omf_pmd_layout_unpack_letoh(
-	struct mpool_descriptor    *mp,
-	struct omf_mdcver          *mdcver,
-	struct omf_mdcrec_data     *cdr,
-	const char                 *inbuf)
+static int omf_pmd_layout_unpack_letoh(struct mpool_descriptor *mp, struct omf_mdcver *mdcver,
+				       struct omf_mdcrec_data *cdr, const char *inbuf)
 {
 	struct pmd_layout *ecl = NULL;
 	int rc, i;
@@ -676,9 +637,9 @@ omf_pmd_layout_unpack_letoh(
  */
 static int omf_cksum_crc32c_le(const char *dbuf, u64 dlen, u8 *obuf)
 {
-	struct shash_desc  *desc;
-	int                 rc;
-	size_t              descsz;
+	struct shash_desc *desc;
+	size_t descsz;
+	int rc;
 
 	memset(obuf, 0, 4);
 
@@ -711,7 +672,7 @@ struct omf_mdcver *omf_sbver_to_mdcver(enum sb_descriptor_ver_omf sbver)
 
 int omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf)
 {
-	struct sb_descriptor_omf   *sb_omf;
+	struct sb_descriptor_omf *sb_omf;
 	u8 cksum[4];
 	int rc;
 
@@ -764,15 +725,14 @@ int omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf)
 
 
 /**
- * omf_sb_unpack_letoh_v1()- unpack version 1 omf sb descriptor into
- *                            in-memory format
+ * omf_sb_unpack_letoh_v1()- unpack version 1 omf sb descriptor into in-memory format
  * @out: in-memory format
  * @inbuf: omf format
  */
 int omf_sb_unpack_letoh_v1(void *out, const char *inbuf)
 {
-	struct sb_descriptor_omf   *sb_omf;
-	struct omf_sb_descriptor   *sb;
+	struct sb_descriptor_omf *sb_omf;
+	struct omf_sb_descriptor *sb;
 	u8 cksum[4];
 	u8 omf_cksum[4];
 	int rc;
@@ -947,16 +907,12 @@ omf_mdcrec_objcmn_pack_htole(struct mpool_descriptor *mp, struct omf_mdcrec_data
  *   -ENOMEM if cannot alloc memory to return an object layout
  *   -ENOENT if cannot convert a devid to a device handle (pdh)
  */
-static int
-omf_mdcrec_objcmn_unpack_letoh(
-	struct mpool_descriptor    *mp,
-	struct omf_mdcver          *mdcver,
-	struct omf_mdcrec_data     *cdr,
-	const char                 *inbuf)
+static int omf_mdcrec_objcmn_unpack_letoh(struct mpool_descriptor *mp, struct omf_mdcver *mdcver,
+					  struct omf_mdcrec_data *cdr, const char *inbuf)
 {
 	struct mdcrec_data_odelete_omf *odel_omf;
-	struct mdcrec_data_oerase_omf  *oera_omf;
-	enum mdcrec_type_omf            rtype;
+	struct mdcrec_data_oerase_omf *oera_omf;
+	enum mdcrec_type_omf rtype;
 	int rc = 0;
 
 	/*
@@ -1007,7 +963,7 @@ omf_mdcrec_objcmn_unpack_letoh(
  */
 static u64 omf_mdcrec_mcconfig_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
 {
-	struct mdcrec_data_mcconfig_omf    *mc_omf;
+	struct mdcrec_data_mcconfig_omf *mc_omf;
 
 	mc_omf = (struct mdcrec_data_mcconfig_omf *)outbuf;
 	omf_set_pdrs_rtype(mc_omf, cdr->omd_rtype);
@@ -1021,11 +977,8 @@ static u64 omf_mdcrec_mcconfig_pack_htole(struct omf_mdcrec_data *cdr, char *out
  * @cdr:
  * @inbuf:
  */
-static int
-omf_mdcrec_mcconfig_unpack_letoh(
-	struct omf_mdcver      *mdcver,
-	struct omf_mdcrec_data *cdr,
-	const char             *inbuf)
+static int omf_mdcrec_mcconfig_unpack_letoh(struct omf_mdcver *mdcver, struct omf_mdcrec_data *cdr,
+					    const char *inbuf)
 {
 	struct mdcrec_data_mcconfig_omf *mc_omf;
 
@@ -1051,7 +1004,7 @@ omf_mdcrec_mcconfig_unpack_letoh(
  */
 static u64 omf_mdcver_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
 {
-	struct mdcver_omf  *pv_omf;
+	struct mdcver_omf *pv_omf;
 
 	pv_omf = (struct mdcver_omf *)outbuf;
 
@@ -1066,7 +1019,7 @@ static u64 omf_mdcver_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
 
 void omf_mdcver_unpack_letoh(struct omf_mdcrec_data *cdr, const char *inbuf)
 {
-	struct mdcver_omf  *pv_omf;
+	struct mdcver_omf *pv_omf;
 
 	pv_omf = (struct mdcver_omf *)inbuf;
 
@@ -1101,7 +1054,7 @@ static u64 omf_mdcrec_mcspare_pack_htole(struct omf_mdcrec_data *cdr, char *outb
 static int omf_mdcrec_mcspare_unpack_letoh_v1(void *out, const char *inbuf)
 {
 	struct mdcrec_data_mcspare_omf *mcs_omf;
-	struct omf_mdcrec_data         *cdr = out;
+	struct omf_mdcrec_data *cdr = out;
 
 	mcs_omf = (struct mdcrec_data_mcspare_omf *)inbuf;
 
@@ -1117,12 +1070,9 @@ static int omf_mdcrec_mcspare_unpack_letoh_v1(void *out, const char *inbuf)
  * @cdr:
  * @inbuf:
  */
-static int
-omf_mdcrec_mcspare_unpack_letoh(
-	struct omf_mdcrec_data     *cdr,
-	const char                 *inbuf,
-	enum sb_descriptor_ver_omf  sbver,
-	struct omf_mdcver          *mdcver)
+static int omf_mdcrec_mcspare_unpack_letoh(struct omf_mdcrec_data *cdr, const char *inbuf,
+					   enum sb_descriptor_ver_omf sbver,
+					   struct omf_mdcver *mdcver)
 {
 	return omf_unpack_letoh_and_convert(cdr, sizeof(*cdr), inbuf, mdcrec_data_mcspare_table,
 					    ARRAY_SIZE(mdcrec_data_mcspare_table), sbver, mdcver);
@@ -1142,8 +1092,8 @@ omf_mdcrec_mcspare_unpack_letoh(
  */
 static u64 omf_mdcrec_mpconfig_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
 {
-	struct mdcrec_data_mpconfig_omf    *cfg_omf;
-	struct mpool_config                *cfg;
+	struct mdcrec_data_mpconfig_omf *cfg_omf;
+	struct mpool_config *cfg;
 
 	cfg = &cdr->u.omd_cfg;
 
@@ -1177,8 +1127,8 @@ static u64 omf_mdcrec_mpconfig_pack_htole(struct omf_mdcrec_data *cdr, char *out
  */
 static void omf_mdcrec_mpconfig_unpack_letoh(struct omf_mdcrec_data *cdr, const char *inbuf)
 {
-	struct mdcrec_data_mpconfig_omf    *cfg_omf;
-	struct mpool_config                *cfg;
+	struct mdcrec_data_mpconfig_omf *cfg_omf;
+	struct mpool_config *cfg;
 
 	cfg = &cdr->u.omd_cfg;
 
@@ -1202,8 +1152,7 @@ static void omf_mdcrec_mpconfig_unpack_letoh(struct omf_mdcrec_data *cdr, const 
 }
 
 /**
- * mdcrec_type_objcmn() - Determine if the data record type corresponds to
- *	an object.
+ * mdcrec_type_objcmn() - Determine if the data record type corresponds to an object.
  * @rtype: record type
  *
  * Return: true if the type is of an object data record.
@@ -1216,8 +1165,7 @@ static bool mdcrec_type_objcmn(enum mdcrec_type_omf rtype)
 
 int omf_mdcrec_isobj_le(const char *inbuf)
 {
-	/* rtype is byte so no endian conversion */
-	const u8 rtype = inbuf[0];
+	const u8 rtype = inbuf[0]; /* rtype is byte so no endian conversion */
 
 	return mdcrec_type_objcmn(rtype);
 }
@@ -1246,12 +1194,8 @@ int omf_mdcrec_pack_htole(struct mpool_descriptor *mp, struct omf_mdcrec_data *c
 	return -EINVAL;
 }
 
-int
-omf_mdcrec_unpack_letoh(
-	struct omf_mdcver          *mdcver,
-	struct mpool_descriptor    *mp,
-	struct omf_mdcrec_data     *cdr,
-	const char                 *inbuf)
+int omf_mdcrec_unpack_letoh(struct omf_mdcver *mdcver, struct mpool_descriptor *mp,
+			    struct omf_mdcrec_data *cdr, const char *inbuf)
 {
 	u8 rtype = (u8)*inbuf;
 
@@ -1362,7 +1306,7 @@ int omf_logrec_desc_pack_htole(struct omf_logrec_descriptor *lrd, char *outbuf)
 
 void omf_logrec_desc_unpack_letoh(struct omf_logrec_descriptor *lrd, const char *inbuf)
 {
-	struct logrec_descriptor_omf   *lrd_omf;
+	struct logrec_descriptor_omf *lrd_omf;
 
 	lrd_omf = (struct logrec_descriptor_omf *)inbuf;
 	lrd->olr_tlen  = omf_polr_tlen(lrd_omf);

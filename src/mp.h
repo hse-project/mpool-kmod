@@ -7,9 +7,7 @@
 #define MPOOL_MP_H
 
 #include "mpool_ioctl.h"
-
 #include "uuid.h"
-
 #include "params.h"
 
 struct mpool_descriptor;
@@ -81,14 +79,8 @@ struct mpool_config {
  * %0 if successful, -errno otherwise..
  * ENODEV if insufficient number of drives meeting mdparm,
  */
-int
-mpool_create(
-	const char              *name,
-	u32                      flags,
-	char                   **dpaths,
-	struct pd_prop	        *pd_prop,
-	struct mpcore_params    *params,
-	u64                      mlog_cap);
+int mpool_create(const char *name, u32 flags, char **dpaths, struct pd_prop *pd_prop,
+		 struct mpcore_params *params, u64 mlog_cap);
 
 /**
  * mpool_activate() - Activate an mpool
@@ -109,15 +101,8 @@ mpool_create(
  * ENODEV if too many drives unavailable or failed,
  * ENXIO if device previously removed from mpool and is no longer a member
  */
-int
-mpool_activate(
-	u64                          dcnt,
-	char                       **dpaths,
-	struct pd_prop              *pd_prop,
-	u64                          mlog_cap,
-	struct mpcore_params        *params,
-	u32                          flags,
-	struct mpool_descriptor    **mpp);
+int mpool_activate(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u64 mlog_cap,
+		   struct mpcore_params *params, u32 flags, struct mpool_descriptor **mpp);
 
 
 /**

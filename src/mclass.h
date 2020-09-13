@@ -132,10 +132,7 @@ static inline bool mclass_isvalid(enum mp_media_classp mclass)
  * @mclass:
  * @mcsp: (output)
  */
-int
-mc_smap_parms_get(
-	struct media_class     *mc,
-	struct mpcore_params   *params,
-	struct mc_smap_parms   *mcsp);
+int mc_smap_parms_get(struct media_class *mc, struct mpcore_params *params,
+		      struct mc_smap_parms *mcsp);
 
 #endif /* MPOOL_MCLASS_H */

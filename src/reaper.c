@@ -135,12 +135,11 @@ static void mpc_reap_meminfo(ulong *freep, ulong *availp, uint shift)
 
 static void mpc_reap_evict_vma(struct mpc_xvm *xvm)
 {
-	struct address_space   *mapping = xvm->xvm_mapping;
-	struct mpc_reap        *reap = xvm->xvm_reap;
-
+	struct address_space *mapping = xvm->xvm_mapping;
+	struct mpc_reap *reap = xvm->xvm_reap;
 	pgoff_t off, bktsz, len;
-	u64     ttl, xtime, now;
-	int     i;
+	u64 ttl, xtime, now;
+	int i;
 
 	bktsz = xvm->xvm_bktsz >> PAGE_SHIFT;
 	off = mpc_xvm_pgoff(xvm);
@@ -195,9 +194,9 @@ static void mpc_reap_evict(struct list_head *process)
  */
 static void mpc_reap_scan(struct mpc_reap_elem *elem)
 {
-	struct list_head   *list, process;
-	struct mpc_xvm     *xvm, *next;
-	u64                 nrpages, n;
+	struct list_head *list, process;
+	struct mpc_xvm *xvm, *next;
+	u64 nrpages, n;
 
 	INIT_LIST_HEAD(&process);
 
@@ -236,8 +235,8 @@ static void mpc_reap_scan(struct mpc_reap_elem *elem)
 
 static void mpc_reap_run(struct work_struct *work)
 {
-	struct mpc_reap_elem   *elem;
-	struct mpc_reap        *reap;
+	struct mpc_reap_elem *elem;
+	struct mpc_reap *reap;
 
 	elem = container_of(work, struct mpc_reap_elem, reap_work);
 	reap = elem->reap_reap;
@@ -254,8 +253,8 @@ static void mpc_reap_run(struct work_struct *work)
  */
 static void mpc_reap_tune(struct mpc_reap *reap)
 {
-	ulong   total_pages, hpages, wpages, cpages, mfree;
-	uint    freepct, hwm, lwm, ttl, debug, i;
+	ulong total_pages, hpages, wpages, cpages, mfree;
+	uint freepct, hwm, lwm, ttl, debug, i;
 
 	hpages = wpages = cpages = 0;
 
@@ -326,13 +325,12 @@ static void mpc_reap_tune(struct mpc_reap *reap)
 
 static void mpc_reap_prune(struct work_struct *work)
 {
-	struct mpc_xvm         *xvm, *next;
-	struct mpc_reap_elem   *elem;
-	struct mpc_reap        *reap;
-	struct list_head        freeme;
-
-	uint   nfreed, eidx;
-	ulong  delay;
+	struct mpc_reap_elem *elem;
+	struct mpc_xvm *xvm, *next;
+	struct mpc_reap *reap;
+	struct list_head freeme;
+	uint nfreed, eidx;
+	ulong delay;
 
 	reap = container_of(work, struct mpc_reap, reap_dwork.work);
 
@@ -397,13 +395,12 @@ static ssize_t mpc_reap_mempct_show(struct device *dev, struct device_attribute 
 	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_reap(dev)->reap_mempct);
 }
 
-static ssize_t
-mpc_reap_mempct_store(struct device *dev, struct device_attribute *da, const char *buf,
-		      size_t count)
+static ssize_t mpc_reap_mempct_store(struct device *dev, struct device_attribute *da,
+				     const char *buf, size_t count)
 {
-	struct mpc_reap    *reap;
-	unsigned int        val;
-	int                 rc;
+	struct mpc_reap *reap;
+	unsigned int val;
+	int rc;
 
 	rc = kstrtouint(buf, 10, &val);
 	if (rc || (val < REAP_MEMPCT_MIN || val > REAP_MEMPCT_MAX))
@@ -420,12 +417,12 @@ static ssize_t mpc_reap_debug_show(struct device *dev, struct device_attribute *
 	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_reap(dev)->reap_debug);
 }
 
-static ssize_t
-mpc_reap_debug_store(struct device *dev, struct device_attribute *da, const char *buf, size_t count)
+static ssize_t mpc_reap_debug_store(struct device *dev, struct device_attribute *da,
+				    const char *buf, size_t count)
 {
-	struct mpc_reap    *reap;
-	unsigned int        val;
-	int                 rc;
+	struct mpc_reap *reap;
+	unsigned int val;
+	int rc;
 
 	rc = kstrtouint(buf, 10, &val);
 	if (rc || val > REAP_DEBUG_MAX)
@@ -442,12 +439,12 @@ static ssize_t mpc_reap_ttl_show(struct device *dev, struct device_attribute *da
 	return scnprintf(buf, PAGE_SIZE, "%d\n", dev_to_reap(dev)->reap_ttl);
 }
 
-static ssize_t
-mpc_reap_ttl_store(struct device *dev, struct device_attribute *da, const char *buf, size_t count)
+static ssize_t mpc_reap_ttl_store(struct device *dev, struct device_attribute *da,
+				  const char *buf, size_t count)
 {
-	struct mpc_reap    *reap;
-	unsigned int        val;
-	int                 rc;
+	struct mpc_reap *reap;
+	unsigned int val;
+	int rc;
 
 	rc = kstrtouint(buf, 10, &val);
 	if (rc || val < REAP_TTL_MIN)
@@ -468,8 +465,8 @@ void mpc_reap_params_add(struct device_attribute *dattr)
 
 static void mpc_reap_mempct_init(struct mpc_reap *reap)
 {
-	ulong   mavail;
-	uint    pct = 60;
+	ulong mavail;
+	uint pct = 60;
 
 	mpc_reap_meminfo(NULL, &mavail, 30);
 
@@ -493,10 +490,9 @@ static void mpc_reap_mempct_init(struct mpc_reap *reap)
  */
 int mpc_reap_create(struct mpc_reap **reapp)
 {
-	struct mpc_reap_elem   *elem;
-	struct mpc_reap        *reap;
-
-	uint   flags, i;
+	struct mpc_reap_elem *elem;
+	struct mpc_reap *reap;
+	uint flags, i;
 
 	flags = WQ_UNBOUND | WQ_HIGHPRI | WQ_CPU_INTENSIVE;
 	*reapp = NULL;
@@ -546,8 +542,8 @@ int mpc_reap_create(struct mpc_reap **reapp)
 
 void mpc_reap_destroy(struct mpc_reap *reap)
 {
-	struct mpc_reap_elem   *elem;
-	int                     i;
+	struct mpc_reap_elem *elem;
+	int i;
 
 	if (!reap)
 		return;
@@ -582,9 +578,8 @@ void mpc_reap_destroy(struct mpc_reap *reap)
 
 void mpc_reap_xvm_add(struct mpc_reap *reap, struct mpc_xvm *xvm)
 {
-	struct mpc_reap_elem   *elem;
-	uint                    idx;
-	uint                    mult;
+	struct mpc_reap_elem *elem;
+	uint idx, mult;
 
 	if (!reap || !xvm)
 		return;
@@ -643,13 +638,12 @@ void mpc_reap_xvm_evict(struct mpc_xvm *xvm)
 
 void mpc_reap_xvm_touch(struct mpc_xvm *xvm, int index)
 {
-	struct mpc_reap    *reap;
-	atomic64_t         *atimep;
-	pgoff_t             offset;
-	ulong               delay;
-	uint                mbnum;
-	uint                lwm;
-	u64                 now;
+	struct mpc_reap *reap;
+	atomic64_t *atimep;
+	uint mbnum, lwm;
+	pgoff_t offset;
+	ulong delay;
+	u64 now;
 
 	reap = xvm->xvm_reap;
 	if (!reap)
@@ -682,8 +676,8 @@ void mpc_reap_xvm_touch(struct mpc_xvm *xvm, int index)
 
 bool mpc_reap_xvm_duress(struct mpc_xvm *xvm)
 {
-	struct mpc_reap    *reap;
-	uint                lwm;
+	struct mpc_reap *reap;
+	uint lwm;
 
 	if (xvm->xvm_advice == MPC_VMA_HOT)
 		return false;

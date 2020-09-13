@@ -99,7 +99,6 @@ const char *omfu_mdcver_comment(struct omf_mdcver *mdcver);
 
 /**
  * omfu_mdcver_to_str() - convert a version into a string.
- *
  * @mdcver: version to convert
  * @buf:    buffer in which to place the conversion.
  * @sz:     size of "buf" in bytes.

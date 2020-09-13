@@ -128,30 +128,16 @@ struct mlog_stat {
  * -EBUSY = log is in erasing state; wait or retry erase
  */
 
-int
-mlog_alloc(
-	struct mpool_descriptor *mp,
-	struct mlog_capacity    *capreq,
-	enum   mp_media_classp   mclassp,
-	struct mlog_props       *prop,
-	struct mlog_descriptor  **mlh);
+int mlog_alloc(struct mpool_descriptor *mp, struct mlog_capacity *capreq,
+	       enum mp_media_classp mclassp, struct mlog_props *prop,
+	       struct mlog_descriptor **mlh);
 
-int
-mlog_realloc(
-	struct mpool_descriptor *mp,
-	u64                      objid,
-	struct mlog_capacity    *capreq,
-	enum   mp_media_classp   mclassp,
-	struct mlog_props       *prop,
-	struct mlog_descriptor  **mlh);
+int mlog_realloc(struct mpool_descriptor *mp, u64 objid, struct mlog_capacity *capreq,
+		 enum mp_media_classp mclassp, struct mlog_props *prop,
+		 struct mlog_descriptor **mlh);
 
-int
-mlog_find_get(
-	struct mpool_descriptor    *mp,
-	u64                         objid,
-	int                         which,
-	struct mlog_props          *prop,
-	struct mlog_descriptor    **mlh);
+int mlog_find_get(struct mpool_descriptor *mp, u64 objid, int which,
+		  struct mlog_props *prop, struct mlog_descriptor **mlh);
 
 void mlog_put(struct mlog_descriptor *layout);
 
@@ -164,7 +150,7 @@ int mlog_abort(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 int mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
 /**
- * mlog_open()
+ * mlog_open() -
  *
  * Open committed log, validate contents, and return its generation number;
  * if log is already open just returns gen; if csem is true enforces compaction
@@ -190,18 +176,13 @@ int mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 
 int mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-int
-mlog_append_data(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	char                       *buf,
-	u64                         buflen,
-	int                         sync);
+int mlog_append_data(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
+		     char *buf, u64 buflen, int sync);
 
 int mlog_read_data_init(struct mlog_descriptor *mlh);
 
 /**
- * mlog_read_data_next()
+ * mlog_read_data_next() -
  * @mp:
  * @mlh:
  * @buf:
@@ -209,34 +190,20 @@ int mlog_read_data_init(struct mlog_descriptor *mlh);
  * @rdlen:
  *
  * Returns:
- *   If merr_errno(return value) is EOVERFLOW, then "buf" is too small to
+ *   If -EOVERFLOW is returned, then "buf" is too small to
  *   hold the read data. Can be retried with a bigger receive buffer whose
  *   size is returned in rdlen.
  */
-int
-mlog_read_data_next(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	char                       *buf,
-	u64                         buflen,
-	u64                        *rdlen);
+int mlog_read_data_next(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
+			char *buf, u64 buflen, u64 *rdlen);
 
-int
-mlog_get_props_ex(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	struct mlog_props_ex       *prop);
+int mlog_get_props_ex(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
+		      struct mlog_props_ex *prop);
 
 void mlog_precompact_alsz(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
-int
-mlog_rw_raw(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	const struct kvec          *iov,
-	int                         iovcnt,
-	u64                         boff,
-	u8                          rw);
+int mlog_rw_raw(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
+		const struct kvec *iov, int iovcnt, u64 boff, u8 rw);
 
 void mlogutil_closeall(struct mpool_descriptor *mp);
 

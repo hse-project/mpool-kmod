@@ -110,8 +110,7 @@ char *omfu_mdcver_to_str(struct omf_mdcver *mdcver, char *buf, size_t sz)
 bool omfu_mdcver_cmp(struct omf_mdcver *a, char *op, struct omf_mdcver *b)
 {
 	size_t cnt = ARRAY_SIZE(a->mdcver);
-	int    i;
-	int    res = 0;
+	int res = 0, i;
 
 	for (i = 0; i < cnt; i++) {
 		if (a->mdcver[i] != b->mdcver[i]) {
@@ -129,7 +128,7 @@ bool omfu_mdcver_cmp(struct omf_mdcver *a, char *op, struct omf_mdcver *b)
 
 bool omfu_mdcver_cmp2(struct omf_mdcver *a, char *op, u16 major, u16 minor, u16 patch, u16 dev)
 {
-	struct omf_mdcver  b;
+	struct omf_mdcver b;
 
 	b.mdcv_major = major;
 	b.mdcv_minor = minor;

@@ -55,9 +55,9 @@ struct mlog_descriptor *layout2mlog(struct pmd_layout *layout)
 
 static struct pmd_layout_mlpriv *oml_layout_find(struct mpool_descriptor *mp, u64 key)
 {
-	struct pmd_layout_mlpriv   *this;
-	struct pmd_layout          *layout;
-	struct rb_node             *node;
+	struct pmd_layout_mlpriv *this;
+	struct pmd_layout *layout;
+	struct rb_node *node;
 
 	node = mp->pds_oml_root.rb_node;
 	while (node) {
@@ -75,14 +75,14 @@ static struct pmd_layout_mlpriv *oml_layout_find(struct mpool_descriptor *mp, u6
 	return NULL;
 }
 
-struct pmd_layout_mlpriv *
-oml_layout_insert(struct mpool_descriptor *mp, struct pmd_layout_mlpriv *item)
+struct pmd_layout_mlpriv *oml_layout_insert(struct mpool_descriptor *mp,
+					    struct pmd_layout_mlpriv *item)
 {
-	struct pmd_layout_mlpriv   *this;
-	struct pmd_layout          *layout;
-	struct rb_node            **pos, *parent;
-	struct rb_root             *root;
-	u64                         key;
+	struct pmd_layout_mlpriv *this;
+	struct pmd_layout *layout;
+	struct rb_node **pos, *parent;
+	struct rb_root *root;
+	u64 key;
 
 	root = &mp->pds_oml_root;
 	pos = &root->rb_node;
@@ -167,17 +167,13 @@ void mlog_free_rbuf(struct mlog_stat *lstat, int start, int end)
  * @layout: layout descriptor
  * @mfp:    fset parameters (output)
  */
-static void
-mlog_init_fsetparms(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	struct mlog_fsetparms      *mfp)
+static void mlog_init_fsetparms(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
+				struct mlog_fsetparms *mfp)
 {
 	struct pmd_layout *layout;
-	struct pd_prop    *pdp;
-
-	u8     secshift;
-	u16    sectsz;
+	struct pd_prop *pdp;
+	u8 secshift;
+	u16 sectsz;
 
 	layout = mlog2layout(mlh);
 	assert(layout);
@@ -267,7 +263,7 @@ mlog_read_iter_init(struct pmd_layout *layout, struct mlog_stat *lstat, struct m
  */
 void mlog_stat_init_common(struct pmd_layout *layout, struct mlog_stat *lstat)
 {
-	struct mlog_read_iter  *lri;
+	struct mlog_read_iter *lri;
 
 	lstat->lst_pfsetid = 0;
 	lstat->lst_cfsetid = 1;
@@ -286,24 +282,18 @@ void mlog_stat_init_common(struct pmd_layout *layout, struct mlog_stat *lstat)
 
 /**
  * mlog_rw_raw() - Called by mpctl kernel for mlog IO.
- * @mp:    mpool descriptor
- * @mlh:   mlog descriptor
- * iov:    iovec
- * iovcnt: iov cnt
- * boff:   IO offset
- * rw:     MPOOL_OP_READ or MPOOL_OP_WRITE
+ * @mp:     mpool descriptor
+ * @mlh:    mlog descriptor
+ * @iov:    iovec
+ * @iovcnt: iov cnt
+ * @boff:   IO offset
+ * @rw:     MPOOL_OP_READ or MPOOL_OP_WRITE
  *
  * The scatter-gather buffer must contain
  * framed mlog data (this is done in user space for user space mlogs).
  */
-int
-mlog_rw_raw(
-	struct mpool_descriptor    *mp,
-	struct mlog_descriptor     *mlh,
-	const struct kvec          *iov,
-	int                         iovcnt,
-	u64                         boff,
-	u8                          rw)
+int mlog_rw_raw(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
+		const struct kvec *iov, int iovcnt, u64 boff, u8 rw)
 {
 	struct pmd_layout *layout;
 	int flags;
@@ -324,23 +314,16 @@ mlog_rw_raw(
 
 /**
  * mlog_rw() -
- * @mp:      mpool descriptor
- * @mlh:     mlog descriptor
- * iov:      iovec
- * iovcnt:   iov cnt
- * boff:     IO offset
- * rw:       MPOOL_OP_READ or MPOOL_OP_WRITE
- * skip_ser: client guarantees serialization
+ * @mp:       mpool descriptor
+ * @mlh:      mlog descriptor
+ * @iov:      iovec
+ * @iovcnt:   iov cnt
+ * @boff:     IO offset
+ * @rw:       MPOOL_OP_READ or MPOOL_OP_WRITE
+ * @skip_ser: client guarantees serialization
  */
-static int
-mlog_rw(
-	struct mpool_descriptor *mp,
-	struct mlog_descriptor  *mlh,
-	struct kvec             *iov,
-	int                      iovcnt,
-	u64                      boff,
-	u8                       rw,
-	bool                     skip_ser)
+static int mlog_rw(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
+		   struct kvec *iov, int iovcnt, u64 boff, u8 rw, bool skip_ser)
 {
 	struct pmd_layout *layout;
 
@@ -364,10 +347,10 @@ mlog_rw(
  */
 int mlog_stat_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, bool csem)
 {
-	struct pmd_layout      *layout = mlog2layout(mlh);
-	struct mlog_stat       *lstat;
-	struct mlog_fsetparms   mfp;
-	size_t                  bufsz;
+	struct pmd_layout *layout = mlog2layout(mlh);
+	struct mlog_fsetparms mfp;
+	struct mlog_stat *lstat;
+	size_t bufsz;
 	int rc;
 
 	if (!layout)
@@ -409,12 +392,11 @@ int mlog_stat_init(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, boo
 static int
 mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u32 l_iolen, u8 op)
 {
-	struct kvec    *iov = *riov;
-
-	char  *buf;
-	u16    i;
-	u32    len       = MLOG_LPGSZ(lstat);
-	bool   alloc_iov = false;
+	struct kvec *iov = *riov;
+	u32 len = MLOG_LPGSZ(lstat);
+	bool alloc_iov = false;
+	u16 i;
+	char *buf;
 
 	assert(len == PAGE_SIZE);
 	assert(l_iolen <= PAGE_SIZE);
@@ -507,23 +489,15 @@ mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u32 l_io
  * flush set algorithm ensures 4k-alignment of sector offsets at the start
  * of each log page.
  */
-static int
-mlog_populate_abuf(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	off_t                      *soff,
-	char                       *buf,
-	bool                        skip_ser)
+static int mlog_populate_abuf(struct mpool_descriptor *mp, struct pmd_layout *layout,
+			      off_t *soff, char *buf, bool skip_ser)
 {
-	struct mlog_stat   *lstat = &layout->eld_lstat;
-	struct kvec         iov;
-
-	int    rc;
-	off_t  off;
-	u32    leadb;
-	u16    sectsz;
-	u16    iovcnt;
-	u16    leading;
+	struct mlog_stat *lstat = &layout->eld_lstat;
+	struct kvec iov;
+	u16 sectsz, iovcnt, leading;
+	off_t off;
+	u32 leadb;
+	int rc;
 
 	sectsz = MLOG_SECSZ(lstat);
 
@@ -556,8 +530,7 @@ mlog_populate_abuf(
 }
 
 /**
- * mlog_populate_rbuf() - Fill the read buffer after aligning the read offset
- * to page boundary.
+ * mlog_populate_rbuf() - Fill the read buffer after aligning the read offset to page boundary.
  * @mp:       mpool descriptor
  * @layout:   layout descriptor
  * @nsec:     number of sectors to populate
@@ -573,25 +546,15 @@ mlog_populate_abuf(
  *
  * Caller must hold the write lock on the layout.
  */
-int
-mlog_populate_rbuf(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	u16                        *nsec,
-	off_t                      *soff,
-	bool                        skip_ser)
+int mlog_populate_rbuf(struct mpool_descriptor *mp, struct pmd_layout *layout,
+		       u16 *nsec, off_t *soff, bool skip_ser)
 {
-	struct mlog_stat   *lstat = &layout->eld_lstat;
-	struct kvec        *iov = NULL;
-
-	int    rc;
-	off_t  off;
-	u32    l_iolen;
-	u16    maxsec;
-	u16    sectsz;
-	u16    iovcnt;
-	u16    nseclpg;
-	u16    leading;
+	struct mlog_stat *lstat = &layout->eld_lstat;
+	struct kvec *iov = NULL;
+	u16 maxsec, sectsz, iovcnt, nseclpg, leading;
+	off_t off;
+	u32 l_iolen;
+	int rc;
 
 	mlog_extract_fsetparms(lstat, &sectsz, NULL, &maxsec, &nseclpg);
 
@@ -651,8 +614,8 @@ mlog_populate_rbuf(
 static int mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *layout,
 			     u16 abidx, bool skip_ser)
 {
-	struct mlog_stat   *lstat = &layout->eld_lstat;
-	char               *abuf;
+	struct mlog_stat *lstat = &layout->eld_lstat;
+	char *abuf;
 
 	assert(MLOG_LPGSZ(lstat) == PAGE_SIZE);
 
@@ -715,15 +678,12 @@ static int mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *lay
  */
 static int mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser)
 {
-	struct mlog_stat   *lstat = &layout->eld_lstat;
-	struct kvec        *iov = NULL;
-
+	struct mlog_stat *lstat = &layout->eld_lstat;
+	struct kvec *iov = NULL;
+	u16    abidx, sectsz, nseclpg;
 	off_t  off;
 	u32    l_iolen;
 	int    rc;
-	u16    abidx;
-	u16    sectsz;
-	u16    nseclpg;
 
 	mlog_extract_fsetparms(lstat, &sectsz, NULL, NULL, &nseclpg);
 
@@ -765,14 +725,10 @@ static int mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *layou
 static void mlog_flush_posthdlr_4ka(struct pmd_layout *layout, bool fsucc)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
-
+	u16    abidx, sectsz, asidx;
+	off_t  asoff, wsoff;
 	char  *abuf;
-	off_t  asoff;
-	off_t  wsoff;
 	u32    nsecwr;
-	u16    abidx;
-	u16    sectsz;
-	u16    asidx;
 
 	sectsz = MLOG_SECSZ(lstat);
 	abidx  = lstat->lst_abidx;
@@ -937,14 +893,12 @@ exit2:
 static int mlog_logblocks_hdrpack(struct pmd_layout *layout)
 {
 	struct omf_logblock_header lbh;
-	struct mlog_stat          *lstat = &layout->eld_lstat;
-
-	off_t  lpgoff;
-	u32    pfsetid;
-	u32    cfsetid;
-	u16    idx, abidx;
-	u16    sectsz, nseclpg;
-	u16    sec, start;
+	struct mlog_stat *lstat = &layout->eld_lstat;
+	off_t lpgoff;
+	u32 pfsetid, cfsetid;
+	u16 sectsz, nseclpg;
+	u16 idx, abidx;
+	u16 sec, start;
 
 	sectsz  = MLOG_SECSZ(lstat);
 	nseclpg = MLOG_NSECLPG(lstat);
@@ -998,11 +952,8 @@ static int mlog_logblocks_hdrpack(struct pmd_layout *layout)
 int mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
-
-	int    rc;
+	int    start, end, rc;
 	bool   fsucc = true;
-	int    start;
-	int    end;
 	u16    abidx;
 
 	abidx = lstat->lst_abidx;
@@ -1056,11 +1007,8 @@ int mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layout,
 s64 mlog_append_dmax(struct pmd_layout *layout)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
-
-	u64    lbmax;
-	u64    lbrest;
-	u32    sectsz;
-	u32    datalb;
+	u64 lbmax, lbrest;
+	u32 sectsz, datalb;
 
 	sectsz = MLOG_SECSZ(lstat);
 	datalb = MLOG_TOTSEC(lstat);
@@ -1098,12 +1046,8 @@ s64 mlog_append_dmax(struct pmd_layout *layout)
 int mlog_update_append_idx(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
-
-	int    rc;
-	u16    sectsz;
-	u16    abidx;
-	u16    asidx;
-	u16    nseclpg;
+	u16 sectsz, nseclpg, abidx, asidx;
+	int rc;
 
 	sectsz  = MLOG_SECSZ(lstat);
 	nseclpg = MLOG_NSECLPG(lstat);
@@ -1138,14 +1082,12 @@ int mlog_update_append_idx(struct mpool_descriptor *mp, struct pmd_layout *layou
 static int mlog_logblocks_load_media(struct mpool_descriptor *mp, struct mlog_read_iter *lri,
 				     char **inbuf)
 {
-	struct pmd_layout  *layout = lri->lri_layout;
-	struct mlog_stat   *lstat = &layout->eld_lstat;
-
-	off_t  rsoff;
-	int    remsec;
-	u16    maxsec, nsecs, sectsz;
-	bool   skip_ser = false;
-	int    rc;
+	struct pmd_layout *layout = lri->lri_layout;
+	struct mlog_stat *lstat = &layout->eld_lstat;
+	u16 maxsec, nsecs, sectsz;
+	bool skip_ser = false;
+	off_t rsoff;
+	int remsec, rc;
 
 	mlog_extract_fsetparms(lstat, &sectsz, NULL, &maxsec, NULL);
 
@@ -1210,17 +1152,11 @@ static int mlog_logblocks_load_media(struct mpool_descriptor *mp, struct mlog_re
 static int mlog_logblock_load_internal(struct mpool_descriptor *mp, struct mlog_read_iter *lri,
 				       char **inbuf)
 {
-	struct mlog_stat       *lstat;
-
-	off_t  rsoff;
-	off_t  rseoff;
-	off_t  soff;
-	u16    nsecs;
-	u16    rbidx;
-	u16    nlpgs;
-	u16    nseclpg;
-	u16    rsidx;
-	int    rc;
+	struct mlog_stat *lstat;
+	off_t rsoff, rseoff, soff;
+	u16 nsecs, rbidx, rsidx;
+	u16 nlpgs, nseclpg;
+	int rc;
 
 	lstat = &lri->lri_layout->eld_lstat;
 
@@ -1399,8 +1335,8 @@ out:
  */
 void mlogutil_closeall(struct mpool_descriptor *mp)
 {
-	struct pmd_layout_mlpriv   *this, *tmp;
-	struct pmd_layout          *layout;
+	struct pmd_layout_mlpriv *this, *tmp;
+	struct pmd_layout *layout;
 
 	oml_layout_lock(mp);
 
