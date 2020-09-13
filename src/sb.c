@@ -349,7 +349,7 @@ int sb_erase(struct pd_dev_parm *dparm)
 
 	buf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!buf)
-		return -EINVAL;
+		return -ENOMEM;
 
 	memset(buf, 0, SB_AREA_SZ);
 

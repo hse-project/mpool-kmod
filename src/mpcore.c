@@ -488,7 +488,7 @@ int mpool_dev_init_all(struct mpool_dev_info *pdv, u64 dcnt, char **dpaths,
 	if (dcnt == 0)
 		return -EINVAL;
 
-	for (idx = 0; idx < dcnt; idx++, pd_prop++) {
+	for (rc = 0, idx = 0; idx < dcnt; idx++, pd_prop++) {
 		rc = pd_dev_open(dpaths[idx], &pdv[idx].pdi_parm, pd_prop);
 		if (rc) {
 			mp_pr_err("opening device %s failed", rc, dpaths[idx]);
