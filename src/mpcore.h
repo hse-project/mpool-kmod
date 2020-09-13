@@ -206,9 +206,9 @@ struct mpool_descriptor {
  * As part of adding the drive to the mpool descriptor, the drive is added
  * in its media class.
  *
- * Return: 0 if successful, merr_t (EINVAL or ENOMEM) otherwise
+ * Return: 0 if successful, -errno (-EINVAL or -ENOMEM) otherwise
  */
-merr_t mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_descriptor *devparm);
+int mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_descriptor *devparm);
 
 /**
  * mpool_desc_pdmc_add() - Add a device in its media class.
@@ -258,7 +258,7 @@ merr_t mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_de
  *	Should be called with mp.pds_pdvlock held in write.
  *	Except if mpool is single threaded (during activate for example).
  */
-merr_t
+int
 mpool_desc_pdmc_add(
 	struct mpool_descriptor		*mp,
 	u16				 pdh,
@@ -267,22 +267,22 @@ mpool_desc_pdmc_add(
 
 int uuid_to_mpdesc_insert(struct rb_root *root, struct mpool_descriptor *data);
 
-merr_t
+int
 mpool_dev_sbwrite(
 	struct mpool_descriptor    *mp,
 	struct mpool_dev_info      *pd,
 	struct omf_sb_descriptor   *sbmdc0);
 
-merr_t
+int
 mpool_mdc0_sb2obj(
 	struct mpool_descriptor    *mp,
 	struct omf_sb_descriptor   *sb,
 	struct pmd_layout         **l1,
 	struct pmd_layout         **l2);
 
-merr_t mpool_desc_init_newpool(struct mpool_descriptor *mp, u32 flags);
+int mpool_desc_init_newpool(struct mpool_descriptor *mp, u32 flags);
 
-merr_t
+int
 mpool_dev_init_all(
 	struct mpool_dev_info  *pdv,
 	u64                     dcnt,
@@ -291,26 +291,26 @@ mpool_dev_init_all(
 
 void mpool_mdc_cap_init(struct mpool_descriptor *mp, struct mpool_dev_info *pd);
 
-merr_t
+int
 mpool_desc_init_sb(
 	struct mpool_descriptor    *mp,
 	struct omf_sb_descriptor   *sbmdc0,
 	u32                         flags,
 	bool                       *mc_resize);
 
-merr_t mpool_dev_sbwrite_newpool(struct mpool_descriptor *mp, struct omf_sb_descriptor *sbmdc0);
+int mpool_dev_sbwrite_newpool(struct mpool_descriptor *mp, struct omf_sb_descriptor *sbmdc0);
 
-merr_t check_for_dups(char **listv, int cnt, int *dup, int *offset);
+int check_for_dups(char **listv, int cnt, int *dup, int *offset);
 
 void fill_in_devprops(struct mpool_descriptor *mp, u64 pdh, struct mpool_devprops *dprop);
 
-merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap);
+int mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap);
 
 struct mpool_descriptor *mpool_desc_alloc(void);
 
 void mpool_desc_free(struct mpool_descriptor *mp);
 
-merr_t mpool_dev_check_new(struct mpool_descriptor *mp, struct mpool_dev_info *pd);
+int mpool_dev_check_new(struct mpool_descriptor *mp, struct mpool_dev_info *pd);
 
 static inline enum pd_status mpool_pd_status_get(struct mpool_dev_info *pd)
 {
@@ -338,12 +338,12 @@ static inline void mpool_pd_status_set(struct mpool_dev_info *pd, enum pd_status
  * @mplen:  buffer length
  *
  * Return:
- * %0 if successful, EINVAL otherwise
+ * %0 if successful, -EINVAL otherwise
  */
-static inline merr_t mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
+static inline int mpool_get_mpname(struct mpool_descriptor *mp, char *mpname, size_t mplen)
 {
 	if (!mp || !mpname)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	strlcpy(mpname, mp->pds_name, mplen);
 

@@ -88,7 +88,7 @@ mblock_getprops_cmn(
 	prop->mpr_iscommitted = layout->eld_state & PMD_LYT_COMMITTED;
 }
 
-static merr_t
+static int
 mblock_alloc_cmn(
 	struct mpool_descriptor     *mp,
 	u64                          objid,
@@ -99,10 +99,10 @@ mblock_alloc_cmn(
 {
 	struct pmd_layout      *layout = NULL;
 	struct pmd_obj_capacity ocap;
-	merr_t                  err;
+	int rc;
 
 	if (!mp)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	*mbh = NULL;
 
@@ -110,21 +110,21 @@ mblock_alloc_cmn(
 	ocap.moc_spare  = spare;
 
 	if (!objid) {
-		err = pmd_obj_alloc(mp, OMF_OBJ_MBLOCK, &ocap, mclassp, &layout);
-		if (err)
-			return err;
+		rc = pmd_obj_alloc(mp, OMF_OBJ_MBLOCK, &ocap, mclassp, &layout);
+		if (rc)
+			return rc;
 	} else {
-		err = pmd_obj_realloc(mp, objid, &ocap, mclassp, &layout);
-		if (err) {
-			if (merr_errno(err) != ENOENT)
+		rc = pmd_obj_realloc(mp, objid, &ocap, mclassp, &layout);
+		if (rc) {
+			if (rc != -ENOENT)
 				mp_pr_err("mpool %s, re-allocating mblock 0x%lx failed",
-					  err, mp->pds_name, (ulong)objid);
-			return err;
+					  rc, mp->pds_name, (ulong)objid);
+			return rc;
 		}
 	}
 
 	if (!layout)
-		return merr(EBUG);
+		return -ENOTRECOVERABLE;
 
 	if (prop) {
 		pmd_obj_rdlock(layout);
@@ -137,7 +137,7 @@ mblock_alloc_cmn(
 	return 0;
 }
 
-merr_t
+int
 mblock_alloc(
 	struct mpool_descriptor     *mp,
 	enum mp_media_classp         mclassp,
@@ -148,7 +148,7 @@ mblock_alloc(
 	return mblock_alloc_cmn(mp, 0, mclassp, spare, prop, mbh);
 }
 
-merr_t
+int
 mblock_find_get(
 	struct mpool_descriptor    *mp,
 	u64                         objid,
@@ -161,11 +161,11 @@ mblock_find_get(
 	*mbh = NULL;
 
 	if (!mblock_objid(objid))
-		return merr(EINVAL);
+		return -EINVAL;
 
 	layout = pmd_obj_find_get(mp, objid, which);
 	if (!layout)
-		return merr(ENOENT);
+		return -ENOENT;
 
 	if (prop) {
 		pmd_obj_rdlock(layout);
@@ -202,73 +202,72 @@ do {									\
 	}								\
 } while (0)
 
-merr_t mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
+int mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 {
 	struct pmd_layout     *layout;
-	merr_t                 err;
 	struct mpool_dev_info *pd;
+	int rc;
 
 	layout = mblock2layout(mbh);
 	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
-		return merr(EINVAL);
+		return -EINVAL;
 	}
 
 	pd = pmd_layout_pd_get(mp, layout);
 	if (!pd->pdi_fua) {
-		err = pd_dev_flush(&pd->pdi_parm);
-		if (err)
-			return err;
+		rc = pd_dev_flush(&pd->pdi_parm);
+		if (rc)
+			return rc;
 	}
 
 	/* Commit will fail with EBUSY if aborting flag set. */
-	err = pmd_obj_commit(mp, layout);
-	if (err) {
+	rc = pmd_obj_commit(mp, layout);
+	if (rc) {
 		mp_pr_rl("mpool %s, committing mblock 0x%lx failed",
-			 err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
+			 rc, mp->pds_name, (ulong)layout->eld_objid);
+		return rc;
 	}
 
 	return 0;
 }
 
-merr_t mblock_abort(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
+int mblock_abort(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 {
-	struct pmd_layout  *layout;
-	merr_t              err;
+	struct pmd_layout *layout;
+	int rc;
 
 	layout = mblock2layout(mbh);
 	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
-		return merr(EINVAL);
+		return -EINVAL;
 	}
 
-	err = pmd_obj_abort(mp, layout);
-	if (err) {
+	rc = pmd_obj_abort(mp, layout);
+	if (rc) {
 		mp_pr_err("mpool %s, aborting mblock 0x%lx failed",
-			  err, mp->pds_name, (ulong)layout->eld_objid);
-		return err;
+			  rc, mp->pds_name, (ulong)layout->eld_objid);
+		return rc;
 	}
 
 	return 0;
 }
 
-merr_t mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
+int mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 {
 	struct pmd_layout *layout;
 
 	layout = mblock2layout(mbh);
 	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
-		return merr(EINVAL);
+		return -EINVAL;
 	}
 
 	return pmd_obj_delete(mp, layout);
 }
 
 /**
- * mblock_rw_argcheck()
- *
+ * mblock_rw_argcheck() -
  * @mp:      - Mpool descriptor
  * @layout:  - Layout of the mblock
  * @iov:     - iovec array
@@ -280,13 +279,13 @@ merr_t mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
  *
  * Validate mblock_write() and mblock_read()
  *
- * Returns: 0 if successful, merr_t otherwise
+ * Returns: 0 if successful, -errno otherwise
  *
  * Note: be aware that there are checks in this function that prevent illegal
  * arguments in lower level functions (lower level functions should assert the
  * requirements but not otherwise check them)
  */
-static merr_t
+static int
 mblock_rw_argcheck(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *layout,
@@ -294,9 +293,9 @@ mblock_rw_argcheck(
 	int                         rw,
 	size_t                      len)
 {
-	u64    opt_iosz;
-	u32    mblock_cap;
-	merr_t err;
+	u64 opt_iosz;
+	u32 mblock_cap;
+	int rc;
 
 	mblock_cap = pmd_layout_cap_get(mp, layout);
 	opt_iosz = mblock_optimal_iosz_get(mp, layout);
@@ -304,18 +303,18 @@ mblock_rw_argcheck(
 	if (rw == MPOOL_OP_READ) {
 		/* boff must be a multiple of the OS page size */
 		if (!PAGE_ALIGNED(boff)) {
-			err = merr(EINVAL);
+			rc = -EINVAL;
 			mp_pr_err("mpool %s, read offset 0x%lx is not multiple of OS page size",
-				  err, mp->pds_name, (ulong) boff);
-			return err;
+				  rc, mp->pds_name, (ulong) boff);
+			return rc;
 		}
 
 		/* Check that boff is not past end of mblock capacity. */
 		if (mblock_cap <= boff) {
-			err = merr(EINVAL);
+			rc = -EINVAL;
 			mp_pr_err("mpool %s, read offset 0x%lx >= mblock capacity 0x%x",
-				  err, mp->pds_name, (ulong)boff, mblock_cap);
-			return err;
+				  rc, mp->pds_name, (ulong)boff, mblock_cap);
+			return rc;
 		}
 
 		/*
@@ -326,60 +325,54 @@ mblock_rw_argcheck(
 		 * TODO: Use (len != MCACHE_RA_PAGES_MAX)
 		 */
 		if (boff + len > layout->eld_mblen)
-			return merr(EINVAL);
+			return -EINVAL;
 	} else {
 		/* Write boff required to match eld_mblen */
 		if (boff != layout->eld_mblen) {
-			err = merr(EINVAL);
+			rc = -EINVAL;
 			mp_pr_err("mpool %s write boff (%ld) != eld_mblen (%d)",
-				  err, mp->pds_name, (ulong)boff, layout->eld_mblen);
-			return err;
+				  rc, mp->pds_name, (ulong)boff, layout->eld_mblen);
+			return rc;
 		}
 
 		/* Writes must be optimal iosz aligned */
 		if (boff % opt_iosz) {
-			err = merr(EINVAL);
+			rc = -EINVAL;
 			mp_pr_err("mpool %s, write not optimal iosz aligned, offset 0x%lx",
-				  err, mp->pds_name, (ulong)boff);
-			return err;
+				  rc, mp->pds_name, (ulong)boff);
+			return rc;
 		}
 
 		/* Check for write past end of allocated space (!) */
 		if ((len + boff) > mblock_cap) {
-			err = merr(EINVAL);
+			rc = -EINVAL;
 			mp_pr_err("(write): len %lu + boff %lu > mblock_cap %lu",
-				  err, (ulong)len, (ulong)boff, (ulong)mblock_cap);
-			return err;
+				  rc, (ulong)len, (ulong)boff, (ulong)mblock_cap);
+			return rc;
 		}
 	}
 
 	return 0;
 }
 
-merr_t
-mblock_write(
-	struct mpool_descriptor    *mp,
-	struct mblock_descriptor   *mbh,
-	const struct kvec          *iov,
-	int                         iovcnt,
-	size_t                      len)
+int mblock_write(struct mpool_descriptor *mp, struct mblock_descriptor *mbh,
+		 const struct kvec *iov, int iovcnt, size_t len)
 {
 	struct pmd_layout *layout;
-
-	merr_t err;
 	loff_t boff;
-	u8     state;
+	u8 state;
+	int rc;
 
 	layout = mblock2layout(mbh);
 	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
-		return merr(EINVAL);
+		return -EINVAL;
 	}
 
-	err = mblock_rw_argcheck(mp, layout, layout->eld_mblen, MPOOL_OP_WRITE, len);
-	if (err) {
-		mp_pr_debug("mblock write argcheck failed ", err);
-		return err;
+	rc = mblock_rw_argcheck(mp, layout, layout->eld_mblen, MPOOL_OP_WRITE, len);
+	if (rc) {
+		mp_pr_debug("mblock write argcheck failed ", rc);
+		return rc;
 	}
 
 	if (len == 0)
@@ -400,41 +393,34 @@ mblock_write(
 		if (pd->pdi_fua)
 			flags = REQ_FUA;
 
-		err = pmd_layout_rw(mp, layout, iov, iovcnt, boff, flags, MPOOL_OP_WRITE);
-		if (!err)
+		rc = pmd_layout_rw(mp, layout, iov, iovcnt, boff, flags, MPOOL_OP_WRITE);
+		if (!rc)
 			layout->eld_mblen += len;
 	}
 	pmd_obj_wrunlock(layout);
 
-	return (!(state & PMD_LYT_COMMITTED)) ? err : merr(EALREADY);
+	return !(state & PMD_LYT_COMMITTED) ? rc : -EALREADY;
 }
 
-merr_t
-mblock_read(
-	struct mpool_descriptor    *mp,
-	struct mblock_descriptor   *mbh,
-	const struct kvec          *iov,
-	int                         iovcnt,
-	loff_t                      boff,
-	size_t                      len)
+int mblock_read(struct mpool_descriptor *mp, struct mblock_descriptor *mbh,
+		const struct kvec *iov, int iovcnt, loff_t boff, size_t len)
 {
 	struct pmd_layout *layout;
-
-	merr_t err;
-	u8     state;
+	u8 state;
+	int rc;
 
 	assert(mp);
 
 	layout = mblock2layout(mbh);
 	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
-		return merr(EINVAL);
+		return -EINVAL;
 	}
 
-	err = mblock_rw_argcheck(mp, layout, boff, MPOOL_OP_READ, len);
-	if (err) {
-		mp_pr_debug("mblock read argcheck failed ", err);
-		return err;
+	rc = mblock_rw_argcheck(mp, layout, boff, MPOOL_OP_READ, len);
+	if (rc) {
+		mp_pr_debug("mblock read argcheck failed ", rc);
+		return rc;
 	}
 
 	if (len == 0)
@@ -451,13 +437,13 @@ mblock_read(
 	pmd_obj_rdlock(layout);
 	state = layout->eld_state;
 	if (state & PMD_LYT_COMMITTED)
-		err = pmd_layout_rw(mp, layout, iov, iovcnt, boff, 0, MPOOL_OP_READ);
+		rc = pmd_layout_rw(mp, layout, iov, iovcnt, boff, 0, MPOOL_OP_READ);
 	pmd_obj_rdunlock(layout);
 
-	return (state & PMD_LYT_COMMITTED) ? err : merr(EAGAIN);
+	return (state & PMD_LYT_COMMITTED) ? rc : -EAGAIN;
 }
 
-merr_t
+int
 mblock_get_props_ex(
 	struct mpool_descriptor    *mp,
 	struct mblock_descriptor   *mbh,
@@ -468,7 +454,7 @@ mblock_get_props_ex(
 	layout = mblock2layout(mbh);
 	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
-		return merr(EINVAL);
+		return -EINVAL;
 	}
 
 	pmd_obj_rdlock(layout);

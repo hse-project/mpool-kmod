@@ -86,29 +86,26 @@ uuid_to_mpdesc_search(struct rb_root *root, struct mpool_uuid *key_uuid)
 	return NULL;
 }
 
-merr_t
-mpool_dev_sbwrite(
-	struct mpool_descriptor    *mp,
-	struct mpool_dev_info      *pd,
-	struct omf_sb_descriptor   *sbmdc0)
+int mpool_dev_sbwrite(struct mpool_descriptor *mp, struct mpool_dev_info *pd,
+		      struct omf_sb_descriptor *sbmdc0)
 {
-	merr_t                      err;
 	struct omf_sb_descriptor   *sb = NULL;
 	struct mc_parms		    mc_parms;
+	int rc;
 
 	if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
-		err = merr(EIO);
+		rc = -EIO;
 		mp_pr_err("%s:%s unavailable or offline, status %d",
-			  err, mp->pds_name, pd->pdi_name, mpool_pd_status_get(pd));
-		return err;
+			  rc, mp->pds_name, pd->pdi_name, mpool_pd_status_get(pd));
+		return rc;
 	}
 
 	sb = kzalloc(sizeof(struct omf_sb_descriptor), GFP_KERNEL);
 	if (!sb) {
-		err = merr(ENOMEM);
+		rc = -ENOMEM;
 		mp_pr_err("mpool %s, writing superblock on drive %s, alloc of superblock descriptor failed %lu",
-			  err, mp->pds_name, pd->pdi_name, sizeof(struct omf_sb_descriptor));
-		return err;
+			  rc, mp->pds_name, pd->pdi_name, sizeof(struct omf_sb_descriptor));
+		return rc;
 	}
 
 	/*
@@ -133,18 +130,18 @@ mpool_dev_sbwrite(
 	else
 		sbutil_mdc0_clear(sb);
 
-	err = sb_write_new(&pd->pdi_parm, sb);
-	if (err) {
+	rc = sb_write_new(&pd->pdi_parm, sb);
+	if (rc) {
 		mp_pr_err("mpool %s, writing superblock on drive %s, write failed",
-			  err, mp->pds_name, pd->pdi_name);
+			  rc, mp->pds_name, pd->pdi_name);
 	}
 
 	kfree(sb);
-	return err;
+	return rc;
 }
 
 /**
- * mpool_mdc0_alloc()
+ * mpool_mdc0_alloc() -
  * @mp:
  * @sb:
  *
@@ -154,25 +151,25 @@ mpool_dev_sbwrite(
  * Note: this function assumes that the media classes have already been
  *	created.
  */
-static merr_t mpool_mdc0_alloc(struct mpool_descriptor *mp, struct omf_sb_descriptor *sb)
+static int mpool_mdc0_alloc(struct mpool_descriptor *mp, struct omf_sb_descriptor *sb)
 {
 	struct mpool_dev_info  *pd;
 	struct media_class     *mc;
 	struct mpool_uuid       uuid;
-	merr_t                  err;
 	u64                     zcnt;
 	u64                     zonelen;
 	u32                     cnt;
+	int                     rc;
 
 	sbutil_mdc0_clear(sb);
 
 	assert(mp->pds_mdparm.md_mclass < MP_MED_NUMBER);
 	mc = &mp->pds_mc[mp->pds_mdparm.md_mclass];
 	if (mc->mc_pdmc < 0) {
-		err = merr(ENOSPC);
+		rc = -ENOSPC;
 		mp_pr_err("%s: sb update memory image MDC0 information, not enough drives",
-			  err, mp->pds_name);
-		return err;
+			  rc, mp->pds_name);
+		return rc;
 	}
 
 	pd = &mp->pds_pdv[mc->mc_pdmc];
@@ -182,28 +179,28 @@ static merr_t mpool_mdc0_alloc(struct mpool_descriptor *mp, struct omf_sb_descri
 
 	cnt = sb_zones_for_sbs(&(pd->pdi_prop));
 	if (cnt < 1) {
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("%s: sb MDC0, getting sb range failed for drive %s %u",
-			  err, mp->pds_name, pd->pdi_name, cnt);
-		return err;
+			  rc, mp->pds_name, pd->pdi_name, cnt);
+		return rc;
 	}
 
 	if ((pd->pdi_zonetot - cnt) < zcnt * 2) {
-		err = merr(ENOSPC);
+		rc = -ENOSPC;
 		mp_pr_err("%s: sb MDC0, no room for MDC0 on drive %s %lu %u %lu",
-			  err, mp->pds_name, pd->pdi_name,
+			  rc, mp->pds_name, pd->pdi_name,
 			  (ulong)pd->pdi_zonetot, cnt, (ulong)zcnt);
-		return err;
+		return rc;
 	}
 
 	/*
 	 * mdc0 log1/2 alloced on first 2 * zcnt zone's
 	 */
-	err = pd_zone_erase(&pd->pdi_parm, cnt, zcnt * 2, true);
-	if (err) {
+	rc = pd_zone_erase(&pd->pdi_parm, cnt, zcnt * 2, true);
+	if (rc) {
 		mp_pr_err("%s: sb MDC0, erase failed on %s %u %lu",
-			  err, mp->pds_name, pd->pdi_name, cnt, (ulong)zcnt);
-		return err;
+			  rc, mp->pds_name, pd->pdi_name, cnt, (ulong)zcnt);
+		return rc;
 	}
 
 	/*
@@ -233,45 +230,40 @@ static merr_t mpool_mdc0_alloc(struct mpool_descriptor *mp, struct omf_sb_descri
 	return 0;
 }
 
-merr_t mpool_dev_sbwrite_newpool(struct mpool_descriptor *mp, struct omf_sb_descriptor *sbmdc0)
+int mpool_dev_sbwrite_newpool(struct mpool_descriptor *mp, struct omf_sb_descriptor *sbmdc0)
 {
-	merr_t                  err;
-	u64                     pdh = 0;
-	struct mpool_dev_info  *pd = NULL;
+	struct mpool_dev_info *pd = NULL;
+	u64 pdh = 0;
+	int rc;
 
 	/* Alloc mdc0 and generate mdc0 info for superblocks */
-	err = mpool_mdc0_alloc(mp, sbmdc0);
-	if (err) {
-		mp_pr_err("%s: MDC0 allocation failed", err, mp->pds_name);
-		return err;
+	rc = mpool_mdc0_alloc(mp, sbmdc0);
+	if (rc) {
+		mp_pr_err("%s: MDC0 allocation failed", rc, mp->pds_name);
+		return rc;
 	}
 
 	for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
 		pd = &mp->pds_pdv[pdh];
 
 		if (pd->pdi_mclass == mp->pds_mdparm.md_mclass)
-			err = mpool_dev_sbwrite(mp, pd, sbmdc0);
+			rc = mpool_dev_sbwrite(mp, pd, sbmdc0);
 		else
-			err = mpool_dev_sbwrite(mp, pd, NULL);
-		if (err) {
-			mp_pr_err("%s: sb write %s failed, %d %d", err, mp->pds_name,
+			rc = mpool_dev_sbwrite(mp, pd, NULL);
+		if (rc) {
+			mp_pr_err("%s: sb write %s failed, %d %d", rc, mp->pds_name,
 				  pd->pdi_name, pd->pdi_mclass, mp->pds_mdparm.md_mclass);
 			break;
 		}
 	}
 
-	return err;
+	return rc;
 }
 
-merr_t
-mpool_mdc0_sb2obj(
-	struct mpool_descriptor    *mp,
-	struct omf_sb_descriptor   *sb,
-	struct pmd_layout         **l1,
-	struct pmd_layout         **l2)
+int mpool_mdc0_sb2obj(struct mpool_descriptor *mp, struct omf_sb_descriptor *sb,
+		      struct pmd_layout **l1, struct pmd_layout **l2)
 {
-	merr_t err;
-	int    i;
+	int rc, i;
 
 	/* MDC0 mlog1 layout */
 	*l1 = pmd_layout_alloc(&sb->osb_mdc01uuid, MDC0_OBJID_LOG1, sb->osb_mdc01gen, 0,
@@ -279,9 +271,9 @@ mpool_mdc0_sb2obj(
 	if (!*l1) {
 		*l1 = *l2 = NULL;
 
-		err = merr(ENOMEM);
-		mp_pr_err("mpool %s, MDC0 mlog1 allocation failed", err, mp->pds_name);
-		return err;
+		rc = -ENOMEM;
+		mp_pr_err("mpool %s, MDC0 mlog1 allocation failed", rc, mp->pds_name);
+		return rc;
 	}
 
 	(*l1)->eld_state = PMD_LYT_COMMITTED;
@@ -302,11 +294,11 @@ mpool_mdc0_sb2obj(
 		*l1 = *l2 = NULL;
 
 		mpool_unparse_uuid(&sb->osb_mdc01devid, uuid_str);
-		err = merr(ENOENT);
+		rc = -ENOENT;
 		mp_pr_err("mpool %s, allocating MDC0 mlog1, can't find handle for pd uuid %s,",
-			  err, mp->pds_name, uuid_str);
+			  rc, mp->pds_name, uuid_str);
 
-		return err;
+		return rc;
 	}
 
 	/* MDC0 mlog2 layout */
@@ -317,9 +309,9 @@ mpool_mdc0_sb2obj(
 
 		*l1 = *l2 = NULL;
 
-		err = merr(ENOMEM);
-		mp_pr_err("mpool %s, MDC0 mlog2 allocation failed", err, mp->pds_name);
-		return err;
+		rc = -ENOMEM;
+		mp_pr_err("mpool %s, MDC0 mlog2 allocation failed", rc, mp->pds_name);
+		return rc;
 	}
 
 	(*l2)->eld_state = PMD_LYT_COMMITTED;
@@ -341,11 +333,11 @@ mpool_mdc0_sb2obj(
 		*l1 = *l2 = NULL;
 
 		mpool_unparse_uuid(&sb->osb_mdc02devid, uuid_str);
-		err = merr(ENOENT);
+		rc = -ENOENT;
 		mp_pr_err("mpool %s, allocating MDC0 mlog2, can't find handle for pd uuid %s",
-			  err, mp->pds_name, uuid_str);
+			  rc, mp->pds_name, uuid_str);
 
-		return err;
+		return rc;
 	}
 
 	return 0;
@@ -356,47 +348,41 @@ mpool_mdc0_sb2obj(
  * @mp:
  * @pd:
  */
-merr_t mpool_dev_check_new(struct mpool_descriptor *mp, struct mpool_dev_info *pd)
+int mpool_dev_check_new(struct mpool_descriptor *mp, struct mpool_dev_info *pd)
 {
-	int     rval;
-	merr_t  err;
+	int rval, rc;
 
 	if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
-		err = merr(EIO);
+		rc = -EIO;
 		mp_pr_err("%s:%s unavailable or offline, status %d",
-			  err, mp->pds_name, pd->pdi_name, mpool_pd_status_get(pd));
-		return err;
+			  rc, mp->pds_name, pd->pdi_name, mpool_pd_status_get(pd));
+		return rc;
 	}
 
 	/* Confirm drive does not contain mpool magic value */
 	rval = sb_magic_check(&pd->pdi_parm);
 	if (rval) {
 		if (rval < 0) {
-			err = merr(rval);
-			mp_pr_err("%s:%s read sb magic failed", err, mp->pds_name, pd->pdi_name);
-			return err;
+			rc = rval;
+			mp_pr_err("%s:%s read sb magic failed", rc, mp->pds_name, pd->pdi_name);
+			return rc;
 		}
 
-		err = merr(EBUSY);
-		mp_pr_err("%s:%s sb magic already exists", err, mp->pds_name, pd->pdi_name);
-		return err;
+		rc = -EBUSY;
+		mp_pr_err("%s:%s sb magic already exists", rc, mp->pds_name, pd->pdi_name);
+		return rc;
 	}
 
 	return 0;
 }
 
-merr_t
-mpool_desc_pdmc_add(
-	struct mpool_descriptor	       *mp,
-	u16                             pdh,
-	struct omf_devparm_descriptor  *omf_devparm,
-	bool                            check_only)
+int mpool_desc_pdmc_add(struct mpool_descriptor *mp, u16 pdh,
+			struct omf_devparm_descriptor *omf_devparm, bool check_only)
 {
 	struct mpool_dev_info  *pd = NULL;
 	struct media_class     *mc;
 	struct mc_parms		mc_parms;
-
-	merr_t err;
+	int rc;
 
 	pd = &mp->pds_pdv[pdh];
 	if (omf_devparm == NULL)
@@ -405,10 +391,10 @@ mpool_desc_pdmc_add(
 		mc_omf_devparm2mc_parms(omf_devparm, &mc_parms);
 
 	if (!mclass_isvalid(mc_parms.mcp_classp)) {
-		err = merr(EINVAL);
-		mp_pr_err("%s: media class %u of %s is undefined",  err, mp->pds_name,
+		rc = -EINVAL;
+		mp_pr_err("%s: media class %u of %s is undefined",  rc, mp->pds_name,
 			  mc_parms.mcp_classp, pd->pdi_name);
-		return err;
+		return rc;
 	}
 
 	/*
@@ -418,9 +404,9 @@ mpool_desc_pdmc_add(
 	 * properties.
 	 */
 	if ((omf_devparm == NULL) && !(pd->pdi_cmdopt & PD_CMD_SECTOR_UPDATABLE)) {
-		err = merr(EINVAL);
-		mp_pr_err("%s: device %s sectors not updatable", err, mp->pds_name, pd->pdi_name);
-		return err;
+		rc = -EINVAL;
+		mp_pr_err("%s: device %s sectors not updatable", rc, mp->pds_name, pd->pdi_name);
+		return rc;
 	}
 
 	mc = &mp->pds_mc[mc_parms.mcp_classp];
@@ -429,17 +415,17 @@ mpool_desc_pdmc_add(
 		/*
 		 * No media class corresponding to the PD class yet, create one.
 		 */
-		err = mc_smap_parms_get(&mp->pds_mc[mc_parms.mcp_classp], &mp->pds_params, &mcsp);
-		if (err)
-			return err;
+		rc = mc_smap_parms_get(&mp->pds_mc[mc_parms.mcp_classp], &mp->pds_params, &mcsp);
+		if (rc)
+			return rc;
 
 		if (!check_only)
 			mc_init_class(mc, &mc_parms, &mcsp);
 	} else {
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("%s: add %s, only 1 device allowed per media class",
-			  err, mp->pds_name, pd->pdi_name);
-		return err;
+			  rc, mp->pds_name, pd->pdi_name);
+		return rc;
 	}
 
 	if (check_only)
@@ -462,30 +448,30 @@ mpool_desc_pdmc_add(
  * Note: the PD properties (pd->pdi_parm.dpr_prop) must be updated
  * and correct when entering this function.
  */
-merr_t mpool_desc_init_newpool(struct mpool_descriptor *mp, u32 flags)
+int mpool_desc_init_newpool(struct mpool_descriptor *mp, u32 flags)
 {
-	u64    pdh = 0;
-	merr_t err;
+	u64 pdh = 0;
+	int rc;
 
 	if (!(flags & (1 << MP_FLAGS_FORCE))) {
-		err = mpool_dev_check_new(mp, &mp->pds_pdv[pdh]);
-		if (err)
-			return err;
+		rc = mpool_dev_check_new(mp, &mp->pds_pdv[pdh]);
+		if (rc)
+			return rc;
 	}
 
 	/*
 	 * Add drive in its media class. That may create the class
 	 * if first drive of the class.
 	 */
-	err = mpool_desc_pdmc_add(mp, pdh, NULL, false);
-	if (err) {
+	rc = mpool_desc_pdmc_add(mp, pdh, NULL, false);
+	if (rc) {
 		struct mpool_dev_info  *pd __maybe_unused;
 
 		pd = &mp->pds_pdv[pdh];
 
 		mp_pr_err("mpool %s, mpool desc init, adding drive %s in a media class failed",
-			  err, mp->pds_name, pd->pdi_name);
-		return err;
+			  rc, mp->pds_name, pd->pdi_name);
+		return rc;
 	}
 
 	mp->pds_mdparm.md_mclass = mp->pds_pdv[pdh].pdi_mclass;
@@ -493,24 +479,19 @@ merr_t mpool_desc_init_newpool(struct mpool_descriptor *mp, u32 flags)
 	return 0;
 }
 
-merr_t
-mpool_dev_init_all(
-	struct mpool_dev_info  *pdv,
-	u64                     dcnt,
-	char                  **dpaths,
-	struct pd_prop	       *pd_prop)
+int mpool_dev_init_all(struct mpool_dev_info *pdv, u64 dcnt, char **dpaths,
+		       struct pd_prop *pd_prop)
 {
-	merr_t      err = 0;
-	int         idx;
-	char       *pdname;
+	char *pdname;
+	int idx, rc;
 
 	if (dcnt == 0)
-		return merr(EINVAL);
+		return -EINVAL;
 
-	for (idx = 0; idx < dcnt; idx++, pd_prop++) {
-		err = pd_dev_open(dpaths[idx], &pdv[idx].pdi_parm, pd_prop);
-		if (err) {
-			mp_pr_err("opening device %s failed", err, dpaths[idx]);
+	for (rc = 0, idx = 0; idx < dcnt; idx++, pd_prop++) {
+		rc = pd_dev_open(dpaths[idx], &pdv[idx].pdi_parm, pd_prop);
+		if (rc) {
+			mp_pr_err("opening device %s failed", rc, dpaths[idx]);
 			break;
 		}
 
@@ -521,10 +502,10 @@ mpool_dev_init_all(
 		mpool_pd_status_set(&pdv[idx], PD_STAT_ONLINE);
 	}
 
-	while (err && idx-- > 0)
+	while (rc && idx-- > 0)
 		pd_dev_close(&pdv[idx].pdi_parm);
 
-	return err;
+	return rc;
 }
 
 void mpool_mdc_cap_init(struct mpool_descriptor *mp, struct mpool_dev_info *pd)
@@ -547,27 +528,23 @@ void mpool_mdc_cap_init(struct mpool_descriptor *mp, struct mpool_dev_info *pd)
 }
 
 /**
- * mpool_desc_init_sb() -
+ * mpool_desc_init_sb() - Read the super blocks of the PDs.
  * @mp:
  * @sbmdc0: output. MDC0 information stored in the super blocks.
  * @flags:
- * Read the super blocks of the PDs.
+ *
  * Adjust the discovered PD properties stored in pd->pdi_parm.dpr_prop with
  * PD parameters from the super block. Some of discovered PD properties are
  * default (like zone size) and need to be adjusted to what the PD actually
  * use.
  */
-merr_t
-mpool_desc_init_sb(
-	struct mpool_descriptor    *mp,
-	struct omf_sb_descriptor   *sbmdc0,
-	u32                         flags,
-	bool                       *mc_resize)
+int mpool_desc_init_sb(struct mpool_descriptor *mp, struct omf_sb_descriptor *sbmdc0,
+		       u32 flags, bool *mc_resize)
 {
 	struct omf_sb_descriptor   *sb = NULL;
 	struct mpool_dev_info      *pd = NULL;
 
-	merr_t err;
+	int    rc;
 	u16    omf_ver = OMF_SB_DESC_UNDEF;
 	u8     pdh = 0;
 	bool   mdc0found = false;
@@ -575,9 +552,9 @@ mpool_desc_init_sb(
 
 	sb = kzalloc(sizeof(*sb), GFP_KERNEL);
 	if (!sb) {
-		err = merr(ENOMEM);
-		mp_pr_err("sb desc alloc failed %lu", err, (ulong)sizeof(*sb));
-		return err;
+		rc = -ENOMEM;
+		mp_pr_err("sb desc alloc failed %lu", rc, (ulong)sizeof(*sb));
+		return rc;
 	}
 
 	for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
@@ -588,22 +565,22 @@ mpool_desc_init_sb(
 
 		pd = &mp->pds_pdv[pdh];
 		if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
-			err = merr(EIO);
+			rc = -EIO;
 			mp_pr_err("pd %s unavailable or offline, status %d",
-				  err, pd->pdi_name, mpool_pd_status_get(pd));
+				  rc, pd->pdi_name, mpool_pd_status_get(pd));
 			kfree(sb);
-			return err;
+			return rc;
 		}
 
 		/*
 		 * Read superblock; init and validate pool drive info
 		 * from device parameters stored in the super block.
 		 */
-		err = sb_read(&pd->pdi_parm, sb, &omf_ver, force);
-		if (err) {
-			mp_pr_err("sb read from %s failed", err, pd->pdi_name);
+		rc = sb_read(&pd->pdi_parm, sb, &omf_ver, force);
+		if (rc) {
+			mp_pr_err("sb read from %s failed", rc, pd->pdi_name);
 			kfree(sb);
-			return err;
+			return rc;
 		}
 
 		if (!pdh) {
@@ -620,12 +597,12 @@ mpool_desc_init_sb(
 				if (uuid_str)
 					mpool_unparse_uuid(&sb->osb_poolid, uuid_str);
 
-				err = merr(EBUSY);
+				rc = -EBUSY;
 				mp_pr_err("%s: mpool already activated, id %s, pd name %s",
-					  err, sb->osb_name, uuid_str, pd->pdi_name);
+					  rc, sb->osb_name, uuid_str, pd->pdi_name);
 				kfree(sb);
 				kfree(uuid_str);
-				return err;
+				return rc;
 			}
 			mpool_uuid_copy(&mp->pds_poolid, &sb->osb_poolid);
 
@@ -643,12 +620,12 @@ mpool_desc_init_sb(
 					mpool_unparse_uuid(&mp->pds_poolid, uuid_str2);
 				}
 
-				err = merr(EINVAL);
+				rc = -EINVAL;
 				mp_pr_err("%s: pd %s, mpool id %s different from prior id %s",
-					  err, mp->pds_name, pd->pdi_name, uuid_str1, uuid_str2);
+					  rc, mp->pds_name, pd->pdi_name, uuid_str1, uuid_str2);
 				kfree(sb);
 				kfree(uuid_str1);
-				return err;
+				return rc;
 			}
 		}
 
@@ -672,11 +649,11 @@ mpool_desc_init_sb(
 		/* Validate mdc0 info in superblock if present */
 		if (!sbutil_mdc0_isclear(sb)) {
 			if (!force && !sbutil_mdc0_isvalid(sb)) {
-				err = merr(EINVAL);
+				rc = -EINVAL;
 				mp_pr_err("%s: pd %s, invalid sb MDC0",
-					  err, mp->pds_name, pd->pdi_name);
+					  rc, mp->pds_name, pd->pdi_name);
 				kfree(sb);
-				return err;
+				return rc;
 			}
 
 			dparm = &sb->osb_mdc0dev;
@@ -700,20 +677,20 @@ mpool_desc_init_sb(
 				uuid_str = kmalloc(MPOOL_UUID_STRING_LEN + 1, GFP_KERNEL);
 				if (uuid_str)
 					mpool_unparse_uuid(&sb->osb_parm.odp_devid, uuid_str);
-				err = merr(EINVAL);
+				rc = -EINVAL;
 				mp_pr_err("%s: pd %s, duplicate devices, uuid %s",
-					  err, mp->pds_name, pd->pdi_name, uuid_str);
+					  rc, mp->pds_name, pd->pdi_name, uuid_str);
 				kfree(sb);
 				kfree(uuid_str);
-				return err;
+				return rc;
 			}
 		}
 
 		if (omf_ver > OMF_SB_DESC_VER_LAST) {
-			err = merr(EOPNOTSUPP);
-			mp_pr_err("%s: unsupported sb version %d", err, mp->pds_name, omf_ver);
+			rc = -EOPNOTSUPP;
+			mp_pr_err("%s: unsupported sb version %d", rc, mp->pds_name, omf_ver);
 			kfree(sb);
-			return err;
+			return rc;
 		} else if (!force && (omf_ver < OMF_SB_DESC_VER_LAST || resize)) {
 			if ((flags & (1 << MP_FLAGS_PERMIT_META_CONV)) == 0) {
 				char *buf1;
@@ -734,23 +711,23 @@ mpool_desc_init_sb(
 					omfu_mdcver_to_str(omfu_mdcver_cur(), buf2, sizeof(buf2));
 				}
 
-				err = merr(EPERM);
+				rc = -EPERM;
 				mp_pr_err("%s: reqd sb upgrade from version %s (%s) to %s (%s)",
-					  err, mp->pds_name,
+					  rc, mp->pds_name,
 					  buf1, omfu_mdcver_comment(mdcver) ?: "",
 					  buf2, omfu_mdcver_comment(omfu_mdcver_cur()));
 				kfree(sb);
 				kfree(buf1);
-				return err;
+				return rc;
 			}
 
 			/* We need to overwrite the old version superblock on the device */
-			err = sb_write_update(&pd->pdi_parm, sb);
-			if (err) {
+			rc = sb_write_update(&pd->pdi_parm, sb);
+			if (rc) {
 				mp_pr_err("%s: pd %s, failed to convert or overwrite mpool sb",
-					  err, mp->pds_name, pd->pdi_name);
+					  rc, mp->pds_name, pd->pdi_name);
 				kfree(sb);
-				return err;
+				return rc;
 			}
 
 			if (!resize)
@@ -761,13 +738,13 @@ mpool_desc_init_sb(
 		mpool_uuid_copy(&pd->pdi_devid, &sb->osb_parm.odp_devid);
 
 		/* Add drive in its media class. Create the media class if not yet created. */
-		err = mpool_desc_pdmc_add(mp, pdh, NULL, false);
-		if (err) {
+		rc = mpool_desc_pdmc_add(mp, pdh, NULL, false);
+		if (rc) {
 			mp_pr_err("%s: pd %s, adding drive in a media class failed",
-				  err, mp->pds_name, pd->pdi_name);
+				  rc, mp->pds_name, pd->pdi_name);
 
 			kfree(sb);
-			return err;
+			return rc;
 		}
 
 		/*
@@ -781,10 +758,10 @@ mpool_desc_init_sb(
 	}
 
 	if (!mdc0found) {
-		err = merr(EINVAL);
-		mp_pr_err("%s: MDC0 not found", err, mp->pds_name);
+		rc = -EINVAL;
+		mp_pr_err("%s: MDC0 not found", rc, mp->pds_name);
 		kfree(sb);
-		return err;
+		return rc;
 	}
 
 	kfree(sb);
@@ -797,12 +774,11 @@ static int comp_func(const void *c1, const void *c2)
 	return strcmp(*(char **)c1, *(char **)c2);
 }
 
-merr_t check_for_dups(char **listv, int cnt, int *dup, int *offset)
+int check_for_dups(char **listv, int cnt, int *dup, int *offset)
 {
 	const char **sortedv;
 	const char  *prev;
-	int          i;
-	merr_t       err;
+	int          rc, i;
 
 	*dup = 0;
 	*offset = -1;
@@ -812,9 +788,9 @@ merr_t check_for_dups(char **listv, int cnt, int *dup, int *offset)
 
 	sortedv = kcalloc(cnt + 1, sizeof(char *), GFP_KERNEL);
 	if (!sortedv) {
-		err = merr(ENOMEM);
-		mp_pr_err("kcalloc failed for %d paths, first path %s", err, cnt, *listv);
-		return err;
+		rc = -ENOMEM;
+		mp_pr_err("kcalloc failed for %d paths, first path %s", rc, cnt, *listv);
+		return rc;
 	}
 
 	/* Make a shallow copy */
@@ -852,9 +828,9 @@ merr_t check_for_dups(char **listv, int cnt, int *dup, int *offset)
 
 void fill_in_devprops(struct mpool_descriptor *mp, u64 pdh, struct mpool_devprops *dprop)
 {
-	merr_t			err;
 	struct mpool_dev_info  *pd;
 	struct media_class     *mc;
+	int rc;
 
 	pd = &mp->pds_pdv[pdh];
 	memcpy(dprop->pdp_devid.b, pd->pdi_devid.uuid, MPOOL_UUID_SIZE);
@@ -863,29 +839,28 @@ void fill_in_devprops(struct mpool_descriptor *mp, u64 pdh, struct mpool_devprop
 	dprop->pdp_mclassp = mc->mc_parms.mcp_classp;
 	dprop->pdp_status  = mpool_pd_status_get(pd);
 
-	err = smap_drive_usage(mp, pdh, dprop);
-	if (err) {
+	rc = smap_drive_usage(mp, pdh, dprop);
+	if (rc) {
 		mp_pr_err("mpool %s, can't get drive usage, media class %d",
-			  err, mp->pds_name, dprop->pdp_mclassp);
+			  rc, mp->pds_name, dprop->pdp_mclassp);
 	}
 }
 
-merr_t
-mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_descriptor *omf_devparm)
+int mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_descriptor *omf_devparm)
 {
-	char                    uuid_str[40];
-	merr_t                  err;
 	struct mpool_dev_info  *pd = NULL;
+	char uuid_str[40];
+	int rc;
 
 	mpool_unparse_uuid(&omf_devparm->odp_devid, uuid_str);
 
 	mp_pr_warn("Activating mpool %s, adding unavailable drive %s", mp->pds_name, uuid_str);
 
 	if (mp->pds_pdvcnt >= MPOOL_DRIVES_MAX) {
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("Activating mpool %s, adding an unavailable drive, too many drives",
-			  err, mp->pds_name);
-		return err;
+			  rc, mp->pds_name);
+		return rc;
 	}
 
 	pd = &mp->pds_pdv[mp->pds_pdvcnt];
@@ -897,16 +872,16 @@ mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_descripto
 	pd_dev_set_unavail(&pd->pdi_parm, omf_devparm);
 
 	/* Add the PD in its media class. */
-	err = mpool_desc_pdmc_add(mp, mp->pds_pdvcnt, omf_devparm, false);
-	if (err)
-		return err;
+	rc = mpool_desc_pdmc_add(mp, mp->pds_pdvcnt, omf_devparm, false);
+	if (rc)
+		return rc;
 
 	mp->pds_pdvcnt = mp->pds_pdvcnt + 1;
 
 	return 0;
 }
 
-merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
+int mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 {
 	struct mlog_descriptor *ml_desc;
 	struct mlog_props       mlprops;
@@ -914,55 +889,54 @@ merr_t mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 		.lcp_captgt = mlog_cap,
 	};
 
-	u64     root_mlog_id[2];
-	merr_t  err;
-	int     i;
+	u64 root_mlog_id[2];
+	int rc, i;
 
 	mlog_lookup_rootids(&root_mlog_id[0], &root_mlog_id[1]);
 
 	for (i = 0; i < 2; ++i) {
-		err = mlog_find_get(mp, root_mlog_id[i], 1, NULL, &ml_desc);
-		if (!err) {
+		rc = mlog_find_get(mp, root_mlog_id[i], 1, NULL, &ml_desc);
+		if (!rc) {
 			mlog_put(ml_desc);
 			continue;
 		}
 
-		if (merr_errno(err) != ENOENT) {
+		if (rc != -ENOENT) {
 			mp_pr_err("mpool %s, root mlog find 0x%lx failed",
-				  err, mp->pds_name, (ulong)root_mlog_id[i]);
-			return err;
+				  rc, mp->pds_name, (ulong)root_mlog_id[i]);
+			return rc;
 		}
 
-		err = mlog_realloc(mp, root_mlog_id[i], &mlcap,
-				   MP_MED_CAPACITY, &mlprops, &ml_desc);
-		if (err) {
+		rc = mlog_realloc(mp, root_mlog_id[i], &mlcap,
+				  MP_MED_CAPACITY, &mlprops, &ml_desc);
+		if (rc) {
 			mp_pr_err("mpool %s, root mlog realloc 0x%lx failed",
-				  err, mp->pds_name, (ulong)root_mlog_id[i]);
-			return err;
+				  rc, mp->pds_name, (ulong)root_mlog_id[i]);
+			return rc;
 		}
 
 		if (mlprops.lpr_objid != root_mlog_id[i]) {
 			mlog_put(ml_desc);
-			err = ENOENT;
-			mp_pr_err("mpool %s, root mlog mismatch 0x%lx 0x%lx", err,
+			rc = -ENOENT;
+			mp_pr_err("mpool %s, root mlog mismatch 0x%lx 0x%lx", rc,
 				  mp->pds_name, (ulong)root_mlog_id[i], (ulong)mlprops.lpr_objid);
-			return err;
+			return rc;
 		}
 
-		err = mlog_commit(mp, ml_desc);
-		if (err) {
+		rc = mlog_commit(mp, ml_desc);
+		if (rc) {
 			if (mlog_abort(mp, ml_desc))
 				mlog_put(ml_desc);
 
 			mp_pr_err("mpool %s, root mlog commit 0x%lx failed",
-				  err, mp->pds_name, (ulong)root_mlog_id[i]);
-			return err;
+				  rc, mp->pds_name, (ulong)root_mlog_id[i]);
+			return rc;
 		}
 
 		mlog_put(ml_desc);
 	}
 
-	return err;
+	return rc;
 }
 
 struct mpool_descriptor *mpool_desc_alloc(void)

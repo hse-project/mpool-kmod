@@ -78,10 +78,10 @@ struct mpool_config {
  * specified by mdparm;
  *
  * Return:
- * %0 if successful, merr_t otherwise..
+ * %0 if successful, -errno otherwise..
  * ENODEV if insufficient number of drives meeting mdparm,
  */
-merr_t
+int
 mpool_create(
 	const char              *name,
 	u32                      flags,
@@ -105,11 +105,11 @@ mpool_create(
  * for the mpool.
  *
  * Return:
- * %0 if successful, merr_t otherwise
+ * %0 if successful, -errno otherwise
  * ENODEV if too many drives unavailable or failed,
  * ENXIO if device previously removed from mpool and is no longer a member
  */
-merr_t
+int
 mpool_activate(
 	u64                          dcnt,
 	char                       **dpaths,
@@ -127,7 +127,7 @@ mpool_activate(
  * Deactivate mpool; caller must ensure no other thread can access mp; mp is
  * invalid after call.
  */
-merr_t mpool_deactivate(struct mpool_descriptor *mp);
+int mpool_deactivate(struct mpool_descriptor *mp);
 
 /**
  * mpool_destroy() - Destroy an mpool
@@ -139,9 +139,9 @@ merr_t mpool_deactivate(struct mpool_descriptor *mp);
  * Destroy mpool on dcnt drive paths dpaths;
  *
  * Return:
- * %0 if successful, merr_t otherwise
+ * %0 if successful, -errno otherwise
  */
-merr_t mpool_destroy(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags);
+int mpool_destroy(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags);
 
 /**
  * mpool_rename() - Rename an mpool
@@ -154,9 +154,9 @@ merr_t mpool_destroy(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags
  * Rename mpool to mp_newname.
  *
  * Return:
- * %0 if successful, merr_t otherwise
+ * %0 if successful, -errno otherwise
  */
-merr_t
+int
 mpool_rename(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags, const char *mp_newname);
 
 /**
@@ -165,9 +165,9 @@ mpool_rename(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags, const 
  * @dpath:
  * @pd_prop: PD properties.
  *
- * Return: %0 if successful; merr_t otherwise...
+ * Return: %0 if successful; -enno otherwise...
  */
-merr_t mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop *pd_prop);
+int mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop *pd_prop);
 
 /**
  * mpool_drive_spares() -
@@ -177,9 +177,9 @@ merr_t mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop 
  *
  * Set percent spare zones to spzone for drives in media class mclassp.
  *
- * Return: 0 if successful, merr_t otherwise...
+ * Return: 0 if successful, -errno otherwise...
  */
-merr_t mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8 spzone);
+int mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8 spzone);
 
 /**
  * mpool_mclass_get_cnt() -
@@ -198,9 +198,9 @@ void mpool_mclass_get_cnt(struct mpool_descriptor *mp, u32 *cnt);
  *
  * Get a information on mcl_cnt media classes
  *
- * Return: 0 if successful, merr_t otherwise...
+ * Return: 0 if successful, -errno otherwise...
  */
-merr_t mpool_mclass_get(struct mpool_descriptor *mp, u32 *mcxc, struct mpool_mclass_xprops *mcxv);
+int mpool_mclass_get(struct mpool_descriptor *mp, u32 *mcxc, struct mpool_mclass_xprops *mcxv);
 
 /**
  * mpool_get_xprops() - Retrieve extended mpool properties
@@ -217,10 +217,10 @@ void mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops);
  *
  * Fill in dprop for active drive with name pdname
  *
- * Return: %0 if success, merr_t otherwise...
+ * Return: %0 if success, -errno otherwise...
  * -ENOENT if device with specified name cannot be found
  */
-merr_t
+int
 mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname, struct mpool_devprops *dprop);
 
 /**
@@ -245,13 +245,13 @@ mpool_get_usage(
  * @mp:
  * @cfg:
  */
-merr_t mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config *cfg);
+int mpool_config_store(struct mpool_descriptor *mp, const struct mpool_config *cfg);
 
 /**
  * mpool_config_fetch() - fetch the current mpool config
  * @mp:
  * @cfg:
  */
-merr_t mpool_config_fetch(struct mpool_descriptor *mp, struct mpool_config *cfg);
+int mpool_config_fetch(struct mpool_descriptor *mp, struct mpool_config *cfg);
 
 #endif /* MPOOL_MP_H */

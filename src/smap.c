@@ -23,8 +23,8 @@
 
 static struct kmem_cache  *smap_zone_cache __read_mostly;
 
-static merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh);
-static merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh);
+static int smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh);
+static int smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh);
 
 /*
  * smap API functions
@@ -77,35 +77,35 @@ static int smap_zone_insert(struct rb_root *root, struct smap_zone *item)
 /**
  * See smap.h.
  */
-merr_t smap_mpool_init(struct mpool_descriptor *mp)
+int smap_mpool_init(struct mpool_descriptor *mp)
 {
-	merr_t                 err = 0;
-	u64                    pdh = 0;
-	struct mpool_dev_info *pd  = NULL;
-	struct media_class    *mc;
+	struct mpool_dev_info *pd = NULL;
+	struct media_class *mc;
+	u64 pdh = 0;
+	int rc = 0;
 
 	for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
 		struct mc_smap_parms   mcsp;
 
 		pd = &mp->pds_pdv[pdh];
 		mc = &mp->pds_mc[pd->pdi_mclass];
-		err = mc_smap_parms_get(&mp->pds_mc[mc->mc_parms.mcp_classp],
-					&mp->pds_params, &mcsp);
-		if (err)
+		rc = mc_smap_parms_get(&mp->pds_mc[mc->mc_parms.mcp_classp],
+				       &mp->pds_params, &mcsp);
+		if (rc)
 			break;
 
-		err = smap_drive_init(mp, &mcsp, pdh);
-		if (err) {
+		rc = smap_drive_init(mp, &mcsp, pdh);
+		if (rc) {
 			mp_pr_err("smap(%s, %s): drive init failed",
-				  err, mp->pds_name, pd->pdi_name);
+				  rc, mp->pds_name, pd->pdi_name);
 			break;
 		}
 	}
 
-	if (err)
+	if (rc)
 		smap_mpool_free(mp);
 
-	return err;
+	return rc;
 }
 
 /**
@@ -134,18 +134,18 @@ void smap_mpool_usage(struct mpool_descriptor *mp, u8 mclass, struct mpool_usage
 	}
 }
 
-merr_t smap_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8 spzone)
+int smap_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8 spzone)
 {
 	struct mpool_dev_info *pd = NULL;
-	struct media_class    *mc;
-	merr_t                 err;
-	u8                     i;
+	struct media_class *mc;
+	int rc;
+	u8 i;
 
 	if (!mclass_isvalid(mclassp) || spzone > 100) {
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("smap mpool %s: smap drive spares failed mclassp %d spzone %u",
-			  err, mp->pds_name, mclassp, spzone);
-		return err;
+			  rc, mp->pds_name, mclassp, spzone);
+		return rc;
 	}
 
 	/* Loop on all classes matching mclassp. */
@@ -193,7 +193,7 @@ static void smap_calc_znstats(struct mpool_dev_info *pd, struct smap_dev_znstats
 /**
  * See smap.h.
  */
-merr_t smap_drive_usage(struct mpool_descriptor *mp, u16 pdh, struct mpool_devprops *dprop)
+int smap_drive_usage(struct mpool_descriptor *mp, u16 pdh, struct mpool_devprops *dprop)
 {
 	struct smap_dev_znstats zones;
 	struct mpool_dev_info   *pd = &mp->pds_pdv[pdh];
@@ -219,33 +219,33 @@ merr_t smap_drive_usage(struct mpool_descriptor *mp, u16 pdh, struct mpool_devpr
 /**
  * See smap.h.
  */
-merr_t smap_drive_init(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh)
+int smap_drive_init(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh)
 {
 	struct mpool_dev_info *pd __maybe_unused;
-	merr_t                 err;
+	int rc;
 
 	pd = &mp->pds_pdv[pdh];
 
 	if ((mcsp->mcsp_spzone > 100) || !(mcsp->mcsp_rgnc > 0)) {
-		err = merr(EINVAL);
-		mp_pr_err("smap(%s, %s): drive init failed, spzone %u rcnt %lu", err, mp->pds_name,
+		rc = -EINVAL;
+		mp_pr_err("smap(%s, %s): drive init failed, spzone %u rcnt %lu", rc, mp->pds_name,
 			  pd->pdi_name, mcsp->mcsp_spzone, (ulong)mcsp->mcsp_rgnc);
-		return merr(EINVAL);
+		return rc;
 	}
 
-	err = smap_drive_alloc(mp, mcsp, pdh);
-	if (!err) {
-		err = smap_drive_sballoc(mp, pdh);
-		if (err)
-			mp_pr_err("smap(%s, %s): sb alloc failed", err, mp->pds_name, pd->pdi_name);
+	rc = smap_drive_alloc(mp, mcsp, pdh);
+	if (!rc) {
+		rc = smap_drive_sballoc(mp, pdh);
+		if (rc)
+			mp_pr_err("smap(%s, %s): sb alloc failed", rc, mp->pds_name, pd->pdi_name);
 	} else {
-		mp_pr_err("smap(%s, %s): drive alloc failed", err, mp->pds_name, pd->pdi_name);
+		mp_pr_err("smap(%s, %s): drive alloc failed", rc, mp->pds_name, pd->pdi_name);
 	}
 
-	if (err)
+	if (rc)
 		smap_drive_free(mp, pdh);
 
-	return err;
+	return rc;
 }
 
 /**
@@ -356,7 +356,7 @@ static bool smap_alloccheck(struct mpool_dev_info *pd, u64 zonecnt, enum smap_sp
 /**
  * See smap.h.
  */
-merr_t
+int
 smap_alloc(
 	struct mpool_descriptor *mp,
 	u16                      pdh,
@@ -372,28 +372,29 @@ smap_alloc(
 	struct smap_zone  *elem = NULL;
 	struct media_class    *mc;
 	struct mc_smap_parms   mcsp;
-	merr_t err;
-	u64    fsoff = 0;
-	u64    fslen = 0;
-	u64    ualen = 0;
-	s8     rgnleft;
-	bool   res;
-	u8     rgn  = 0;
-	u8     rgnc;
+	bool res;
+	int rc;
+	u64 fsoff = 0;
+	u64 fslen = 0;
+	u64 ualen = 0;
+	s8 rgnleft;
+	u8 rgn = 0;
+	u8 rgnc;
 
 	*zoneaddr = 0;
 	pd = &mp->pds_pdv[pdh];
 
 	if (!zonecnt || !saptype_valid(sapolicy))
-		return merr(EINVAL);
+		return -EINVAL;
 
 	assert(is_power_of_2(align));
 
 	ds = &pd->pdi_ds;
 	mc = &mp->pds_mc[pd->pdi_mclass];
-	err = mc_smap_parms_get(&mp->pds_mc[mc->mc_parms.mcp_classp], &mp->pds_params, &mcsp);
-	if (err)
-		return err;
+	rc = mc_smap_parms_get(&mp->pds_mc[mc->mc_parms.mcp_classp], &mp->pds_params, &mcsp);
+	if (rc)
+		return rc;
+
 	rgnc = mcsp.mcsp_rgnc;
 
 	/*
@@ -446,13 +447,13 @@ smap_alloc(
 	}
 
 	if (rgnleft < 0)
-		return merr(ENOSPC);
+		return -ENOSPC;
 
 	/* Alloc from this free space if permitted. First fit. */
 	res = smap_alloccheck(pd, zonecnt, sapolicy);
 	if (!res) {
 		mutex_unlock(rmlock);
-		return merr(ENOSPC);
+		return -ENOSPC;
 	}
 
 	fsoff = fsoff + ualen;
@@ -474,7 +475,7 @@ smap_alloc(
 			elem = kmem_cache_alloc(smap_zone_cache, GFP_ATOMIC);
 			if (!elem) {
 				mutex_unlock(rmlock);
-				return merr(ENOMEM);
+				return -ENOMEM;
 			}
 		}
 
@@ -501,34 +502,34 @@ smap_alloc(
 
 /*
  * Init empty space map for drive pdh with a % spare zones of spzone.
- * Returns: 0 if successful, merr_t otherwise
+ * Returns: 0 if successful, -errno otherwise...
  */
-static merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh)
+static int smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh)
 {
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
-	u8                     rgn = 0;
-	u8                     rgn2 = 0;
-	struct smap_zone  *urb_elem = NULL;
-	struct smap_zone  *found_ue = NULL;
-	u32                    rgnsz = 0;
-	merr_t                 err;
-	u8                     rgnc;
+	struct smap_zone *urb_elem = NULL;
+	struct smap_zone *found_ue = NULL;
+	u32 rgnsz = 0;
+	u8 rgn = 0;
+	u8 rgn2 = 0;
+	u8 rgnc;
+	int rc;
 
 	rgnc  = mcsp->mcsp_rgnc;
 	rgnsz = pd->pdi_parm.dpr_zonetot / rgnc;
 	if (!rgnsz) {
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("smap(%s, %s): drive alloc failed, invalid rgn size",
-			  err, mp->pds_name, pd->pdi_name);
-		return err;
+			  rc, mp->pds_name, pd->pdi_name);
+		return rc;
 	}
 
 	/* Allocate and init per channel space maps and associated locks */
 	pd->pdi_rmbktv = kcalloc(rgnc, sizeof(*pd->pdi_rmbktv), GFP_KERNEL);
 	if (!pd->pdi_rmbktv) {
-		err = merr(ENOMEM);
-		mp_pr_err("smap(%s, %s): rmbktv alloc failed", err, mp->pds_name, pd->pdi_name);
-		return err;
+		rc = -ENOMEM;
+		mp_pr_err("smap(%s, %s): rmbktv alloc failed", rc, mp->pds_name, pd->pdi_name);
+		return rc;
 	}
 
 	/* Define all space on all channels as being free (drive empty) */
@@ -552,10 +553,10 @@ static merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms
 			kfree(pd->pdi_rmbktv);
 			pd->pdi_rmbktv = NULL;
 
-			err = merr(ENOMEM);
+			rc = -ENOMEM;
 			mp_pr_err("smap(%s, %s): rb node alloc failed, rgn %u",
-				  err, mp->pds_name, pd->pdi_name, rgn);
-			return err;
+				  rc, mp->pds_name, pd->pdi_name, rgn);
+			return rc;
 		}
 
 		urb_elem->smz_key = rgn * rgnsz;
@@ -581,29 +582,27 @@ static merr_t smap_drive_alloc(struct mpool_descriptor *mp, struct mc_smap_parms
 
 /*
  * Add entry to space map covering superblocks on drive pdh.
- * Returns: 0 if successful, merr_t otherwise
+ * Returns: 0 if successful, -errno otherwise...
  */
-static merr_t smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh)
+static int smap_drive_sballoc(struct mpool_descriptor *mp, u16 pdh)
 {
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
-	merr_t err;
-	u32    cnt;
+	int rc;
+	u32 cnt;
 
 	cnt = sb_zones_for_sbs(&(pd->pdi_prop));
 	if (cnt < 1) {
-		err = merr(ESPIPE);
-		mp_pr_err("smap(%s, %s): identifying sb failed", err, mp->pds_name, pd->pdi_name);
-		return err;
+		rc = -ESPIPE;
+		mp_pr_err("smap(%s, %s): identifying sb failed", rc, mp->pds_name, pd->pdi_name);
+		return rc;
 	}
 
-	err = smap_insert(mp, pdh, 0, cnt);
-	if (err) {
+	rc = smap_insert(mp, pdh, 0, cnt);
+	if (rc)
 		mp_pr_err("smap(%s, %s): insert failed, cnt %u",
-			  err, mp->pds_name, pd->pdi_name, cnt);
-		return err;
-	}
+			  rc, mp->pds_name, pd->pdi_name, cnt);
 
-	return err;
+	return rc;
 }
 
 void smap_mclass_usage(struct mpool_descriptor *mp, u8 mclass, struct mpool_usage *usage)
@@ -648,20 +647,19 @@ static u32 smap_addr2rgn(struct mpool_descriptor *mp, struct mpool_dev_info *pd,
  * Add entry to space map in rgn starting at zoneaddr
  * and continuing for zonecnt blocks.
  *
- *   Returns: 0 if successful, merr_t otherwise
+ *   Returns: 0 if successful, -errno otherwise...
  */
-static merr_t smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u16 zonecnt)
+static int smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u16 zonecnt)
 {
-	const char             *msg __maybe_unused;
-	struct smap_zone   *elem = NULL;
-	struct rb_root         *rmap;
-	struct rb_node         *node;
-	merr_t                  err;
-	u64                     fsoff;
-	u64                     fslen;
+	struct smap_zone *elem = NULL;
+	const char *msg __maybe_unused;
+	struct rb_root *rmap;
+	struct rb_node *node;
+	u64 fsoff, fslen;
+	int rc;
 
 	fsoff = fslen = 0;
-	err = 0;
+	rc = 0;
 	msg = NULL;
 
 	mutex_lock(&pd->pdi_rmbktv[rgn].pdi_rmlock);
@@ -670,7 +668,7 @@ static merr_t smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr
 	node = rmap->rb_node;
 	if (!node) {
 		msg = "invalid rgn map";
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		goto errout;
 	}
 
@@ -694,7 +692,7 @@ static merr_t smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr
 	if (zoneaddr < fsoff) {
 		elem = NULL;
 		msg = "requested range not free";
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		goto errout;
 	}
 
@@ -702,7 +700,7 @@ static merr_t smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr
 	if (zoneaddr + zonecnt > fsoff + fslen) {
 		elem = NULL;
 		msg = "requested range does not fit";
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		goto errout;
 	}
 
@@ -719,7 +717,7 @@ static merr_t smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr
 			elem = kmem_cache_alloc(smap_zone_cache, GFP_KERNEL);
 		if (!elem) {
 			msg = "chunk alloc failed";
-			err = merr(ENOMEM);
+			rc = -ENOMEM;
 			goto errout;
 		}
 
@@ -743,35 +741,33 @@ errout:
 		kmem_cache_free(smap_zone_cache, elem);
 	}
 
-	if (err)
+	if (rc)
 		mp_pr_err("smap pd %s: %s, zoneaddr %lu zonecnt %u fsoff %lu fslen %lu",
-			  err, pd->pdi_name, msg ? msg : "(no detail)",
+			  rc, pd->pdi_name, msg ? msg : "(no detail)",
 			  (ulong)zoneaddr, zonecnt, (ulong)fsoff, (ulong)fslen);
 
-	return err;
+	return rc;
 }
 
 /**
  * See smap.h.
  */
-merr_t smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonecnt)
+int smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonecnt)
 {
-	merr_t                 err = 0;
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
-	u32                    rstart = 0;
-	u32                    rend = 0;
-	u64                    zoneadded = 0;
-	int                    rgn = 0;
-	u64                    raddr = 0;
-	u64                    rcnt = 0;
+	u32 rstart = 0, rend = 0;
+	u64 raddr = 0, rcnt = 0;
+	u64 zoneadded = 0;
+	int rgn = 0;
+	int rc = 0;
 
 	if (zoneaddr >= pd->pdi_parm.dpr_zonetot ||
 	    (zoneaddr + zonecnt) > pd->pdi_parm.dpr_zonetot) {
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("smap(%s, %s): insert failed, zoneaddr %lu zonecnt %u zonetot %u",
-			  err, mp->pds_name, pd->pdi_name, (ulong)zoneaddr,
+			  rc, mp->pds_name, pd->pdi_name, (ulong)zoneaddr,
 			  zonecnt, pd->pdi_parm.dpr_zonetot);
-		return err;
+		return rc;
 	}
 
 	/*
@@ -795,16 +791,16 @@ merr_t smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonec
 		else
 			rcnt = zonecnt - zoneadded;
 
-		err = smap_insert_byrgn(pd, rgn, raddr, rcnt);
-		if (err) {
+		rc = smap_insert_byrgn(pd, rgn, raddr, rcnt);
+		if (rc) {
 			mp_pr_err("smap(%s, %s): insert byrgn failed, rgn %d raddr %lu rcnt %lu",
-				  err, mp->pds_name, pd->pdi_name, rgn, (ulong)raddr, (ulong)rcnt);
+				  rc, mp->pds_name, pd->pdi_name, rgn, (ulong)raddr, (ulong)rcnt);
 			break;
 		}
 		zoneadded = zoneadded + rcnt;
 	}
 
-	return err;
+	return rc;
 }
 
 
@@ -819,18 +815,17 @@ merr_t smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonec
  * back to the indicated space map.  Always coalesces ranges in the space
  * map that abut the range to be freed so as to minimize fragmentation.
  *
- * Return: 0 if successful, merr_t otherwise
+ * Return: 0 if successful, -errno otherwise...
  */
-static merr_t smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u32 zonecnt)
+static int smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u32 zonecnt)
 {
-	const char             *msg __maybe_unused;
-	struct smap_zone   *left, *right;
-	struct smap_zone   *new, *old;
-	struct rb_root         *rmap;
-	struct rb_node         *node;
-
-	u32     orig_zonecnt = zonecnt;
-	merr_t  err = 0;
+	struct smap_zone *left, *right;
+	struct smap_zone *new, *old;
+	struct rb_root *rmap;
+	struct rb_node *node;
+	const char *msg __maybe_unused;
+	u32 orig_zonecnt = zonecnt;
+	int rc = 0;
 
 	new = old = left = right = NULL;
 	msg = NULL;
@@ -854,7 +849,7 @@ static merr_t smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, 
 			node = node->rb_right;
 		} else {
 			msg = "chunk overlapping";
-			err = merr(EINVAL);
+			rc = -EINVAL;
 			goto unlock;
 		}
 	}
@@ -895,7 +890,7 @@ static merr_t smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, 
 		new = kmem_cache_alloc(smap_zone_cache, GFP_ATOMIC);
 		if (!new) {
 			msg = "chunk alloc failed";
-			err = merr(ENOMEM);
+			rc = -ENOMEM;
 			goto unlock;
 		}
 	}
@@ -906,7 +901,7 @@ static merr_t smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, 
 	if (!smap_zone_insert(rmap, new)) {
 		kmem_cache_free(smap_zone_cache, new);
 		msg = "chunk insert failed";
-		err = merr(EBUG);
+		rc = -ENOTRECOVERABLE;
 		goto unlock;
 	}
 
@@ -933,38 +928,35 @@ unlock:
 	if (old)
 		kmem_cache_free(smap_zone_cache, old);
 
-	if (err)
+	if (rc)
 		mp_pr_err("smap pd %s: %s, free byrgn failed, rgn %u zoneaddr %lu zonecnt %u",
-			 err, pd->pdi_name, msg ? msg : "(no detail)",
-			 rgn, (ulong)zoneaddr, zonecnt);
+			  rc, pd->pdi_name, msg ? msg : "(no detail)",
+			  rgn, (ulong)zoneaddr, zonecnt);
 
-	return err;
+	return rc;
 }
 
-merr_t smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt)
+int smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt)
 {
-	merr_t                 err      = 0;
-	struct mpool_dev_info *pd       = NULL;
-	u32                    rstart   = 0;
-	u32                    rend     = 0;
-	u32                    rgn     = 0;
-	u64                    zonefreed = 0;
-	u32                    raddr    = 0;
-	u64                    rcnt     = 0;
+	struct mpool_dev_info *pd = NULL;
+	u32 rstart = 0, rend = 0;
+	u32 raddr = 0, rcnt = 0;
+	u64 zonefreed = 0;
+	u32 rgn = 0;
+	int rc = 0;
 
 	pd = &mp->pds_pdv[pdh];
 
 	if (zoneaddr >= pd->pdi_parm.dpr_zonetot || zoneaddr + zonecnt > pd->pdi_parm.dpr_zonetot) {
-		err = merr(EINVAL);
+		rc = -EINVAL;
 		mp_pr_err("smap(%s, %s): free failed, zoneaddr %lu zonecnt %u zonetot: %u",
-			  err, mp->pds_name, pd->pdi_name, (ulong)zoneaddr,
+			  rc, mp->pds_name, pd->pdi_name, (ulong)zoneaddr,
 			  zonecnt, pd->pdi_parm.dpr_zonetot);
-		return err;
+		return rc;
 	}
 
 	if (!zonecnt)
-		/* Nothing to be returned */
-		return 0;
+		return 0; /* Nothing to be returned */
 
 	/*
 	 * smap_alloc() never crosses regions. however a previous instantiation
@@ -987,16 +979,16 @@ merr_t smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt
 		else
 			rcnt = zonecnt - zonefreed;
 
-		err = smap_free_byrgn(pd, rgn, raddr, rcnt);
-		if (err) {
+		rc = smap_free_byrgn(pd, rgn, raddr, rcnt);
+		if (rc) {
 			mp_pr_err("smap(%s, %s): free byrgn failed, rgn %d raddr %lu, rcnt %lu",
-				  err, mp->pds_name, pd->pdi_name, rgn, (ulong)raddr, (ulong)rcnt);
+				  rc, mp->pds_name, pd->pdi_name, rgn, (ulong)raddr, (ulong)rcnt);
 			break;
 		}
 		zonefreed = zonefreed + rcnt;
 	}
 
-	return err;
+	return rc;
 }
 
 void smap_wait_usage_done(struct mpool_descriptor *mp)
@@ -1023,9 +1015,7 @@ void smap_log_mpool_usage(struct work_struct *ws)
 	smap_mpool_usage(mp, MP_MED_ALL, &usage);
 
 	if (usage.mpu_usable == 0) {
-		merr_t err = merr(EINVAL);
-
-		mp_pr_err("smap mpool %s: zero usable space", err, mp->pds_name);
+		mp_pr_err("smap mpool %s: zero usable space", -EINVAL, mp->pds_name);
 		return;
 	}
 	/*
@@ -1057,19 +1047,19 @@ void smap_log_mpool_usage(struct work_struct *ws)
 			   msecs_to_jiffies(mp->pds_params.mp_mpusageperiod));
 }
 
-merr_t smap_init(void)
+int smap_init(void)
 {
-	merr_t err = 0;
+	int rc = 0;
 
 	smap_zone_cache = kmem_cache_create("mpool_smap_zone", sizeof(struct smap_zone),
 					    0, SLAB_HWCACHE_ALIGN | SLAB_POISON, NULL);
 	if (!smap_zone_cache) {
-		err = merr(ENOMEM);
+		rc = -ENOMEM;
 		mp_pr_err("kmem_cache_create(smap_zone, %zu) failed",
-			  err, sizeof(struct smap_zone));
+			  rc, sizeof(struct smap_zone));
 	}
 
-	return err;
+	return rc;
 }
 
 void smap_exit(void)

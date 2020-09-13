@@ -12,8 +12,6 @@
 #include <linux/workqueue.h>
 #include <linux/spinlock.h>
 
-#include "merr.h"
-
 #include "mpool_ioctl.h"
 #include "omf_if.h"
 #include "pmd_obj.h"
@@ -261,7 +259,7 @@ struct pmd_obj_load_work {
 	struct work_struct          olw_work;
 	struct mpool_descriptor    *olw_mp;
 	atomic_t                   *olw_progress; /* relaxed is correct */
-	atomic64_t                 *olw_err;
+	atomic_t                   *olw_err;
 };
 
 /**
@@ -275,9 +273,9 @@ struct pmd_obj_load_work {
  * caller must ensure no other thread accesses mp until activation is complete.
  * note: pmd module owns mdc01/2 memory mgmt whether succeeds or fails
  *
- * Return: %0 if successful, merr_t otherwise
+ * Return: %0 if successful, -errno otherwise
  */
-merr_t
+int
 pmd_mpool_activate(
 	struct mpool_descriptor    *mp,
 	struct pmd_layout          *mdc01,
@@ -305,9 +303,9 @@ void pmd_mpool_deactivate(struct mpool_descriptor *mp);
  * Add a metadata container (mdc) to mpool with a minimum capacity of mincap
  * bytes.  Once added an mdc can never be deleted.
  *
- * Return: %0 if successful, merr_t otherwise
+ * Return: %0 if successful, -errno otherwise
  */
-merr_t pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter);
+int pmd_mdc_alloc(struct mpool_descriptor *mp, u64 mincap, u32 iter);
 
 /**
  * pmd_mdc_cap() - Get metadata container (mdc) capacity stats.
@@ -332,9 +330,9 @@ void pmd_mdc_cap(struct mpool_descriptor *mp, u64 *mdcmax, u64 *mdccap, u64 *mdc
  *
  * Locking: caller must hold MDC0 compact lock.
  *
- * Return: %0 if successful, merr_t otherwise
+ * Return: %0 if successful, -errno otherwise
  */
-merr_t pmd_prop_mcconfig(struct mpool_descriptor *mp, struct mpool_dev_info *pd, bool compacting);
+int pmd_prop_mcconfig(struct mpool_descriptor *mp, struct mpool_dev_info *pd, bool compacting);
 
 /**
  * pmd_prop_mcspare() -
@@ -347,9 +345,9 @@ merr_t pmd_prop_mcconfig(struct mpool_descriptor *mp, struct mpool_dev_info *pd,
  *
  * Locking: caller must hold MDC0 compact lock.
  *
- * Return: %0 if successful, merr_t otherwise
+ * Return: %0 if successful, -errno otherwise
  */
-merr_t
+int
 pmd_prop_mcspare(
 	struct mpool_descriptor *mp,
 	enum mp_media_classp     mclassp,
@@ -362,8 +360,8 @@ pmd_prop_mcspare(
  * @cfg:
  * @compacting:
  */
-merr_t
-pmd_prop_mpconfig(struct mpool_descriptor *mp, const struct mpool_config *cfg, bool compacting);
+int pmd_prop_mpconfig(struct mpool_descriptor *mp, const struct mpool_config *cfg,
+		      bool compacting);
 
 /**
  * pmd_precompact_start() - start MDC1/255 precompaction
@@ -382,15 +380,15 @@ void pmd_precompact_stop(struct mpool_descriptor *mp);
  * @mp:
  * @cslot:
  */
-merr_t pmd_mdc_addrec_version(struct mpool_descriptor *mp, u8 cslot);
+int pmd_mdc_addrec_version(struct mpool_descriptor *mp, u8 cslot);
 
-merr_t pmd_log_delete(struct mpool_descriptor *mp, u64 objid);
+int pmd_log_delete(struct mpool_descriptor *mp, u64 objid);
 
-merr_t pmd_log_create(struct mpool_descriptor *mp, struct pmd_layout *layout);
+int pmd_log_create(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
-merr_t pmd_log_erase(struct mpool_descriptor *mp, u64 objid, u64 gen);
+int pmd_log_erase(struct mpool_descriptor *mp, u64 objid, u64 gen);
 
-merr_t pmd_log_idckpt(struct mpool_descriptor *mp, u64 objid);
+int pmd_log_idckpt(struct mpool_descriptor *mp, u64 objid);
 
 #define PMD_MDC0_COMPACTLOCK(_mp) \
 	pmd_mdc_lock(&((_mp)->pds_mda.mdi_slotv[0].mmi_compactlock), 0)

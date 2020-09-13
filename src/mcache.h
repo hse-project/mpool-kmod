@@ -76,17 +76,18 @@ void mpc_rgnmap_flush(struct mpc_rgnmap *rm);
 
 int mpc_mmap(struct file *fp, struct vm_area_struct *vma);
 
-merr_t mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, struct mpioc_vma *ioc);
+int mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, struct mpioc_vma *ioc);
 
-merr_t mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc);
+int mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc);
 
-merr_t mpioc_xvm_purge(struct mpc_unit *unit, struct mpioc_vma *ioc);
+int mpioc_xvm_purge(struct mpc_unit *unit, struct mpioc_vma *ioc);
 
-merr_t mpioc_xvm_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc);
+int mpioc_xvm_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc);
 
-merr_t mcache_init(void);
+void mpc_xvm_free(struct mpc_xvm *xvm);
 
-void mcache_exit(void);
+int mcache_init(void) __cold;
+void mcache_exit(void) __cold;
 
 static inline pgoff_t mpc_xvm_pgoff(struct mpc_xvm *xvm)
 {
@@ -97,7 +98,5 @@ static inline size_t mpc_xvm_pglen(struct mpc_xvm *xvm)
 {
 	return (xvm->xvm_bktsz * xvm->xvm_mbinfoc) >> PAGE_SHIFT;
 }
-
-void mpc_xvm_free(struct mpc_xvm *xvm);
 
 #endif /* MPOOL_MCACHE_H */

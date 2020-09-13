@@ -5,7 +5,6 @@
 
 #include <linux/module.h>
 
-#include "merr.h"
 #include "mpool_printk.h"
 
 #include "omf_if.h"
@@ -64,57 +63,57 @@ static void mpool_exit_impl(void)
 static __init int mpool_init(void)
 {
 	const char *errmsg = NULL;
-	merr_t      err;
+	int rc;
 
-	err = pd_init();
-	if (err) {
+	rc = pd_init();
+	if (rc) {
 		errmsg = "pd init failed";
 		goto errout;
 	}
 
-	err = omf_init();
-	if (err) {
+	rc = omf_init();
+	if (rc) {
 		errmsg = "omf init failed";
 		goto errout;
 	}
 
-	err = sb_init();
-	if (err) {
+	rc = sb_init();
+	if (rc) {
 		errmsg = "sb init failed";
 		goto errout;
 	}
 
-	err = smap_init();
-	if (err) {
+	rc = smap_init();
+	if (rc) {
 		errmsg = "smap init failed";
 		goto errout;
 	}
 
-	err = pmd_init();
-	if (err) {
+	rc = pmd_init();
+	if (rc) {
 		errmsg = "pmd init failed";
 		goto errout;
 	}
 
-	err = mcache_init();
-	if (err) {
+	rc = mcache_init();
+	if (rc) {
 		errmsg = "mcache init failed";
 		goto errout;
 	}
 
-	err = mpctl_init();
-	if (err) {
+	rc = mpctl_init();
+	if (rc) {
 		errmsg = "mpctl init failed";
 		goto errout;
 	}
 
 errout:
-	if (err) {
-		mp_pr_err("%s", err, errmsg);
+	if (rc) {
+		mp_pr_err("%s", rc, errmsg);
 		mpool_exit_impl();
 	}
 
-	return -merr_errno(err);
+	return rc;
 }
 
 static __exit void mpool_exit(void)

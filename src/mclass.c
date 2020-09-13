@@ -68,13 +68,13 @@ void mc_pd_prop2mc_parms(struct pd_prop *pd_prop, struct mc_parms *mc_parms)
 		mc_parms->mcp_features |= OMF_MC_FEAT_CHECKSUM;
 }
 
-merr_t mc_set_spzone(struct media_class *mc, u8 spzone)
+int mc_set_spzone(struct media_class *mc, u8 spzone)
 {
 	if (!mc)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	if (mc->mc_pdmc < 0)
-		return merr(ENOENT);
+		return -ENOENT;
 
 	mc->mc_sparms.mcsp_spzone = spzone;
 
@@ -88,14 +88,11 @@ static void mc_smap_parms_get_internal(struct mpcore_params *params, struct mc_s
 	mcsp->mcsp_align = params->mp_smapalign;
 }
 
-merr_t
-mc_smap_parms_get(
-	struct media_class     *mc,
-	struct mpcore_params   *params,
-	struct mc_smap_parms   *mcsp)
+int mc_smap_parms_get(struct media_class *mc, struct mpcore_params *params,
+		      struct mc_smap_parms *mcsp)
 {
 	if (!mc || !mcsp)
-		return merr(EINVAL);
+		return -EINVAL;
 
 	if (mc->mc_pdmc >= 0)
 		*mcsp = mc->mc_sparms;
