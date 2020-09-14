@@ -176,9 +176,9 @@ static void mpc_mpool_params_add(struct device_attribute *dattr)
 
 static int mpc_params_register(struct mpc_unit *unit, int cnt)
 {
-	struct mpc_attr            *attr;
-	struct device_attribute    *dattr;
-	int                         rc;
+	struct device_attribute *dattr;
+	struct mpc_attr *attr;
+	int rc;
 
 	attr = mpc_attr_create(unit->un_device, "parameters", cnt);
 	if (!attr)
@@ -219,8 +219,8 @@ static void mpc_params_unregister(struct mpc_unit *unit)
  */
 static size_t mpc_toascii(char *str, size_t sz)
 {
-	size_t  len = 0;
-	int     i;
+	size_t len = 0;
+	int i;
 
 	if (!str || sz < 1)
 		return 0;
@@ -274,9 +274,8 @@ static void mpool_params_merge_defaults(struct mpool_params *params)
 
 static void mpool_to_mpcore_params(struct mpool_params *params, struct mpcore_params *mpc_params)
 {
-	u64    mdc0cap;
-	u64    mdcncap;
-	u32    mdcnum;
+	u64 mdc0cap, mdcncap;
+	u32 mdcnum;
 
 	mpcore_params_defaults(mpc_params);
 
@@ -297,7 +296,7 @@ static void mpool_to_mpcore_params(struct mpool_params *params, struct mpcore_pa
 static bool mpool_params_merge_config(struct mpool_params *params, struct mpool_config *cfg)
 {
 	uuid_le uuidnull = { };
-	bool    changed = false;
+	bool changed = false;
 
 	if (params->mp_uid != -1 && params->mp_uid != cfg->mc_uid) {
 		cfg->mc_uid = params->mp_uid;
@@ -377,10 +376,10 @@ static void mpc_mpool_put(struct mpc_mpool *mpool)
  */
 static int mpc_unit_create(const char *name, struct mpc_mpool *mpool, struct mpc_unit **unitp)
 {
-	struct mpc_softstate   *ss = &mpc_softstate;
-	struct mpc_unit        *unit;
-	size_t                  unitsz;
-	int                     minor;
+	struct mpc_softstate *ss = &mpc_softstate;
+	struct mpc_unit *unit;
+	size_t unitsz;
+	int minor;
 
 	if (!ss || !name || !unitp)
 		return -EINVAL;
@@ -464,8 +463,8 @@ static void mpc_unit_put(struct mpc_unit *unit)
  */
 static void mpc_unit_lookup(int minor, struct mpc_unit **unitp)
 {
-	struct mpc_softstate   *ss = &mpc_softstate;
-	struct mpc_unit        *unit;
+	struct mpc_softstate *ss = &mpc_softstate;
+	struct mpc_unit *unit;
 
 	*unitp = NULL;
 
@@ -491,10 +490,10 @@ static void mpc_unit_lookup(int minor, struct mpc_unit **unitp)
  */
 static int mpc_unit_lookup_by_name_itercb(int minor, void *item, void *arg)
 {
-	struct mpc_unit    *unit = item;
-	void              **argv = arg;
-	struct mpc_unit    *parent = argv[0];
-	const char         *name = argv[1];
+	struct mpc_unit *unit = item;
+	void **argv = arg;
+	struct mpc_unit *parent = argv[0];
+	const char *name = argv[1];
 
 	if (!unit)
 		return ITERCB_NEXT;
@@ -524,11 +523,11 @@ static int mpc_unit_lookup_by_name_itercb(int minor, void *item, void *arg)
  * then it is referenced and returned via *unitp.  Otherwise, *unitp
  * is set to NULL.
  */
-static void
-mpc_unit_lookup_by_name(struct mpc_unit *parent, const char *name, struct mpc_unit **unitp)
+static void mpc_unit_lookup_by_name(struct mpc_unit *parent, const char *name,
+				    struct mpc_unit **unitp)
 {
 	struct mpc_softstate *ss = &mpc_softstate;
-	void   *argv[] = { parent, (void *)name, NULL };
+	void *argv[] = { parent, (void *)name, NULL };
 
 	mutex_lock(&ss->ss_lock);
 	idr_for_each(&ss->ss_unitmap, mpc_unit_lookup_by_name_itercb, argv);
@@ -556,17 +555,13 @@ mpc_unit_lookup_by_name(struct mpc_unit *parent, const char *name, struct mpc_un
  *
  * Return:  Returns 0 on success, -errno otherwise...
  */
-static int
-mpc_unit_setup(
-	const struct mpc_uinfo     *uinfo,
-	const char                 *name,
-	const struct mpool_config  *cfg,
-	struct mpc_mpool           *mpool,
-	struct mpc_unit           **unitp)
+static int mpc_unit_setup(const struct mpc_uinfo *uinfo, const char *name,
+			  const struct mpool_config *cfg, struct mpc_mpool *mpool,
+			  struct mpc_unit **unitp)
 {
-	struct mpc_softstate   *ss = &mpc_softstate;
-	struct mpc_unit        *unit;
-	struct device          *device;
+	struct mpc_softstate *ss = &mpc_softstate;
+	struct mpc_unit *unit;
+	struct device *device;
 	int rc;
 
 	if (!ss || !uinfo || !name || !name[0] || !cfg || !unitp)
@@ -644,8 +639,8 @@ errout:
 
 static int mpc_cf_journal(struct mpc_unit *unit)
 {
-	struct mpool_config     cfg = { };
-	struct mpc_mpool       *mpool;
+	struct mpool_config cfg = { };
+	struct mpc_mpool *mpool;
 	int rc;
 
 	mpool = unit->un_mpool;
@@ -681,7 +676,7 @@ static int mpc_cf_journal(struct mpc_unit *unit)
 */
 static int mpc_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
-	struct mpc_unit    *unit = dev_get_drvdata(dev);
+	struct mpc_unit *unit = dev_get_drvdata(dev);
 
 	if (unit) {
 		add_uevent_var(env, "DEVMODE=%#o", unit->un_mode);
@@ -701,10 +696,10 @@ static int mpc_uevent(struct device *dev, struct kobj_uevent_env *env)
  */
 static int mpc_mp_chown(struct mpc_unit *unit, struct mpool_params *params)
 {
-	uid_t  uid;
-	gid_t  gid;
 	mode_t mode;
-	int    rc = 0;
+	uid_t uid;
+	gid_t gid;
+	int rc = 0;
 
 	if (!mpc_unit_ismpooldev(unit))
 		return -EINVAL;
@@ -749,11 +744,11 @@ static int mpc_mp_chown(struct mpc_unit *unit, struct mpool_params *params)
  */
 static int mpioc_params_get(struct mpc_unit *unit, struct mpioc_params *get)
 {
-	struct mpc_softstate       *ss = &mpc_softstate;
-	struct mpool_descriptor    *desc;
-	struct mpool_params        *params;
-	struct mpool_xprops         xprops = { };
-	u8                          mclass;
+	struct mpc_softstate *ss = &mpc_softstate;
+	struct mpool_descriptor *desc;
+	struct mpool_params *params;
+	struct mpool_xprops xprops = { };
+	u8 mclass;
 
 	if (!mpc_unit_ismpooldev(unit))
 		return -EINVAL;
@@ -803,10 +798,9 @@ static int mpioc_params_get(struct mpc_unit *unit, struct mpioc_params *get)
  */
 static int mpioc_params_set(struct mpc_unit *unit, struct mpioc_params *set)
 {
-	struct mpc_softstate       *ss = &mpc_softstate;
-	struct mpool_descriptor    *mp;
-	struct mpool_params        *params;
-
+	struct mpc_softstate *ss = &mpc_softstate;
+	struct mpool_descriptor *mp;
+	struct mpool_params *params;
 	uuid_le uuidnull = { };
 	int rerr = 0, err = 0;
 	bool journal = false;
@@ -882,10 +876,10 @@ static int mpioc_params_set(struct mpc_unit *unit, struct mpioc_params *set)
  */
 static int mpioc_mp_mclass_get(struct mpc_unit *unit, struct mpioc_mclass *mcl)
 {
-	struct mpool_descriptor   *desc = unit->un_mpool->mp_desc;
+	struct mpool_descriptor *desc = unit->un_mpool->mp_desc;
 	struct mpool_mclass_xprops mcxv[MP_MED_NUMBER];
-	uint32_t                   mcxc = ARRAY_SIZE(mcxv);
-	int                        rc;
+	uint32_t mcxc = ARRAY_SIZE(mcxv);
+	int rc;
 
 	if (!mcl || !desc)
 		return -EINVAL;
@@ -937,9 +931,9 @@ static int mpioc_devprops_get(struct mpc_unit *unit, struct mpioc_devprops *devp
  */
 static void mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop)
 {
-	struct mpool_descriptor    *desc = unit->un_mpool->mp_desc;
-	struct mpool_params        *params;
-	struct mpool_xprops        *xprops;
+	struct mpool_descriptor *desc = unit->un_mpool->mp_desc;
+	struct mpool_params *params;
+	struct mpool_xprops *xprops;
 
 	memset(kprop, 0, sizeof(*kprop));
 
@@ -978,14 +972,14 @@ static void mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop)
  */
 static int mpioc_proplist_get_itercb(int minor, void *item, void *arg)
 {
-	struct mpc_unit             *unit = item;
-	struct mpioc_prop __user    *uprop;
-	struct mpioc_prop            kprop;
-	struct mpc_unit             *match;
-	struct mpioc_list           *ls;
-	void                       **argv = arg;
-	int                         *cntp, rc;
-	int                         *errp;
+	struct mpc_unit *unit = item;
+	struct mpioc_prop __user *uprop;
+	struct mpioc_prop kprop;
+	struct mpc_unit *match;
+	struct mpioc_list *ls;
+	void **argv = arg;
+	int *cntp, rc;
+	int *errp;
 
 	if (!unit)
 		return ITERCB_NEXT;
@@ -1064,9 +1058,9 @@ static int mpioc_proplist_get(struct mpc_unit *unit, struct mpioc_list *ls)
 static int mpc_mpool_open(uint dpathc, char **dpathv, struct mpc_mpool **mpoolp,
 			  struct pd_prop *pd_prop, struct mpool_params *params, u32 flags)
 {
-	struct mpc_softstate   *ss = &mpc_softstate;
-	struct mpcore_params    mpc_params;
-	struct mpc_mpool       *mpool;
+	struct mpc_softstate *ss = &mpc_softstate;
+	struct mpcore_params mpc_params;
+	struct mpc_mpool *mpool;
 	size_t mpoolsz, len;
 	int rc;
 
@@ -1123,15 +1117,15 @@ static int mpc_mpool_open(uint dpathc, char **dpathv, struct mpc_mpool **mpoolp,
 static int mpioc_mp_create(struct mpc_unit *ctl, struct mpioc_mpool *mp,
 			   struct pd_prop *pd_prop, char ***dpathv)
 {
-	struct mpc_softstate   *ss = &mpc_softstate;
-	struct mpool_config     cfg = { };
-	struct mpcore_params    mpc_params;
-	struct mpc_unit        *unit = NULL;
-	struct mpc_mpool       *mpool = NULL;
-	size_t                  len;
-	mode_t                  mode;
-	uid_t                   uid;
-	gid_t                   gid;
+	struct mpc_softstate *ss = &mpc_softstate;
+	struct mpcore_params mpc_params;
+	struct mpool_config cfg = { };
+	struct mpc_mpool *mpool = NULL;
+	struct mpc_unit *unit = NULL;
+	size_t len;
+	mode_t mode;
+	uid_t uid;
+	gid_t gid;
 	int rc;
 
 	if (!ctl || !mp || !pd_prop || !dpathv)
@@ -1279,11 +1273,11 @@ errout:
 static int mpioc_mp_activate(struct mpc_unit *ctl, struct mpioc_mpool *mp,
 			     struct pd_prop *pd_prop, char ***dpathv)
 {
-	struct mpc_softstate   *ss = &mpc_softstate;
-	struct mpool_config     cfg;
-	struct mpc_mpool       *mpool = NULL;
-	struct mpc_unit        *unit = NULL;
-	size_t                  len;
+	struct mpc_softstate *ss = &mpc_softstate;
+	struct mpool_config cfg;
+	struct mpc_mpool *mpool = NULL;
+	struct mpc_unit *unit = NULL;
+	size_t len;
 	int rc;
 
 	if (!capable(CAP_SYS_ADMIN))
@@ -1373,8 +1367,8 @@ errout:
  */
 static int mp_deactivate_impl(struct mpc_unit *ctl, struct mpioc_mpool *mp, bool locked)
 {
-	struct mpc_softstate   *ss = &mpc_softstate;
-	struct mpc_unit        *unit = NULL;
+	struct mpc_softstate *ss = &mpc_softstate;
+	struct mpc_unit *unit = NULL;
 	size_t len;
 	int rc;
 
@@ -1434,16 +1428,14 @@ static int mpioc_mp_deactivate(struct mpc_unit *ctl, struct mpioc_mpool *mp)
 
 static int mpioc_mp_cmd(struct mpc_unit *ctl, uint cmd, struct mpioc_mpool *mp)
 {
-	struct mpc_softstate   *ss = &mpc_softstate;
-	struct mpc_unit        *unit = NULL;
-	struct pd_prop         *pd_prop = NULL;
-	char                  **dpathv = NULL;
-	size_t                  dpathvsz;
-	char                   *dpaths;
-	int                     rc, i;
-	size_t                  pd_prop_sz;
-	const char             *action;
-	size_t                  len;
+	struct mpc_softstate *ss = &mpc_softstate;
+	struct mpc_unit *unit = NULL;
+	struct pd_prop *pd_prop = NULL;
+	char **dpathv = NULL, *dpaths;
+	size_t dpathvsz, pd_prop_sz;
+	const char *action;
+	size_t len;
+	int rc, i;
 
 	if (!ctl || !mp)
 		return -EINVAL;
@@ -1616,14 +1608,11 @@ errout:
  */
 static int mpioc_mp_add(struct mpc_unit *unit, struct mpioc_drive *drv)
 {
-	struct mpool_descriptor    *desc = unit->un_mpool->mp_desc;
-	struct pd_prop             *pd_prop;
-
-	size_t  pd_prop_sz;
-	size_t  dpathvsz;
-	char  **dpathv;
-	char   *dpaths;
-	int     rc, i;
+	struct mpool_descriptor *desc = unit->un_mpool->mp_desc;
+	size_t pd_prop_sz, dpathvsz;
+	struct pd_prop *pd_prop;
+	char **dpathv, *dpaths;
+	int rc, i;
 
 	/*
 	 * The device path names are in one long string separated by
@@ -1781,24 +1770,15 @@ static void mpc_vcache_fini(struct vcache *vc)
  *
  * See http://www.makelinux.net/ldd3/chp-15-sect-3 for more detail.
  */
-static int
-mpc_physio(
-	struct mpool_descriptor    *mpd,
-	void                       *desc,
-	struct iovec               *uiov,
-	int                         uioc,
-	off_t                       offset,
-	enum mp_obj_type            objtype,
-	int                         rw,
-	void                       *stkbuf,
-	size_t                      stkbufsz)
+static int mpc_physio(struct mpool_descriptor *mpd, void *desc, struct iovec *uiov,
+		      int uioc, off_t offset, enum mp_obj_type objtype, int rw,
+		      void *stkbuf, size_t stkbufsz)
 {
-	struct kvec        *iov_base, *iov;
-	struct iov_iter     iter;
-	struct page       **pagesv;
-
-	size_t  pagesvsz, pgbase, length;
-	int     pagesc, niov, rc, i;
+	struct kvec *iov_base, *iov;
+	struct iov_iter iter;
+	struct page **pagesv;
+	size_t pagesvsz, pgbase, length;
+	int pagesc, niov, rc, i;
 	ssize_t cc;
 
 	iov = NULL;
@@ -1956,9 +1936,9 @@ errout:
  */
 static int mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
 {
-	struct mblock_descriptor   *mblock;
-	struct mpool_descriptor    *mpool;
-	struct mblock_props         props;
+	struct mblock_descriptor *mblock;
+	struct mpool_descriptor *mpool;
+	struct mblock_props props;
 	int rc;
 
 	if (!unit || !mb || !unit->un_mpool)
@@ -1988,8 +1968,8 @@ static int mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
  */
 static int mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
 {
-	struct mblock_descriptor   *mblock;
-	struct mpool_descriptor    *mpool;
+	struct mblock_descriptor *mblock;
+	struct mpool_descriptor *mpool;
 	int rc;
 
 	if (!unit || !mb || !unit->un_mpool)
@@ -2026,9 +2006,8 @@ static int mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
  */
 static int mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_id *mi)
 {
-	struct mblock_descriptor   *mblock;
-	struct mpool_descriptor    *mpool;
-
+	struct mblock_descriptor *mblock;
+	struct mpool_descriptor *mpool;
 	int which, rc;
 	bool drop;
 
@@ -2081,13 +2060,12 @@ static int mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mbloc
 static int mpioc_mb_rw(struct mpc_unit *unit, uint cmd, struct mpioc_mblock_rw *mbrw,
 		       void *stkbuf, size_t stkbufsz)
 {
-	struct mblock_descriptor   *mblock;
-	struct mpool_descriptor    *mpool;
-	struct iovec               *kiov;
-
-	bool    xfree = false;
-	int     which, rc;
-	size_t  kiovsz;
+	struct mblock_descriptor *mblock;
+	struct mpool_descriptor *mpool;
+	struct iovec *kiov;
+	bool xfree = false;
+	int which, rc;
+	size_t kiovsz;
 
 	if (!unit || !mbrw || !unit->un_mpool)
 		return -EINVAL;
@@ -2146,9 +2124,9 @@ errout:
  */
 static int mpioc_mlog_alloc(struct mpc_unit *unit, struct mpioc_mlog *ml)
 {
-	struct mpool_descriptor    *mpool;
-	struct mlog_descriptor     *mlog;
-	struct mlog_props           props;
+	struct mpool_descriptor *mpool;
+	struct mlog_descriptor *mlog;
+	struct mlog_props props;
 	int rc;
 
 	if (!unit || !unit->un_mpool || !ml)
@@ -2190,11 +2168,11 @@ static int mpioc_mlog_find(struct mpc_unit *unit, struct mpioc_mlog *ml)
 
 static int mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mlog_id *mi)
 {
-	struct mpool_descriptor    *mpool;
-	struct mlog_descriptor     *mlog;
-	struct mlog_props_ex        props;
-	int                         which, rc;
-	bool                        drop;
+	struct mpool_descriptor *mpool;
+	struct mlog_descriptor *mlog;
+	struct mlog_props_ex props;
+	int which, rc;
+	bool drop;
 
 	if (!unit || !unit->un_mpool || !mi || !mlog_objid(mi->mi_objid))
 		return -EINVAL;
@@ -2241,13 +2219,12 @@ static int mpioc_mlog_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mlo
 static int mpioc_mlog_rw(struct mpc_unit *unit, struct mpioc_mlog_io *mi,
 			 void *stkbuf, size_t stkbufsz)
 {
-	struct mpool_descriptor    *mpool;
-	struct mlog_descriptor     *mlog;
-	struct iovec               *kiov;
-
-	bool    xfree = false;
-	size_t  kiovsz;
-	int     rc;
+	struct mpool_descriptor *mpool;
+	struct mlog_descriptor *mlog;
+	struct iovec *kiov;
+	bool xfree = false;
+	size_t kiovsz;
+	int rc;
 
 	if (!unit || !unit->un_mpool || !mi || !mlog_objid(mi->mi_objid))
 		return -EINVAL;
@@ -2298,9 +2275,9 @@ errout:
 
 static int mpioc_mlog_erase(struct mpc_unit *unit, struct mpioc_mlog_id *mi)
 {
-	struct mpool_descriptor    *mpool;
-	struct mlog_descriptor     *mlog;
-	struct mlog_props_ex        props;
+	struct mpool_descriptor *mpool;
+	struct mlog_descriptor *mlog;
+	struct mlog_props_ex props;
 	int rc;
 
 	if (!unit || !unit->un_mpool || !mi || !mlog_objid(mi->mi_objid))
@@ -2387,7 +2364,7 @@ static void mpc_bdi_restore(struct mpc_unit *unit, struct inode *ip, struct file
 
 static int mpc_bdi_setup(void)
 {
-	int    rc;
+	int rc;
 
 	rc = mpc_bdi_alloc();
 	if (rc)
@@ -2425,11 +2402,10 @@ static void mpc_bdi_teardown(void)
  */
 static int mpc_open(struct inode *ip, struct file *fp)
 {
-	struct mpc_softstate   *ss;
-	struct mpc_unit        *unit;
-
-	bool    firstopen;
-	int     rc = 0;
+	struct mpc_softstate *ss;
+	struct mpc_unit *unit;
+	bool firstopen;
+	int rc = 0;
 
 	ss = mpc_cdev2ss(ip->i_cdev);
 	if (!ss || ss != &mpc_softstate)
@@ -2510,8 +2486,8 @@ errout:
  */
 static int mpc_release(struct inode *ip, struct file *fp)
 {
-	struct mpc_unit    *unit;
-	bool                lastclose;
+	struct mpc_unit *unit;
+	bool lastclose;
 
 	unit = fp->private_data;
 	if (!unit)
@@ -2555,11 +2531,10 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 {
 	char argbuf[256] __aligned(16);
 	struct mpc_unit *unit;
-
-	size_t  argbufsz, stkbufsz;
-	void   *argp, *stkbuf;
-	ulong   iosz;
-	int     rc;
+	size_t argbufsz, stkbufsz;
+	void *argp, *stkbuf;
+	ulong iosz;
+	int rc;
 
 	if (_IOC_TYPE(cmd) != MPIOC_MAGIC)
 		return -ENOTTY;
@@ -2752,7 +2727,7 @@ static int mpc_exit_unit(int minor, void *item, void *arg)
  */
 void mpctl_exit(void)
 {
-	struct mpc_softstate   *ss = &mpc_softstate;
+	struct mpc_softstate *ss = &mpc_softstate;
 
 	if (ss->ss_inited) {
 		idr_for_each(&ss->ss_unitmap, mpc_exit_unit, NULL);
@@ -2780,12 +2755,12 @@ void mpctl_exit(void)
  */
 int mpctl_init(void)
 {
-	struct mpc_softstate   *ss = &mpc_softstate;
-	struct mpool_config    *cfg = NULL;
-	struct mpc_unit        *ctlunit;
-	const char             *errmsg = NULL;
-	size_t                  sz;
-	int                     rc;
+	struct mpc_softstate *ss = &mpc_softstate;
+	struct mpool_config *cfg = NULL;
+	struct mpc_unit *ctlunit;
+	const char *errmsg = NULL;
+	size_t sz;
+	int rc;
 
 	if (ss->ss_inited)
 		return -EBUSY;
