@@ -40,9 +40,8 @@
 #define MPOOL_CREATE_MDC_PCTGRBG   MPOOL_PCO_PCTGARBAGE
 
 
-/*
+/**
  * struct mpcore_params - mpool core parameters. Not exported to public API.
- *
  * @mp_mdc0cap: MDC0 capacity,  *ONLY* for testing purpose
  * @mp_mdcncap: MDCN capacity,  *ONLY* for testing purpose
  * @mp_mdcnnum: Number of MDCs, *ONLY* for testing purpose

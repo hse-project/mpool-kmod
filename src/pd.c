@@ -96,7 +96,7 @@ int pd_dev_flush(struct pd_dev_parm *dparm)
 }
 
 /**
- * pd_bio_discard_() - issue discard command to erase a byte-aligned region
+ * pd_bio_discard() - issue discard command to erase a byte-aligned region
  * @dparm:
  * @off:
  * @len:
@@ -228,19 +228,20 @@ static struct bio *pd_bio_chain(struct bio *target, int op, unsigned int nr_page
 	return new;
 }
 
-/*
- * pd_bio_rw() expects a list of kvecs wherein each base ptr is sector
- * aligned and each length is multiple of sectors.
- *
- * If the IO is bigger than 1MiB (BIO_MAX_PAGES pages),
- * it is split in several IOs smaller that BIO_MAX_PAGES.
- *
+/**
+ * pd_bio_rw() -
  * @dparm:
  * @iov:
  * @iovcnt:
  * @off: offset in bytes on disk
  * @rw:
  * @opflags:
+ *
+ * pd_bio_rw() expects a list of kvecs wherein each base ptr is sector
+ * aligned and each length is multiple of sectors.
+ *
+ * If the IO is bigger than 1MiB (BIO_MAX_PAGES pages),
+ * it is split in several IOs smaller that BIO_MAX_PAGES.
  *
  * NOTE:
  * If the size of an I/O is bigger than "Max data transfer size(MDTS),

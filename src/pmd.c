@@ -594,12 +594,11 @@ static void pmd_mdc_alloc_set(struct mpool_descriptor *mp)
 /**
  * pmd_cmp_drv_mdc0() - compare the drive info read from the MDC0 drive list
  *	to what is obtained from the drive itself or from the configuration.
- *
- *	The drive is in list passed to mpool open or an UNAVAIL mdc0 drive.
- *
  * @mp:
  * @pdh:
  * @omd:
+ *
+ * The drive is in list passed to mpool open or an UNAVAIL mdc0 drive.
  */
 static int pmd_cmp_drv_mdc0(struct mpool_descriptor *mp, u8 pdh,
 			    struct omf_devparm_descriptor *omd)
@@ -1614,8 +1613,7 @@ int pmd_prop_mpconfig(struct mpool_descriptor *mp, const struct mpool_config *cf
 }
 
 /**
- * pmd_need_compact() - determine if MDCi corresponding to cslot
- *	need compaction of not.
+ * pmd_need_compact() - determine if MDCi corresponding to cslot need compaction of not.
  * @mp:
  * @cslot:
  *

@@ -705,7 +705,6 @@ static void mpc_invalidatepage(struct page *page, ulong offset)
 
 /**
  * mpc_migratepage() -  Callback for handling page migration.
- *
  * @mapping:
  * @newpage:
  * @page:

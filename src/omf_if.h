@@ -19,9 +19,8 @@ struct pmd_layout;
  * Common defs: versioned via version number field of enclosing structs
  */
 
-/*
- * struct omf_layout_descriptor: version 1 layout descriptor
- *
+/**
+ * struct omf_layout_descriptor - version 1 layout descriptor
  * @ol_zaddr:
  * @ol_zcnt: number of zones
  * @ol_pdh:
@@ -32,21 +31,20 @@ struct omf_layout_descriptor {
 	u16    ol_pdh;
 };
 
-/*
- * struct omf_devparm_descriptor: version 1 devparm descriptor
- *
- * @odp_devid:   UUID for drive
- * @odp_devsz:   size, in bytes, of the volume/device
- * @odp_zonetot: total number of zones
- *
- * The fields below uniquely identify the media class of the PD.
- * All drives in a media class must have the same values in the below fields.
- *
+/**
+ * struct omf_devparm_descriptor - version 1 devparm descriptor
+ * @odp_devid:    UUID for drive
+ * @odp_devsz:    size, in bytes, of the volume/device
+ * @odp_zonetot:  total number of zones
  * @odp_zonepg:   zone size in number of zone pages
  * @odp_mclassp:  enum mp_media_classp
  * @odp_devtype:  PD type. Enum pd_devtype
  * @odp_sectorsz: 2^podp_sectorsz = sector size
  * @odp_features: Features, ored bits of enum mp_mc_features
+ *
+ * The fields zonepg, mclassp, devtype, sectosz, and features uniquely identify
+ * the media class of the PD.
+ * All drives in a media class must have the same values in the below fields.
  */
 struct omf_devparm_descriptor {
 	struct mpool_uuid  odp_devid;
@@ -67,9 +65,8 @@ struct omf_devparm_descriptor {
  */
 #define OMF_SB_MAGIC  0x7665446c6f6f706dULL  /* ASCII mpoolDev - no null */
 
-/*
+/**
  * struct omf_sb_descriptor - version 1 superblock descriptor
- *
  * @osb_magic:  mpool magic value
  * @osb_name:   mpool name, contains a terminating 0 byte
  * @osb_cktype: enum mp_cksum_type value
@@ -77,18 +74,15 @@ struct omf_devparm_descriptor {
  * @osb_poolid: UUID of pool this drive belongs to
  * @osb_gen:    sb generation number on this drive
  * @osb_parm:   parameters for this drive
- *
  * @osb_mdc01gen:   mdc0 log1 generation number
  * @osb_mdc01uuid:
  * @osb_mdc01devid:
  * @osb_mdc01desc:  mdc0 log1 layout
- *
  * @osb_mdc02gen:   mdc0 log2 generation number
  * @osb_mdc02uuid:
  * @osb_mdc02devid:
  * @osb_mdc02desc:  mdc0 log2 layout
- *
- * osb_mdc0dev:   drive param for mdc0
+ * @osb_mdc0dev:   drive param for mdc0
  */
 struct omf_sb_descriptor {
 	u64                            osb_magic;
@@ -112,8 +106,8 @@ struct omf_sb_descriptor {
 	struct omf_devparm_descriptor  osb_mdc0dev;
 };
 
-/* struct omf_logrec_descriptor-
- *
+/**
+ * struct omf_logrec_descriptor -
  * @olr_tlen:  logical length of data record (all chunks)
  * @olr_rlen:  length of data chunk in this log record
  * @olr_rtype: enum logrec_type_omf value
@@ -125,9 +119,8 @@ struct omf_logrec_descriptor {
 	u8     olr_rtype;
 };
 
-/*
- * struct omf_logblock_header-
- *
+/**
+ * struct omf_logblock_header -
  * @olh_magic:   unique ID per mlog
  * @olh_pfsetid: flush set ID of the previous log block
  * @olh_cfsetid: flush set ID this log block
@@ -165,32 +158,25 @@ struct omf_mdcver {
 #define mdcv_patch    mdcver[2]
 #define mdcv_dev      mdcver[3]
 
-/*
+/**
  * struct omf_mdcrec_data -
- *
  * @omd_version:  OMF_MDR_VERSION record
- *
- * object-related rtypes:
- * ODELETE, OIDCKPT: objid field only; others ignored
- * OERASE: objid and gen fields only; others ignored
- * OCREATE, OUPDATE: layout field only; others ignored
  * @omd_objid:  object identifier
  * @omd_gen:    object generation number
  * @omd_layout:
  * @omd_mblen:  Length of written data in object
  * @omd_old:
  * @omd_uuid:
- *
- * drive_state-
  * @omd_parm:
- *
- * media_cls_spare-
  * @omd_mclassp: mp_media_classp
  * @omd_spzone:   percent spare zones for drives in media class
- *
  * @omd_cfg:
- *
  * @omd_rtype: enum mdcrec_type_omf value
+ *
+ * object-related rtypes:
+ * ODELETE, OIDCKPT: objid field only; others ignored
+ * OERASE: objid and gen fields only; others ignored
+ * OCREATE, OUPDATE: layout field only; others ignored
  */
 struct omf_mdcrec_data {
 	union ustruct {
@@ -222,11 +208,8 @@ struct omf_mdcrec_data {
 };
 
 /**
- * objid_type()
- *
- * Return the type field from an objid.  Returned as int, so it can also be
- * used for handles, which have the OMF_OBJ_UHANDLE bit set in addition to
- * a type.
+ * objid_type() - Return the type field from an objid
+ * @objid:
  */
 static inline int objid_type(u64 objid)
 {

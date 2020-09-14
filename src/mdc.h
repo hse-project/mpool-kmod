@@ -15,8 +15,7 @@ struct mpool_descriptor;
 struct mlog_descriptor;
 
 /**
- * struct mp_mdc: MDC handle
- *
+ * struct mp_mdc - MDC handle
  * @mdc_ds:     dataset handle (user client) or mpool desc (kernel client)
  * @mdc_ctxt:   mdc context
  * @mdc_logh1:  mlog 1 handle

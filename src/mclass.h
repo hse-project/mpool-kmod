@@ -76,8 +76,7 @@ struct media_class {
 void mc_pd_prop2mc_parms(struct pd_prop *pd_prop, struct mc_parms *mc_parms);
 
 /**
- * mc_omf_devparm2mc_parms() - convert a omf_devparm_descriptor into a
- *	mc_parms.
+ * mc_omf_devparm2mc_parms() - convert a omf_devparm_descriptor into an mc_parms.
  * @omf_devparm: input
  * @mc_parms: output
  */

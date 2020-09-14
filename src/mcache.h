@@ -14,7 +14,7 @@
 struct mpc_unit;
 
 /**
- * struct mpc_rgnmap - xvm region management
+ * struct mpc_rgnmap - extended vma (xvm) region management
  * @rm_lock:    protects rm_root
  * @rm_root:    root of the region map
  * @rm_rgncnt;  number of active regions

@@ -242,14 +242,13 @@ int mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 
 /**
  * mblock_rw_argcheck() - Validate mblock_write() and mblock_read().
- * @mp:      - Mpool descriptor
- * @layout:  - Layout of the mblock
- * @iov:     - iovec array
- * @iovcnt:  - iovec count
- * @boff:    - Byte offset into the layout.  Must be equal to layout->eld_mblen
- *             for write
- * @rw:      - MPOOL_OP_READ or MPOOL_OP_WRITE
- * @len:     - number of bytes in iov list
+ * @mp:      Mpool descriptor
+ * @layout:  Layout of the mblock
+ * @iov:     iovec array
+ * @iovcnt:  iovec count
+ * @boff:    Byte offset into the layout.  Must be equal to layout->eld_mblen for write
+ * @rw:      MPOOL_OP_READ or MPOOL_OP_WRITE
+ * @len:     number of bytes in iov list
  *
  * Returns: 0 if successful, -errno otherwise
  *

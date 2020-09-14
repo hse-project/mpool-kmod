@@ -673,11 +673,12 @@ static int mpc_cf_journal(struct mpc_unit *unit)
 }
 
 /**
- * mpc_uevent() - Hook to intercept and modify uevents before they're posted
- *                to udev (see man 7 udev).
+ * mpc_uevent() - Hook to intercept and modify uevents before they're posted to udev
  * @dev:    mpc driver device
  * @env:
- */
+ *
+ * See man 7 udev for more info.
+*/
 static int mpc_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
 	struct mpc_unit    *unit = dev_get_drvdata(dev);

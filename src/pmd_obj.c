@@ -274,14 +274,6 @@ static void pmd_layout_unprovision(struct mpool_descriptor *mp, struct pmd_layou
 	pmd_obj_put(layout);
 }
 
-/**
- * pmd_layout_calculate() -
- * @mp:
- * @ocap:
- * @mc:
- * @zcnt:
- * @otype:
- */
 static void pmd_layout_calculate(struct mpool_descriptor *mp, struct pmd_obj_capacity *ocap,
 				 struct media_class *mc, u64 *zcnt)
 {
@@ -1233,7 +1225,7 @@ void pmd_update_obj_stats(struct mpool_descriptor *mp, struct pmd_layout *layout
 }
 
 /**
- * pmd_compare_free_space - compare free space between MDCs
+ * pmd_compare_free_space() - compare free space between MDCs
  * @f:  First  MDC
  * @s:  Second MDC
  *
@@ -1372,7 +1364,6 @@ static void pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slot
  * space will fill up at the same time as other MDC.
  *
  * Locking: no lock need to be held when calling this function.
- *
  */
 void pmd_update_credit(struct mpool_descriptor *mp)
 {

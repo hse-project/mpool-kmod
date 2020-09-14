@@ -25,7 +25,6 @@
 
 /**
  * mdc_acquire() - Validate mdc handle and acquire mdc_lock
- *
  * @mlh: MDC handle
  * @rw:  read/append?
  */
@@ -50,7 +49,6 @@ static inline int mdc_acquire(struct mp_mdc *mdc, bool rw)
 
 /**
  * mdc_release() - Release mdc_lock
- *
  * @mlh: MDC handle
  * @rw:  read/append?
  */
@@ -64,7 +62,6 @@ static inline void mdc_release(struct mp_mdc *mdc, bool rw)
 
 /**
  * mdc_invalidate() - Invalidates MDC handle by resetting the magic
- *
  * @mdc: MDC handle
  */
 static inline void mdc_invalidate(struct mp_mdc *mdc)
@@ -74,7 +71,6 @@ static inline void mdc_invalidate(struct mp_mdc *mdc)
 
 /**
  * mdc_get_mpname() - Get mpool name from mpool descriptor
- *
  * @mp:     mpool descriptor
  * @mpname: buffer to store the mpool name (output)
  * @mplen:  buffer len

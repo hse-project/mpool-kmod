@@ -18,7 +18,7 @@
  */
 #define MAX_MDCVERSTR          24
 
-/**
+/*
  * Naming conventions:
  *
  * omf structures:
@@ -59,11 +59,6 @@
 
 /**
  * struct upgrade_history -
- *
- * Every time we update a nested structure in superblock or MDC, we need to
- * save the following information about this update, such that we can keep the
- * update history of this structure
- *
  * @uh_size:    size of the current version in-memory structure
  * @uh_unpack:  unpacking function from on-media format to in-memory format
  * @uh_conv:    conversion function from previous version to current version,
@@ -73,6 +68,10 @@
  *              set uh_sbver =  OMF_SB_DESC_UNDEF.
  * @uh_mdcver: corresponding mdc ver since which the change has been
  *              introduced
+ *
+ * Every time we update a nested structure in superblock or MDC, we need to
+ * save the following information about this update, such that we can keep the
+ * update history of this structure
  */
 struct upgrade_history {
 	size_t                      uh_size;
@@ -83,17 +82,13 @@ struct upgrade_history {
 };
 
 /**
- * omfu_mdcver_cur() -
- *
- * Returns the latest mpool MDC content version understood by this binary.
+ * omfu_mdcver_cur() - Return the latest mpool MDC content version understood by this binary
  */
 struct omf_mdcver *omfu_mdcver_cur(void);
 
 /**
- * omfu_mdcver_comment() -
+ * omfu_mdcver_comment() - Return mpool MDC content version comment passed in via "mdcver".
  * @mdcver:
- *
- * Returns the comment on the mpool MDC content version passed in via "mdcver".
  */
 const char *omfu_mdcver_comment(struct omf_mdcver *mdcver);
 

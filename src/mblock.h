@@ -47,16 +47,14 @@ int mblock_alloc(struct mpool_descriptor *mp, enum mp_media_classp mclassp, bool
 		 struct mblock_descriptor **mbh, struct mblock_props *prop);
 
 /**
- * mblock_find_get() -
+ * mblock_find_get() - Get handle and properties for existing mblock with specified objid.
  * @mp:
  * @objid:
  * @which:
  * @prop:
  * @mbh:
  *
- * Get handle and properties for existing mblock with specified objid.  If
- * successful, the caller holds a ref on the mblock (which must be put
- * eventually)
+ * If successful, the caller holds a ref on the mblock (which must be put eventually).
  *
  * Return: %0 if successful, -errno otherwise...
  */
@@ -74,11 +72,11 @@ int mblock_find_get(struct mpool_descriptor *mp, u64 objid, int which,
 void mblock_put(struct mblock_descriptor *mbh);
 
 /**
- * mblock_commit() -
+ * mblock_commit() - Make allocated mblock persistent
  * @mp:
  * @mbh:
  *
- * Make allocated mblock persistent; if fails mblock still exists in an
+ * if fails mblock still exists in an
  * uncommitted state so can retry commit or abort except as noted.
  *
  * Return: %0 if successful, -errno otherwise...
@@ -87,11 +85,11 @@ void mblock_put(struct mblock_descriptor *mbh);
 int mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
 
 /**
- * mblock_abort() -
+ * mblock_abort() - Discard uncommitted mblock
  * @mp:
  * @mbh:
  *
- * Discard uncommitted mblock; if successful mbh is invalid after call.
+ * If successful mbh is invalid after call.
  *
  * Return: %0 if successful, -errno otherwise...
  *
@@ -99,25 +97,25 @@ int mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
 int mblock_abort(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
 
 /**
- * mblock_delete() -
+ * mblock_delete() - Delete committed mblock
  * @mp:
  * @mbh:
  *
- * Delete committed mblock; if successful mbh is invalid after call.
+ * If successful mbh is invalid after call.
  *
  * Return: %0 if successful, -errno otherwise...
  */
 int mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
 
 /**
- * mblock_write() -
+ * mblock_write() - Write iov to mblock
  * @mp:
  * @mbh:
  * @iov:
  * @iovcnt:
  * @len:
  *
- * Write iov to mblock.  Mblocks can be written until they are committed, or
+ * Mblocks can be written until they are committed, or
  * until they are full.  If a caller needs to issue more than one write call
  * to the same mblock, all but the last write call must be optimal write size aligned.
  * The mpr_optimal_wrsz field in struct mblock_props gives the optimal write size.
@@ -128,7 +126,7 @@ int mblock_write(struct mpool_descriptor *mp, struct mblock_descriptor *mbh,
 		 const struct kvec *iov, int iovcnt, size_t len);
 
 /**
- * mblock_read() -
+ * mblock_read() - Read data from mblock mbnum in committed mblock into iov
  * @mp:
  * @mbh:
  * @iov:
@@ -148,12 +146,10 @@ int mblock_read(struct mpool_descriptor *mp, struct mblock_descriptor *mbh,
 		const struct kvec *iov, int iovcnt, loff_t boff, size_t len);
 
 /**
- * mblock_get_props_ex() -
+ * mblock_get_props_ex() - Return extended mblock properties in prop
  * @mp:
  * @mbh:
  * @prop:
- *
- * Return extended mblock properties in prop.
  *
  * Return: %0 if successful, -errno otherwise...
  */

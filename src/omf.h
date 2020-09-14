@@ -84,7 +84,6 @@ enum mc_features_omf {
 
 /**
  * enum devtype_omf -
- *
  * @OMF_PD_DEV_TYPE_BLOCK_STREAM: Block device implementing streams.
  * @OMF_PD_DEV_TYPE_BLOCK_STD:    Standard (non-streams) device (SSD, HDD).
  * @OMF_PD_DEV_TYPE_FILE:	  File in user space for UT.
@@ -106,10 +105,11 @@ enum devtype_omf {
 
 /**
  * struct layout_descriptor_omf - Layout descriptor version 1.
- * Introduced with binary version 1.0.0.0.
- * "pol_" = packed omf layout
  * @pol_zcnt: number of zones
  * @pol_zaddr: zone start addr
+ *
+ * Introduced with binary version 1.0.0.0.
+ * "pol_" = packed omf layout
  */
 struct layout_descriptor_omf {
 	__le32 pol_zcnt;
@@ -123,21 +123,18 @@ OMF_SETGET(struct layout_descriptor_omf, pol_zaddr, 64)
 
 
 /**
- * struct devparm descriptor_omf -
- * "podp_" = packed omf devparm descriptor
- *
+ * struct devparm descriptor_omf - packed omf devparm descriptor
  * @podp_devid:    UUID for drive
  * @podp_zonetot:  total number of zones
  * @podp_devsz:    size of partition in bytes
  * @podp_features: Features, ored bits of enum mc_features_omf
- *
- * The fields below uniquely identify the media class of the PD.
- * All drives in a media class must have the same values in the below
- * fields.
  * @podp_mclassp:   enum mp_media_classp
  * @podp_devtype:   PD type (enum devtype_omf)
  * @podp_sectorsz:  2^podp_sectorsz = sector size
  * @podp_zonepg:    zone size in number of zone pages
+ *
+ * The fields mclassp, devtype, sectosz, and zonepg uniquely identify the media class of the PD.
+ * All drives in a media class must have the same values in these fields.
  */
 struct devparm_descriptor_omf {
 	u8     podp_mclassp;
@@ -175,7 +172,7 @@ OMF_SETGET(struct devparm_descriptor_omf, podp_features, 64)
  * always be added.
  */
 
-/**
+/*
  * Log block format -- version 1
  *
  * log block := header record+ eolb? trailer?
@@ -194,20 +191,20 @@ OMF_SETGET(struct devparm_descriptor_omf, podp_features, 64)
  *
  * OMF_LOGREC_CEND must be the max. value for this enum.
  */
-/*
- *  enum logrec_type_omf -
+
+/**
+ * enum logrec_type_omf -
+ * @OMF_LOGREC_EOLB:      end of log block marker (start of trailer)
+ * @OMF_LOGREC_DATAFULL:  data record; contains all specified data
+ * @OMF_LOGREC_DATAFIRST: data record; contains first part of specified data
+ * @OMF_LOGREC_DATAMID:   data record; contains interior part of data
+ * @OMF_LOGREC_DATALAST:  data record; contains final part of specified data
+ * @OMF_LOGREC_CSTART:    compaction start marker
+ * @OMF_LOGREC_CEND:      compaction end marker
  *
- *  A log record type of 0 signifies EOLB. This is really the start of the
- *  trailer but this simplifies parsing for partially filled log blocks.
- *  DATAFIRST, -MID, -LAST types are used for chunking logical data records.
- *
- *  @OMF_LOGREC_EOLB:      end of log block marker (start of trailer)
- *  @OMF_LOGREC_DATAFULL:  data record; contains all specified data
- *  @OMF_LOGREC_DATAFIRST: data record; contains first part of specified data
- *  @OMF_LOGREC_DATAMID:   data record; contains interior part of data
- *  @OMF_LOGREC_DATALAST:  data record; contains final part of specified data
- *  @OMF_LOGREC_CSTART:    compaction start marker
- *  @OMF_LOGREC_CEND:      compaction end marker
+ * A log record type of 0 signifies EOLB. This is really the start of the
+ * trailer but this simplifies parsing for partially filled log blocks.
+ * DATAFIRST, -MID, -LAST types are used for chunking logical data records.
  */
 enum logrec_type_omf {
 	OMF_LOGREC_EOLB      = 0,
@@ -221,9 +218,7 @@ enum logrec_type_omf {
 
 
 /**
- * struct logrec_descriptor_omf -
- * "polr_" = packed omf logrec descriptor
- *
+ * struct logrec_descriptor_omf -packed omf logrec descriptor
  * @polr_tlen:  logical length of data record (all chunks)
  * @polr_rlen:  length of data chunk in this log record
  * @polr_rtype: enum logrec_type_omf value
@@ -246,9 +241,7 @@ OMF_SETGET(struct logrec_descriptor_omf, polr_rtype, 8)
 #define OMF_LOGBLOCK_VERS    1
 
 /**
- * struct logblock_header_omf - for all versions
- * "polh_" = packed omf logblock header
- *
+ * struct logblock_header_omf - packed omf logblock header for all versions
  * @polh_vers:    log block hdr version, offset 0 in all vers
  * @polh_magic:   unique magic per mlog
  * @polh_pfsetid: flush set ID of the previous log block
@@ -282,7 +275,6 @@ OMF_SETGET(struct logblock_header_omf, polh_gen, 64)
  */
 /**
  * enum mdcrec_type_omf -
- *
  * @OMF_MDR_UNDEF:   undefined; should never occur
  * @OMF_MDR_OCREATE:  object create
  * @OMF_MDR_OUPDATE:  object update
@@ -309,12 +301,7 @@ enum mdcrec_type_omf {
 };
 
 /**
- * struct mdcver_omf - version of an mpool MDC content.
- *
- * This is not the version of the message framing used for the MDC. This is
- * version of the binary that introduced that version of the MDC content.
- * "pv_"= packed mdc version.
- *
+ * struct mdcver_omf - packed mdc version, version of an mpool MDC content.
  * @pv_rtype:      OMF_MDR_VERSION
  * @pv_mdcv_major: to compare with MAJOR in binary version.
  * @pv_mdcv_minor: to compare with MINOR in binary version.
@@ -322,6 +309,8 @@ enum mdcrec_type_omf {
  * @pv_mdcv_dev:   used during development cycle when the above
  *                 numbers don't change.
  *
+ * This is not the version of the message framing used for the MDC. This is
+ * version of the binary that introduced that version of the MDC content.
  */
 struct mdcver_omf {
 	u8     pv_rtype;
@@ -341,9 +330,7 @@ OMF_SETGET(struct mdcver_omf, pv_mdcv_dev,   16)
 
 
 /**
- * struct mdcrec_data_odelete_omf -
- * "pdro_" = packed data record odelete
- *
+ * struct mdcrec_data_odelete_omf - packed data record odelete
  * @pdro_rtype: mdrec_type_omf:OMF_MDR_ODELETE, OMF_MDR_OIDCKPT
  * @pdro_objid: object identifier
  */
@@ -359,9 +346,7 @@ OMF_SETGET(struct  mdcrec_data_odelete_omf, pdro_objid, 64)
 
 
 /**
- * struct mdcrec_data_oerase_omf -
- * "pdrt_" = packed data record oerase
- *
+ * struct mdcrec_data_oerase_omf - packed data record oerase
  * @pdrt_rtype: mdrec_type_omf: OMF_MDR_OERASE
  * @pdrt_objid: object identifier
  * @pdrt_gen:   object generation number
@@ -381,9 +366,7 @@ OMF_SETGET(struct mdcrec_data_oerase_omf, pdrt_gen, 64)
 
 
 /**
- * struct mdcrec_data_mcconfig_omf -
- * "pdrs_" = packed data record mclass config
- *
+ * struct mdcrec_data_mcconfig_omf - packed data record mclass config
  * @pdrs_rtype: mdrec_type_omf: OMF_MDR_MCCONFIG
  * @pdrs_parm:
  */
@@ -399,9 +382,7 @@ OMF_SETGET(struct mdcrec_data_mcconfig_omf, pdrs_rtype, 8)
 
 
 /**
- * struct mdcrec_data_mcspare_omf -
- * "pdra_" = packed data record mcspare
- *
+ * struct mdcrec_data_mcspare_omf - packed data record mcspare
  * @pdra_rtype:   mdrec_type_omf: OMF_MDR_MCSPARE
  * @pdra_mclassp: enum mp_media_classp
  * @pdra_spzone:   percent spare zones for drives in media class
@@ -420,9 +401,7 @@ OMF_SETGET(struct mdcrec_data_mcspare_omf, pdra_spzone, 8)
 
 
 /**
- * struct mdcrec_data_ocreate_omf -
- * "pdrc_" = packed data record ocreate
- *
+ * struct mdcrec_data_ocreate_omf - packed data record ocreate
  * @pdrc_rtype:     mdrec_type_omf: OMF_MDR_OCREATE or OMF_MDR_OUPDATE
  * @pdrc_mclass:
  * @pdrc_uuid:
@@ -454,9 +433,7 @@ OMF_SETGET(struct mdcrec_data_ocreate_omf, pdrc_mblen, 64)
 
 
 /**
- * struct mdcrec_data_mpconfig_omf -
- * "pdmc_" = packed data mpool config
- *
+ * struct mdcrec_data_mpconfig_omf - packed data mpool config
  * @pdmc_rtype:
  * @pdmc_oid1:
  * @pdmc_oid2:
@@ -510,7 +487,7 @@ OMF_SETGET_CHBUF(struct mdcrec_data_mpconfig_omf, pdmc_label)
 #define OMF_MDCREC_MPCONFIG_PACKLEN (sizeof(struct mdcrec_data_mpconfig_omf))
 
 
-/**
+/*
  * Object types embedded in opaque uint64 object ids by the pmd module.
  * This encoding is also present in the object ids stored in the
  * data records on media.
@@ -535,37 +512,31 @@ enum sb_descriptor_ver_omf {
 #define OMF_SB_DESC_VER_LAST   OMF_SB_DESC_V1
 
 
-/*
- * struct sb_descriptor_omf - super block descriptor format version 1.
- * "psb_" = packed super block
- *
- * Note: these fields, up to and including psb_cksum1, are known to libblkid.
- * cannot change them without havoc. Fields from psb_magic to psb_cksum1
- * included are at same offset in all versions.
- *
+/**
+ * struct sb_descriptor_omf - packed super block, super block descriptor format version 1.
  * @psb_magic:  mpool magic value; offset 0 in all vers
  * @psb_name:   mpool name
  * @psb_poolid: UUID of pool this drive belongs to
  * @psb_vers:   sb format version; offset 56
  * @psb_gen:    sb generation number on this drive
  * @psb_cksum1: checksum of all fields above
- *
  * @psb_parm:   parameters for this drive
  * @psb_cksum2: checksum of psb_parm
- *
  * @psb_mdc01gen:   mdc0 log1 generation number
  * @psb_mdc01uuid:
  * @psb_mdc01devid: mdc0 log1 device UUID
  * @psb_mdc01strip: mdc0 log1 strip desc.
  * @psb_mdc01desc:  mdc0 log1 layout
- *
  * @psb_mdc02gen:   mdc0 log2 generation number
  * @psb_mdc02uuid:
  * @psb_mdc02devid: mdc0 log2 device UUID
  * @psb_mdc02strip: mdc0 log2 strip desc.
  * @psb_mdc02desc:  mdc0 log2 layout
- *
  * @psb_mdc0dev:    drive param for mdc0 strip
+ *
+ * Note: these fields, up to and including psb_cksum1, are known to libblkid.
+ * cannot change them without havoc. Fields from psb_magic to psb_cksum1
+ * included are at same offset in all versions.
  */
 struct sb_descriptor_omf {
 	__le64                         psb_magic;

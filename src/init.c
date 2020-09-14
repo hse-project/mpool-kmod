@@ -57,9 +57,6 @@ static void mpool_exit_impl(void)
 	pd_exit();
 }
 
-/**
- * mpool_init() - Load and initialize mpool
- */
 static __init int mpool_init(void)
 {
 	const char *errmsg = NULL;
