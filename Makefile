@@ -137,27 +137,27 @@ MPOOL_TOP_DIR := $(shell dirname $(realpath $(lastword $(MAKEFILE_LIST))))
 ifeq ($(findstring release,$(MAKECMDGOALS)),release)
 	BUILD_TYPE := release
 	BUILD_STYPE := r
-	KCFLAGS += -O2 -DNDEBUG
+	KCFLAGS += -O2
 else ifeq ($(findstring relassert,$(MAKECMDGOALS)),relassert)
 	BUILD_TYPE := relassert
 	BUILD_STYPE := a
-	KCFLAGS += -O2
+	KCFLAGS += -O2 -DCONFIG_MPOOL_ASSERT
 else ifeq ($(findstring relwithdebug,$(MAKECMDGOALS)),relwithdebug)
 	BUILD_TYPE := relwithdebug
 	BUILD_STYPE := i
-	KCFLAGS += -O2 -DNDEBUG
+	KCFLAGS += -O2
 else ifeq ($(findstring optdebug,$(MAKECMDGOALS)),optdebug)
 	BUILD_TYPE := optdebug
 	BUILD_STYPE := o
-	KCFLAGS += -Og -DDEBUG
+	KCFLAGS += -Og -DDEBUG -DCONFIG_MPOOL_ASSERT
 else ifeq ($(findstring debug,$(MAKECMDGOALS)),debug)
 	BUILD_TYPE := debug
 	BUILD_STYPE := d
-	KCFLAGS += -Og -DDEBUG
+	KCFLAGS += -Og -DDEBUG -DCONFIG_MPOOL_ASSERT
 else
 	BUILD_TYPE := release
 	BUILD_STYPE := r
-	KCFLAGS += -O2 -DNDEBUG
+	KCFLAGS += -O2
 endif
 
 KDIR  ?= /lib/modules/$(shell uname -r)/build

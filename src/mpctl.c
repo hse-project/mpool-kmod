@@ -2660,7 +2660,8 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 	case MPIOC_MB_READ:
 	case MPIOC_MB_WRITE:
-		assert(roundup(iosz, 16) < argbufsz);
+		ASSERT(roundup(iosz, 16) < argbufsz);
+
 		stkbufsz = argbufsz - roundup(iosz, 16);
 		stkbuf = argbuf + roundup(iosz, 16);
 
@@ -2684,7 +2685,8 @@ static long mpc_ioctl(struct file *fp, unsigned int cmd, unsigned long arg)
 
 	case MPIOC_MLOG_READ:
 	case MPIOC_MLOG_WRITE:
-		assert(roundup(iosz, 16) < argbufsz);
+		ASSERT(roundup(iosz, 16) < argbufsz);
+
 		stkbufsz = argbufsz - roundup(iosz, 16);
 		stkbuf = argbuf + roundup(iosz, 16);
 

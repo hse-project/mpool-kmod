@@ -198,10 +198,8 @@ void pmd_layout_release(struct kref *refp)
 
 	layout = container_of(refp, typeof(*layout), eld_ref);
 
-	WARN_ONCE(layout->eld_objid == 0 ||
-		  kref_read(&layout->eld_ref), "%s: %p, objid %lx, state %x, refcnt %ld",
-		  __func__, layout, (ulong)layout->eld_objid,
-		  layout->eld_state, (long)kref_read(&layout->eld_ref));
+	ASSERT(layout->eld_objid > 0);
+	ASSERT(kref_read(&layout->eld_ref) == 0);
 
 	if (pmd_objid_type(layout->eld_objid) == OMF_OBJ_MLOG)
 		cache = pmd_layout_priv_cache;
@@ -818,7 +816,7 @@ static int pmd_alloc_idgen(struct mpool_descriptor *mp, enum obj_type_omf otype,
 
 	/* Get next mdc for allocation */
 	tidx = atomic_inc_return(&mp->pds_mda.mdi_sel.mds_tbl_idx) % MDC_TBL_SZ;
-	assert(tidx <= MDC_TBL_SZ);
+	ASSERT(tidx <= MDC_TBL_SZ);
 
 	cslot = mp->pds_mda.mdi_sel.mds_tbl[tidx];
 	cinfo = &mp->pds_mda.mdi_slotv[cslot];
@@ -1075,8 +1073,8 @@ void pmd_mpool_usage(struct mpool_descriptor *mp, struct mpool_usage *usage)
 	spin_unlock(&mp->pds_mda.mdi_slotvlock);
 
 	for (sidx = 1; sidx < slotvcnt; sidx++) {
-		struct pmd_mdc_stats   *pms;
-		struct pmd_mdc_info    *cinfo;
+		struct pmd_mdc_stats *pms;
+		struct pmd_mdc_info *cinfo;
 
 		cinfo = &mp->pds_mda.mdi_slotv[sidx];
 		pms   = &cinfo->mmi_stats;
@@ -1227,7 +1225,7 @@ void pmd_update_obj_stats(struct mpool_descriptor *mp, struct pmd_layout *layout
 		break;
 
 	default:
-		assert(0);
+		ASSERT(0);
 		break;
 	}
 
@@ -1299,7 +1297,7 @@ static void pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slot
 		/* Setup members of the credit set */
 		while (csmidx < MPOOL_MDC_SET_SZ  && i < num_mdc) {
 			/* slot 0 should never be there */
-			assert(slotnum[i] != 0);
+			ASSERT(slotnum[i] != 0);
 
 			cinfo = &mp->pds_mda.mdi_slotv[slotnum[i]];
 			cs->cs_num_csm = csmidx + 1;
@@ -1336,7 +1334,8 @@ static void pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slot
 			csmidx++;
 		}
 	}
-	assert(totalcredit == MDC_TBL_SZ);
+
+	ASSERT(totalcredit == MDC_TBL_SZ);
 	num_cset = csidx;
 
 	tidx  = 0;
@@ -1359,7 +1358,8 @@ static void pmd_update_mds_tbl(struct mpool_descriptor *mp, u8 num_mdc, u8 *slot
 		/* Loop over the sets */
 		csidx = (csidx + 1) % num_cset;
 	}
-	assert(totalcredit == 0);
+
+	ASSERT(totalcredit == 0);
 
 	kfree(cset);
 }
@@ -1463,7 +1463,8 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 		cinfo->mmi_credit.ci_credit = (MDC_TBL_SZ * cinfo->mmi_credit.ci_free) / free;
 		credit += cinfo->mmi_credit.ci_credit;
 	}
-	assert(credit <= MDC_TBL_SZ);
+
+	ASSERT(credit <= MDC_TBL_SZ);
 
 	/*
 	 * If the credit is not equal to the table size, assign

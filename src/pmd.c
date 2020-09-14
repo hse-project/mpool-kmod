@@ -703,7 +703,7 @@ static int pmd_props_load(struct mpool_descriptor *mp)
 			struct omf_devparm_descriptor *src;
 
 			src = &cdr->u.dev.omd_parm;
-			assert(src->odp_mclassp < MP_MED_NUMBER);
+			ASSERT(src->odp_mclassp < MP_MED_NUMBER);
 
 			memcpy(&netdev[src->odp_mclassp], src, sizeof(*src));
 			continue;
@@ -727,8 +727,7 @@ static int pmd_props_load(struct mpool_descriptor *mp)
 		if (cdr->omd_rtype == OMF_MDR_VERSION) {
 			cinfo->mmi_mdcver = cdr->u.omd_version;
 			if (omfu_mdcver_cmp(&cinfo->mmi_mdcver, ">", omfu_mdcver_cur())) {
-				char   *buf1;
-				char   *buf2 = NULL;
+				char *buf1, *buf2 = NULL;
 
 				buf1 = kmalloc(2 * MAX_MDCVERSTR, GFP_KERNEL);
 				if (buf1) {
@@ -903,7 +902,6 @@ static int pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 
 	while (true) {
 		struct pmd_layout *layout, *found;
-
 		size_t rlen = 0;
 		u64 objid;
 
@@ -923,9 +921,7 @@ static int pmd_objs_load(struct mpool_descriptor *mp, u8 cslot)
 			cinfo->mmi_mdcver = cdr->u.omd_version;
 
 			if (omfu_mdcver_cmp(&cinfo->mmi_mdcver, ">", omfu_mdcver_cur())) {
-
-				char   *buf1;
-				char   *buf2 = NULL;
+				char *buf1, *buf2 = NULL;
 
 				buf1 = kmalloc(2 * MAX_MDCVERSTR, GFP_KERNEL);
 				if (buf1) {
@@ -1370,7 +1366,8 @@ static void pmd_pre_compact_reset(struct pmd_mdc_info *cinfo, u32 compacted)
 	struct pre_compact_ctrs *pco_cnt;
 
 	pco_cnt = &cinfo->mmi_pco_cnt;
-	assert(pco_cnt->pcc_cobj.counter == compacted);
+	ASSERT(pco_cnt->pcc_cobj.counter == compacted);
+
 	atomic_set(&pco_cnt->pcc_cr, compacted);
 	atomic_set(&pco_cnt->pcc_cobj, compacted);
 	atomic_set(&pco_cnt->pcc_up, 0);
@@ -1636,7 +1633,7 @@ static bool pmd_need_compact(struct mpool_descriptor *mp, u8 cslot, char *msgbuf
 	u64 rec, cobj, len, cap;
 	u32 garbage, pct;
 
-	assert(cslot > 0);
+	ASSERT(cslot > 0);
 
 	cinfo = &mp->pds_mda.mdi_slotv[cslot];
 	pco_cnt = &(cinfo->mmi_pco_cnt);
@@ -1705,9 +1702,10 @@ static bool pmd_mdc_needed(struct mpool_descriptor *mp)
 	u32 pct, pctg, mdccnt;
 	u16 cslot;
 
+	ASSERT(mp->pds_mda.mdi_slotvcnt <= MDC_SLOTS);
+
 	cap = used = garbage = record = pctg = 0;
 
-	assert(mp->pds_mda.mdi_slotvcnt <= MDC_SLOTS);
 	if (mp->pds_mda.mdi_slotvcnt == MDC_SLOTS)
 		return false;
 

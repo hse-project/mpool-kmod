@@ -191,7 +191,7 @@ int sb_magic_check(struct pd_dev_parm *dparm)
 		return rc;
 	}
 
-	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
+	ASSERT(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
 	inbuf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!inbuf) {
@@ -234,7 +234,7 @@ int sb_write_new(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb)
 	char *outbuf;
 	int rc, i;
 
-	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
+	ASSERT(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
 	if (!sb_parm_valid(dparm)) {
 		rc = -EINVAL;
@@ -285,7 +285,7 @@ int sb_write_update(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb)
 	char *outbuf;
 	int rc, i;
 
-	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
+	ASSERT(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
 	if (!sb_parm_valid(dparm)) {
 		rc = -EINVAL;
@@ -344,7 +344,7 @@ int sb_erase(struct pd_dev_parm *dparm)
 		return rc;
 	}
 
-	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
+	ASSERT(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
 	buf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!buf)
@@ -443,7 +443,7 @@ int sb_read(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb, u16 *omf_ve
 	if (!sbtmp)
 		return -ENOMEM;
 
-	assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
+	ASSERT(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
 	buf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!buf) {

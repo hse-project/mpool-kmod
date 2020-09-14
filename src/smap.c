@@ -377,7 +377,7 @@ int smap_alloc(struct mpool_descriptor *mp, u16 pdh, u64 zonecnt,
 	if (!zonecnt || !saptype_valid(sapolicy))
 		return -EINVAL;
 
-	assert(is_power_of_2(align));
+	ASSERT(is_power_of_2(align));
 
 	ds = &pd->pdi_ds;
 	mc = &mp->pds_mc[pd->pdi_mclass];
@@ -401,7 +401,7 @@ int smap_alloc(struct mpool_descriptor *mp, u16 pdh, u64 zonecnt,
 
 	/* Search per-rgn space maps for contiguous region. */
 	while (rgnleft--) {
-		struct rb_node        *node;
+		struct rb_node *node;
 
 		rmlock = &pd->pdi_rmbktv[rgn].pdi_rmlock;
 		rmap = &pd->pdi_rmbktv[rgn].pdi_rmroot;
@@ -727,7 +727,7 @@ errout:
 
 	if (elem != NULL) {
 		/* Was an exact match */
-		assert((zoneaddr == fsoff) && (zonecnt == fslen));
+		ASSERT((zoneaddr == fsoff) && (zonecnt == fslen));
 		kmem_cache_free(smap_zone_cache, elem);
 	}
 

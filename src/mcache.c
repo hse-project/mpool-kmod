@@ -147,8 +147,8 @@ void mpc_xvm_free(struct mpc_xvm *xvm)
 {
 	struct mpc_rgnmap *rm;
 
-	assert((u32)(uintptr_t)xvm == xvm->xvm_magic);
-	assert(atomic_read(&xvm->xvm_reapref) > 0);
+	ASSERT((u32)(uintptr_t)xvm == xvm->xvm_magic);
+	ASSERT(atomic_read(&xvm->xvm_reapref) > 0);
 
 again:
 	mpc_reap_xvm_evict(xvm);
@@ -195,12 +195,12 @@ static void mpc_xvm_release(struct kref *kref)
 {
 	struct mpc_xvm *xvm = container_of(kref, struct mpc_xvm, xvm_ref);
 	struct mpc_rgnmap *rm = xvm->xvm_rgnmap;
-	int  i;
+	int i;
 
-	assert((u32)(uintptr_t)xvm == xvm->xvm_magic);
+	ASSERT((u32)(uintptr_t)xvm == xvm->xvm_magic);
 
 	mutex_lock(&rm->rm_lock);
-	assert(kref_read(kref) == 0);
+	ASSERT(kref_read(kref) == 0);
 	idr_replace(&rm->rm_root, NULL, xvm->xvm_rgn);
 	mutex_unlock(&rm->rm_lock);
 
@@ -478,8 +478,8 @@ static void mpc_readpages_cb(struct work_struct *work)
 	pagec = w->w_args.a_pagec;
 	argssz = sizeof(*args) + sizeof(args->a_pagev[0]) * pagec;
 
-	assert(pagec <= ARRAY_SIZE(iovbuf));
-	assert(argssz <= sizeof(argsbuf));
+	ASSERT(pagec <= ARRAY_SIZE(iovbuf));
+	ASSERT(argssz <= sizeof(argsbuf));
 
 	memcpy(args, &w->w_args, argssz);
 	w = NULL; /* Do not touch! */
@@ -680,7 +680,7 @@ static int mpc_releasepage(struct page *page, gfp_t gfp)
 	ClearPagePrivate(page);
 	set_page_private(page, 0);
 
-	assert((u32)(uintptr_t)xvm == xvm->xvm_magic);
+	ASSERT((u32)(uintptr_t)xvm == xvm->xvm_magic);
 
 	if (xvm->xvm_hcpagesp)
 		atomic64_dec(xvm->xvm_hcpagesp);
@@ -724,7 +724,7 @@ static int mpc_migratepage(struct address_space *mapping, struct page *newpage,
 	    !try_to_release_page(page, GFP_KERNEL))
 		return -EAGAIN;
 
-	assert(PageLocked(page));
+	ASSERT(PageLocked(page));
 
 	return migrate_page(mapping, newpage, page, mode);
 }
@@ -782,15 +782,14 @@ int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
  */
 int mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, struct mpioc_vma *ioc)
 {
-	struct mpc_rgnmap *rm;
 	struct mpc_mbinfo *mbinfov;
 	struct kmem_cache *cache;
+	struct mpc_rgnmap *rm;
 	struct mpc_xvm *xvm;
-
-	u64     *mbidv;
-	size_t  largest, sz;
-	uint    mbidc, mult;
-	int     rc, i;
+	size_t largest, sz;
+	uint mbidc, mult;
+	u64 *mbidv;
+	int rc, i;
 
 	if (!unit || !unit->un_mapping || !ioc)
 		return -EINVAL;
