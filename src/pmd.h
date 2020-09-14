@@ -275,12 +275,8 @@ struct pmd_obj_load_work {
  *
  * Return: %0 if successful, -errno otherwise
  */
-int
-pmd_mpool_activate(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *mdc01,
-	struct pmd_layout          *mdc02,
-	int                         create);
+int pmd_mpool_activate(struct mpool_descriptor *mp, struct pmd_layout *mdc01,
+		       struct pmd_layout *mdc02, int create);
 
 /**
  * pmd_mpool_deactivate() - Deactivate mpool mp.
@@ -347,12 +343,8 @@ int pmd_prop_mcconfig(struct mpool_descriptor *mp, struct mpool_dev_info *pd, bo
  *
  * Return: %0 if successful, -errno otherwise
  */
-int
-pmd_prop_mcspare(
-	struct mpool_descriptor *mp,
-	enum mp_media_classp     mclassp,
-	u8                       spzone,
-	bool			 compacting);
+int pmd_prop_mcspare(struct mpool_descriptor *mp, enum mp_media_classp mclassp,
+		     u8 spzone, bool compacting);
 
 /**
  * pmd_prop_mpconfig() -
@@ -360,8 +352,7 @@ pmd_prop_mcspare(
  * @cfg:
  * @compacting:
  */
-int pmd_prop_mpconfig(struct mpool_descriptor *mp, const struct mpool_config *cfg,
-		      bool compacting);
+int pmd_prop_mpconfig(struct mpool_descriptor *mp, const struct mpool_config *cfg, bool compacting);
 
 /**
  * pmd_precompact_start() - start MDC1/255 precompaction

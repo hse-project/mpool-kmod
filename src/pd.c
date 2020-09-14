@@ -255,10 +255,10 @@ static struct bio *pd_bio_chain(struct bio *target, int op, unsigned int nr_page
 static int pd_bio_rw(struct pd_dev_parm *dparm, const struct kvec *iov,
 		     int iovcnt, loff_t off, int rw, int opflags)
 {
-	struct block_device    *bdev;
-	struct bio             *bio;
-	struct page            *page;
-	struct request_queue   *q;
+	struct block_device *bdev;
+	struct request_queue *q;
+	struct page *page;
+	struct bio *bio;
 	u64 iov_base, sector_mask;
 	u32 tot_pages, tot_len, len, iov_len, left;
 	u32 iolimit;
@@ -434,7 +434,7 @@ int pd_zone_preadv(struct pd_dev_parm *dparm, const struct kvec *iov,
 
 void pd_dev_set_unavail(struct pd_dev_parm *dparm, struct omf_devparm_descriptor *omf_devparm)
 {
-	struct pd_prop     *pd_prop = &(dparm->dpr_prop);
+	struct pd_prop *pd_prop = &(dparm->dpr_prop);
 
 	/*
 	 * Fill in dparm for unavailable drive; sets zone parm and other

@@ -10,7 +10,7 @@
 struct mpc_attr *mpc_attr_create(struct device *dev, const char *name, int acnt)
 {
 	struct mpc_attr *attr;
-	int              i;
+	int i;
 
 	attr = kzalloc(sizeof(*attr) + acnt * sizeof(*attr->a_dattr) +
 		       (acnt + 1) * sizeof(*attr->a_attrs), GFP_KERNEL);

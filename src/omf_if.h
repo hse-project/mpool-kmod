@@ -245,7 +245,7 @@ static inline bool objtype_valid(enum obj_type_omf otype)
 /**
  * omf_sb_pack_htole() - pack superblock
  * @sb: struct omf_sb_descriptor *
- * outbuf: char *
+ * @outbuf: char *
  *
  * Pack superblock into outbuf little-endian computing specified checksum.
  *
@@ -258,6 +258,7 @@ int omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf);
  * @sb: struct omf_sb_descriptor *
  * @inbuf: char *
  * @omf_ver: on-media-format superblock version
+ *
  * Unpack little-endian superblock from inbuf into sb verifying checksum.
  *
  * Return: 0 if successful, -errno otherwise
@@ -353,12 +354,8 @@ int omf_mdcrec_pack_htole(struct mpool_descriptor *mp, struct omf_mdcrec_data *c
  *
  * Return: 0 if successful, -errno on error
  */
-int
-omf_mdcrec_unpack_letoh(
-	struct omf_mdcver          *mdcver,
-	struct mpool_descriptor    *mp,
-	struct omf_mdcrec_data     *cdr,
-	const char                 *inbuf);
+int omf_mdcrec_unpack_letoh(struct omf_mdcver *mdcver, struct mpool_descriptor *mp,
+			    struct omf_mdcrec_data *cdr, const char *inbuf);
 
 /**
  * omf_mdcrec_isobj_le() - determine if mdc recordis object-related
@@ -376,8 +373,7 @@ int omf_mdcrec_isobj_le(const char *inbuf);
 void omf_mdcver_unpack_letoh(struct omf_mdcrec_data *cdr, const char *inbuf);
 
 /**
- * omf_mdcrec_unpack_type_letoh() - extract the record type from a
- *	packed MDC record.
+ * omf_mdcrec_unpack_type_letoh() - extract the record type from a packed MDC record.
  * @inbuf: packed MDC record.
  */
 u8 omf_mdcrec_unpack_type_letoh(const char *inbuf);
@@ -391,8 +387,7 @@ u8 omf_mdcrec_unpack_type_letoh(const char *inbuf);
 bool logrec_type_datarec(enum logrec_type_omf rtype);
 
 /**
- * omf_sbver_to_mdcver() - Returns the matching mdc version for a given
- *                          superblock version
+ * omf_sbver_to_mdcver() - Returns the matching mdc version for a given superblock version
  * @sbver: superblock version
  */
 struct omf_mdcver *omf_sbver_to_mdcver(enum sb_descriptor_ver_omf sbver);

@@ -29,19 +29,12 @@
  */
 static DEFINE_MUTEX(mpool_s_lock);
 
-int
-mpool_create(
-	const char             *mpname,
-	u32                     flags,
-	char                  **dpaths,
-	struct pd_prop	       *pd_prop,
-	struct mpcore_params   *params,
-	u64                     mlog_cap)
+int mpool_create(const char *mpname, u32 flags, char **dpaths, struct pd_prop *pd_prop,
+		 struct mpcore_params *params, u64 mlog_cap)
 {
-	struct pmd_layout          *mdc01, *mdc02;
-	struct omf_sb_descriptor   *sbmdc0;
-	struct mpool_descriptor    *mp;
-
+	struct omf_sb_descriptor *sbmdc0;
+	struct mpool_descriptor *mp;
+	struct pmd_layout *mdc01, *mdc02;
 	bool active, sbvalid;
 	u16 sidx;
 	int err;
@@ -149,7 +142,6 @@ mpool_create(
 		}
 	}
 
-
 	/*
 	 * Add drive state records to mdc0; if crash before complete will
 	 * detect if attempt to open same drive list; it may be possible to
@@ -239,29 +231,20 @@ errout:
 	return err;
 }
 
-int
-mpool_activate(
-	u64                         dcnt,
-	char                      **dpaths,
-	struct pd_prop		   *pd_prop,
-	u64                         mlog_cap,
-	struct mpcore_params       *params,
-	u32                         flags,
-	struct mpool_descriptor   **mpp)
+int mpool_activate(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u64 mlog_cap,
+		   struct mpcore_params *params, u32 flags, struct mpool_descriptor **mpp)
 {
-	struct omf_sb_descriptor   *sbmdc0;
-	struct mpool_descriptor    *mp;
-	struct pmd_layout          *mdc01 = NULL;
-	struct pmd_layout          *mdc02 = NULL;
-	struct media_class         *mcmeta;
-	int err;
-
-	u64     mdcmax, mdcnum, mdcncap, mdc0cap;
-	bool    active;
-	int     dup, doff, i;
-	u8      pdh;
-	bool    mc_resize[MP_MED_NUMBER] = { };
-	bool    force = ((flags & (1 << MP_FLAGS_FORCE)) != 0);
+	struct omf_sb_descriptor *sbmdc0;
+	struct mpool_descriptor *mp;
+	struct pmd_layout *mdc01 = NULL;
+	struct pmd_layout *mdc02 = NULL;
+	struct media_class *mcmeta;
+	u64 mdcmax, mdcnum, mdcncap, mdc0cap;
+	bool force = ((flags & (1 << MP_FLAGS_FORCE)) != 0);
+	bool mc_resize[MP_MED_NUMBER] = { };
+	bool active;
+	int dup, doff, err, i;
+	u8  pdh;
 
 	active = false;
 	*mpp = NULL;
@@ -603,24 +586,17 @@ errout:
 	return err;
 }
 
-int
-mpool_rename(
-	u64                         dcnt,
-	char                      **dpaths,
-	struct pd_prop             *pd_prop,
-	u32                         flags,
-	const char                 *mp_newname)
+int mpool_rename(u64 dcnt, char **dpaths, struct pd_prop *pd_prop,
+		 u32 flags, const char *mp_newname)
 {
-	struct omf_sb_descriptor   *sb;
-	struct mpool_descriptor    *mp;
-	struct mpool_dev_info      *pd = NULL;
+	struct omf_sb_descriptor*sb;
+	struct mpool_descriptor *mp;
+	struct mpool_dev_info *pd = NULL;
+	u16 omf_ver = OMF_SB_DESC_UNDEF;
+	bool force = ((flags & (1 << MP_FLAGS_FORCE)) != 0);
+	u8 pdh;
+	int dup, doff;
 	int err = 0;
-
-	u16    omf_ver = OMF_SB_DESC_UNDEF;
-	u8     pdh;
-	int    dup;
-	int    doff;
-	bool   force = ((flags & (1 << MP_FLAGS_FORCE)) != 0);
 
 	if (!mp_newname || dcnt == 0)
 		return -EINVAL;
@@ -727,13 +703,13 @@ errout:
 
 int mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop *pd_prop)
 {
-	struct mpool_dev_info  *pd;
-	struct mc_smap_parms    mcsp;
-
+	struct mpool_dev_info *pd;
+	struct mc_smap_parms mcsp;
 	char *dpathv[1] = { dpath };
 	bool erase = false;
 	bool smap = false;
 	int err;
+
 	/*
 	 * All device list changes are serialized via mpool_s_lock so
 	 * don't need to acquire mp.pdvlock until ready to update mpool
@@ -926,8 +902,7 @@ int mpool_mclass_get(struct mpool_descriptor *mp, u32 *mcxc, struct mpool_mclass
 	return 0;
 }
 
-int mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp,
-		       u8 drive_spares)
+int mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8 drive_spares)
 {
 	struct media_class *mc;
 	int err;
@@ -997,9 +972,8 @@ skip_update:
 void mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops)
 {
 	struct media_class *mc;
-
-	int     mclassp, i;
-	u16     ftmax;
+	int mclassp, i;
+	u16 ftmax;
 
 	mutex_lock(&mpool_s_lock);
 	down_read(&mp->pds_pdvlock);
@@ -1060,11 +1034,8 @@ int mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname,
 	return 0;
 }
 
-void
-mpool_get_usage(
-	struct mpool_descriptor    *mp,
-	enum mp_media_classp        mclassp,
-	struct mpool_usage         *usage)
+void mpool_get_usage(struct mpool_descriptor *mp, enum mp_media_classp mclassp,
+		     struct mpool_usage *usage)
 {
 	memset(usage, 0, sizeof(*usage));
 

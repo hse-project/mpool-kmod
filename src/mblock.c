@@ -67,11 +67,8 @@ static struct mblock_descriptor *layout2mblock(struct pmd_layout *layout)
 	return (struct mblock_descriptor *)layout;
 }
 
-static void
-mblock_getprops_cmn(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	struct mblock_props        *prop)
+static void mblock_getprops_cmn(struct mpool_descriptor *mp, struct pmd_layout *layout,
+				struct mblock_props *prop)
 {
 	struct mpool_dev_info *pd;
 
@@ -88,16 +85,11 @@ mblock_getprops_cmn(
 	prop->mpr_iscommitted = layout->eld_state & PMD_LYT_COMMITTED;
 }
 
-static int
-mblock_alloc_cmn(
-	struct mpool_descriptor     *mp,
-	u64                          objid,
-	enum mp_media_classp         mclassp,
-	bool                         spare,
-	struct mblock_props         *prop,
-	struct mblock_descriptor   **mbh)
+static int mblock_alloc_cmn(struct mpool_descriptor *mp, u64 objid,
+			    enum mp_media_classp mclassp, bool spare,
+			    struct mblock_props *prop, struct mblock_descriptor **mbh)
 {
-	struct pmd_layout      *layout = NULL;
+	struct pmd_layout *layout = NULL;
 	struct pmd_obj_capacity ocap;
 	int rc;
 
@@ -137,24 +129,14 @@ mblock_alloc_cmn(
 	return 0;
 }
 
-int
-mblock_alloc(
-	struct mpool_descriptor     *mp,
-	enum mp_media_classp         mclassp,
-	bool                         spare,
-	struct mblock_descriptor   **mbh,
-	struct mblock_props         *prop)
+int mblock_alloc(struct mpool_descriptor *mp, enum mp_media_classp mclassp, bool spare,
+		 struct mblock_descriptor **mbh, struct mblock_props *prop)
 {
 	return mblock_alloc_cmn(mp, 0, mclassp, spare, prop, mbh);
 }
 
-int
-mblock_find_get(
-	struct mpool_descriptor    *mp,
-	u64                         objid,
-	int                         which,
-	struct mblock_props        *prop,
-	struct mblock_descriptor  **mbh)
+int mblock_find_get(struct mpool_descriptor *mp, u64 objid, int which,
+		    struct mblock_props *prop, struct mblock_descriptor **mbh)
 {
 	struct pmd_layout *layout;
 
@@ -204,8 +186,8 @@ do {									\
 
 int mblock_commit(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 {
-	struct pmd_layout     *layout;
 	struct mpool_dev_info *pd;
+	struct pmd_layout *layout;
 	int rc;
 
 	layout = mblock2layout(mbh);
@@ -285,13 +267,8 @@ int mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
  * arguments in lower level functions (lower level functions should assert the
  * requirements but not otherwise check them)
  */
-static int
-mblock_rw_argcheck(
-	struct mpool_descriptor    *mp,
-	struct pmd_layout          *layout,
-	loff_t                      boff,
-	int                         rw,
-	size_t                      len)
+static int mblock_rw_argcheck(struct mpool_descriptor *mp, struct pmd_layout *layout,
+			      loff_t boff, int rw, size_t len)
 {
 	u64 opt_iosz;
 	u32 mblock_cap;
@@ -443,11 +420,8 @@ int mblock_read(struct mpool_descriptor *mp, struct mblock_descriptor *mbh,
 	return (state & PMD_LYT_COMMITTED) ? rc : -EAGAIN;
 }
 
-int
-mblock_get_props_ex(
-	struct mpool_descriptor    *mp,
-	struct mblock_descriptor   *mbh,
-	struct mblock_props_ex     *prop)
+int mblock_get_props_ex(struct mpool_descriptor *mp, struct mblock_descriptor *mbh,
+			struct mblock_props_ex *prop)
 {
 	struct pmd_layout *layout;
 

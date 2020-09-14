@@ -67,10 +67,8 @@ int sb_write_new(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb);
 
 /**
  * sb_write_update() - update superblock
- * @dparm: struct pd_dev_parm *
- *	   "dparm" info is not used to fill up the super block, only "sb" content is used.
- * @sb: struct omf_sb_descriptor *
- *	"sb" content is written in the super block.
+ * @dparm: "dparm" info is not used to fill up the super block, only "sb" content is used.
+ * @sb: "sb" content is written in the super block.
  *
  * Update superblock on pool drive
  *
@@ -98,6 +96,7 @@ int sb_erase(struct pd_dev_parm *dparm);
  * @sb: struct omf_sb_descriptor *
  * @omf_ver: omf sb version
  * @force:
+ *
  * Read superblock from drive pd; make repairs as necessary.
  *
  * Note: only pd.status and pd.parm must be set; no other pd fields accessed.
@@ -150,7 +149,7 @@ int sbutil_mdc0_isvalid(struct omf_sb_descriptor *sb);
  */
 static inline u32 sb_zones_for_sbs(struct pd_prop *pd_prop)
 {
-	u32    zonebyte;
+	u32 zonebyte;
 
 	zonebyte = pd_prop->pdp_zparam.dvb_zonepg << PAGE_SHIFT;
 

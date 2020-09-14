@@ -43,13 +43,8 @@ struct mpool_obj_layout;
  *
  * Return: %0 if successful, -errno otherwise...
  */
-int
-mblock_alloc(
-	struct mpool_descriptor	    *mp,
-	enum   mp_media_classp       mclassp,
-	bool                         spare,
-	struct mblock_descriptor   **mbh,
-	struct mblock_props         *prop);
+int mblock_alloc(struct mpool_descriptor *mp, enum mp_media_classp mclassp, bool spare,
+		 struct mblock_descriptor **mbh, struct mblock_props *prop);
 
 /**
  * mblock_find_get() -
@@ -65,13 +60,8 @@ mblock_alloc(
  *
  * Return: %0 if successful, -errno otherwise...
  */
-int
-mblock_find_get(
-	struct mpool_descriptor    *mp,
-	u64                         objid,
-	int                         which,
-	struct mblock_props        *prop,
-	struct mblock_descriptor  **mbh);
+int mblock_find_get(struct mpool_descriptor *mp, u64 objid, int which,
+		    struct mblock_props *prop, struct mblock_descriptor **mbh);
 
 /**
  * mblock_put() - Put (release) a ref on an mblock
@@ -134,13 +124,8 @@ int mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh);
  *
  * Return: %0 if success, -errno otherwise...
  */
-int
-mblock_write(
-	struct mpool_descriptor    *mp,
-	struct mblock_descriptor   *mbh,
-	const struct kvec          *iov,
-	int                         iovcnt,
-	size_t                      len);
+int mblock_write(struct mpool_descriptor *mp, struct mblock_descriptor *mbh,
+		 const struct kvec *iov, int iovcnt, size_t len);
 
 /**
  * mblock_read() -
@@ -159,14 +144,8 @@ mblock_write(
  *
  * Return: 0 if successful, -errno otherwise...
  */
-int
-mblock_read(
-	struct mpool_descriptor    *mp,
-	struct mblock_descriptor   *mbh,
-	const struct kvec          *iov,
-	int                         iovcnt,
-	loff_t                      boff,
-	size_t                      len);
+int mblock_read(struct mpool_descriptor *mp, struct mblock_descriptor *mbh,
+		const struct kvec *iov, int iovcnt, loff_t boff, size_t len);
 
 /**
  * mblock_get_props_ex() -
@@ -178,11 +157,8 @@ mblock_read(
  *
  * Return: %0 if successful, -errno otherwise...
  */
-int
-mblock_get_props_ex(
-	struct mpool_descriptor    *mp,
-	struct mblock_descriptor   *mbh,
-	struct mblock_props_ex     *prop);
+int mblock_get_props_ex(struct mpool_descriptor *mp, struct mblock_descriptor *mbh,
+			struct mblock_props_ex *prop);
 
 bool mblock_objid(u64 objid);
 

@@ -391,13 +391,8 @@ void pmd_precompact_alsz(struct mpool_descriptor *mp, u64 objid, u64 len, u64 ca
  *
  * Return: NULL if allocation fails.
  */
-struct pmd_layout *
-pmd_layout_alloc(
-	struct mpool_uuid  *uuid,
-	u64                 objid,
-	u64                 gen,
-	u64                 mblen,
-	u32                 zcnt);
+struct pmd_layout *pmd_layout_alloc(struct mpool_uuid *uuid, u64 objid,
+				    u64 gen, u64 mblen, u32 zcnt);
 
 /**
  * pmd_layout_release() - free pmd_layout and internal elements

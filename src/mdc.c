@@ -118,9 +118,9 @@ static void mdc_put(struct mlog_descriptor *mlh1, struct mlog_descriptor *mlh2)
 uint64_t mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags,
 		     struct mp_mdc **mdc_out)
 {
-	struct mlog_props          *props = NULL;
-	struct mlog_descriptor     *mlh[2];
-	struct mp_mdc              *mdc;
+	struct mlog_descriptor *mlh[2];
+	struct mlog_props *props = NULL;
+	struct mp_mdc *mdc;
 
 	int     err = 0, err1 = 0, err2 = 0;
 	int     ferr[2] = {0};
@@ -296,8 +296,8 @@ exit:
 
 uint64_t mp_mdc_cstart(struct mp_mdc *mdc)
 {
-	struct mpool_descriptor    *mp;
-	struct mlog_descriptor     *tgth = NULL;
+	struct mlog_descriptor *tgth = NULL;
+	struct mpool_descriptor *mp;
 	bool rw = false;
 	int rc;
 
@@ -335,12 +335,12 @@ uint64_t mp_mdc_cstart(struct mp_mdc *mdc)
 
 uint64_t mp_mdc_cend(struct mp_mdc *mdc)
 {
-	struct mpool_descriptor    *mp;
-	struct mlog_descriptor     *srch = NULL;
-	struct mlog_descriptor     *tgth = NULL;
-	u64    gentgt = 0;
-	bool   rw = false;
-	int    rc;
+	struct mlog_descriptor *srch = NULL;
+	struct mlog_descriptor *tgth = NULL;
+	struct mpool_descriptor *mp;
+	u64 gentgt = 0;
+	bool rw = false;
+	int rc;
 
 	if (!mdc)
 		return -EINVAL;
@@ -384,7 +384,7 @@ uint64_t mp_mdc_cend(struct mp_mdc *mdc)
 
 uint64_t mp_mdc_close(struct mp_mdc *mdc)
 {
-	struct mpool_descriptor   *mp;
+	struct mpool_descriptor *mp;
 	int rval = 0, rc;
 	bool rw = false;
 
