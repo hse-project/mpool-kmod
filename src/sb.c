@@ -169,6 +169,8 @@ static int sb_read_sbx(struct pd_dev_parm *dparm, char *inbuf, u32 idx)
  * sb API functions
  */
 
+_Static_assert(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN, "sb_area_sz < omf_sb_desc_packlen");
+
 /*
  * Determine if the mpool magic value exists in at least one place where
  * expected on drive pd.  Does NOT imply drive has a valid superblock.
@@ -190,8 +192,6 @@ int sb_magic_check(struct pd_dev_parm *dparm)
 			  rc, dparm->dpr_name, dparm->dpr_zonepg, dparm->dpr_zonetot);
 		return rc;
 	}
-
-	ASSERT(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
 	inbuf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!inbuf) {
@@ -233,8 +233,6 @@ int sb_write_new(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb)
 {
 	char *outbuf;
 	int rc, i;
-
-	ASSERT(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
 	if (!sb_parm_valid(dparm)) {
 		rc = -EINVAL;
@@ -284,8 +282,6 @@ int sb_write_update(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb)
 {
 	char *outbuf;
 	int rc, i;
-
-	ASSERT(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
 	if (!sb_parm_valid(dparm)) {
 		rc = -EINVAL;
@@ -343,8 +339,6 @@ int sb_erase(struct pd_dev_parm *dparm)
 			  dparm->dpr_zonepg, dparm->dpr_zonetot);
 		return rc;
 	}
-
-	ASSERT(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
 	buf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!buf)
@@ -442,8 +436,6 @@ int sb_read(struct pd_dev_parm *dparm, struct omf_sb_descriptor *sb, u16 *omf_ve
 	sbtmp = kzalloc(sizeof(*sbtmp), GFP_KERNEL);
 	if (!sbtmp)
 		return -ENOMEM;
-
-	ASSERT(SB_AREA_SZ >= OMF_SB_DESC_PACKLEN);
 
 	buf = kmalloc_large(SB_AREA_SZ + 1, GFP_KERNEL);
 	if (!buf) {
