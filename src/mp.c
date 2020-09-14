@@ -1043,7 +1043,8 @@ void mpool_get_usage(struct mpool_descriptor *mp, enum mp_media_classp mclassp,
 	if (mclassp != MP_MED_ALL) {
 		struct media_class *mc;
 
-		assert(mclassp < MP_MED_NUMBER);
+		ASSERT(mclassp < MP_MED_NUMBER);
+
 		mc = &mp->pds_mc[mclassp];
 		if (mc->mc_pdmc < 0) {
 			/* Not an error, this media class is empty. */

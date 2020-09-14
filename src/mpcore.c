@@ -42,7 +42,7 @@ struct rb_root mpool_pools = { NULL };
 
 int uuid_to_mpdesc_insert(struct rb_root *root, struct mpool_descriptor *data)
 {
-	struct rb_node    **new = &(root->rb_node), *parent = NULL;
+	struct rb_node **new = &(root->rb_node), *parent = NULL;
 
 	/* Figure out where to put new node */
 	while (*new) {
@@ -89,8 +89,8 @@ uuid_to_mpdesc_search(struct rb_root *root, struct mpool_uuid *key_uuid)
 int mpool_dev_sbwrite(struct mpool_descriptor *mp, struct mpool_dev_info *pd,
 		      struct omf_sb_descriptor *sbmdc0)
 {
-	struct omf_sb_descriptor   *sb = NULL;
-	struct mc_parms		    mc_parms;
+	struct omf_sb_descriptor *sb = NULL;
+	struct mc_parms mc_parms;
 	int rc;
 
 	if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
@@ -153,17 +153,17 @@ int mpool_dev_sbwrite(struct mpool_descriptor *mp, struct mpool_dev_info *pd,
  */
 static int mpool_mdc0_alloc(struct mpool_descriptor *mp, struct omf_sb_descriptor *sb)
 {
-	struct mpool_dev_info  *pd;
-	struct media_class     *mc;
-	struct mpool_uuid       uuid;
-	u64                     zcnt;
-	u64                     zonelen;
-	u32                     cnt;
-	int                     rc;
+	struct mpool_dev_info *pd;
+	struct media_class *mc;
+	struct mpool_uuid uuid;
+	u64 zcnt, zonelen;
+	u32 cnt;
+	int rc;
 
 	sbutil_mdc0_clear(sb);
 
-	assert(mp->pds_mdparm.md_mclass < MP_MED_NUMBER);
+	ASSERT(mp->pds_mdparm.md_mclass < MP_MED_NUMBER);
+
 	mc = &mp->pds_mc[mp->pds_mdparm.md_mclass];
 	if (mc->mc_pdmc < 0) {
 		rc = -ENOSPC;
@@ -379,9 +379,9 @@ int mpool_dev_check_new(struct mpool_descriptor *mp, struct mpool_dev_info *pd)
 int mpool_desc_pdmc_add(struct mpool_descriptor *mp, u16 pdh,
 			struct omf_devparm_descriptor *omf_devparm, bool check_only)
 {
-	struct mpool_dev_info  *pd = NULL;
-	struct media_class     *mc;
-	struct mc_parms		mc_parms;
+	struct mpool_dev_info *pd = NULL;
+	struct media_class *mc;
+	struct mc_parms mc_parms;
 	int rc;
 
 	pd = &mp->pds_pdv[pdh];
@@ -411,7 +411,8 @@ int mpool_desc_pdmc_add(struct mpool_descriptor *mp, u16 pdh,
 
 	mc = &mp->pds_mc[mc_parms.mcp_classp];
 	if (mc->mc_pdmc < 0) {
-		struct mc_smap_parms   mcsp;
+		struct mc_smap_parms mcsp;
+
 		/*
 		 * No media class corresponding to the PD class yet, create one.
 		 */
@@ -465,7 +466,7 @@ int mpool_desc_init_newpool(struct mpool_descriptor *mp, u32 flags)
 	 */
 	rc = mpool_desc_pdmc_add(mp, pdh, NULL, false);
 	if (rc) {
-		struct mpool_dev_info  *pd __maybe_unused;
+		struct mpool_dev_info *pd __maybe_unused;
 
 		pd = &mp->pds_pdv[pdh];
 
@@ -510,10 +511,9 @@ int mpool_dev_init_all(struct mpool_dev_info *pdv, u64 dcnt, char **dpaths,
 
 void mpool_mdc_cap_init(struct mpool_descriptor *mp, struct mpool_dev_info *pd)
 {
-	u64    zonesz;
-	u64    defmbsz;
+	u64 zonesz, defmbsz;
 
-	zonesz  = (pd->pdi_zonepg << PAGE_SHIFT) >> 20;
+	zonesz = (pd->pdi_zonepg << PAGE_SHIFT) >> 20;
 	defmbsz = MPOOL_MBSIZE_MB_DEFAULT;
 
 	if (mp->pds_params.mp_mdc0cap == 0) {
@@ -541,14 +541,13 @@ void mpool_mdc_cap_init(struct mpool_descriptor *mp, struct mpool_dev_info *pd)
 int mpool_desc_init_sb(struct mpool_descriptor *mp, struct omf_sb_descriptor *sbmdc0,
 		       u32 flags, bool *mc_resize)
 {
-	struct omf_sb_descriptor   *sb = NULL;
-	struct mpool_dev_info      *pd = NULL;
-
-	int    rc;
-	u16    omf_ver = OMF_SB_DESC_UNDEF;
-	u8     pdh = 0;
-	bool   mdc0found = false;
-	bool   force = ((flags & (1 << MP_FLAGS_FORCE)) != 0);
+	struct omf_sb_descriptor *sb = NULL;
+	struct mpool_dev_info *pd = NULL;
+	u16 omf_ver = OMF_SB_DESC_UNDEF;
+	bool mdc0found = false;
+	bool force = ((flags & (1 << MP_FLAGS_FORCE)) != 0);
+	u8 pdh = 0;
+	int rc;
 
 	sb = kzalloc(sizeof(*sb), GFP_KERNEL);
 	if (!sb) {
@@ -558,10 +557,9 @@ int mpool_desc_init_sb(struct mpool_descriptor *mp, struct omf_sb_descriptor *sb
 	}
 
 	for (pdh = 0; pdh < mp->pds_pdvcnt; pdh++) {
-		struct omf_devparm_descriptor  *dparm;
-
-		bool   resize = false;
-		int    i;
+		struct omf_devparm_descriptor *dparm;
+		bool resize = false;
+		int i;
 
 		pd = &mp->pds_pdv[pdh];
 		if (mpool_pd_status_get(pd) != PD_STAT_ONLINE) {
@@ -607,7 +605,7 @@ int mpool_desc_init_sb(struct mpool_descriptor *mp, struct omf_sb_descriptor *sb
 			mpool_uuid_copy(&mp->pds_poolid, &sb->osb_poolid);
 
 			n = strlcpy(mp->pds_name, (char *)sb->osb_name, sizeof(mp->pds_name));
-			assert(n < sizeof(mp->pds_name));
+			ASSERT(n < sizeof(mp->pds_name));
 		} else {
 			/* Second or later drive; validate pool-wide properties */
 			if (mpool_uuid_compare(&sb->osb_poolid, &mp->pds_poolid) != 0) {
@@ -658,7 +656,7 @@ int mpool_desc_init_sb(struct mpool_descriptor *mp, struct omf_sb_descriptor *sb
 
 			dparm = &sb->osb_mdc0dev;
 			if (resize) {
-				assert(pd->pdi_devsz > dparm->odp_devsz);
+				ASSERT(pd->pdi_devsz > dparm->odp_devsz);
 
 				dparm->odp_devsz = pd->pdi_devsz;
 				dparm->odp_zonetot = pd->pdi_devsz / (pd->pdi_zonepg << PAGE_SHIFT);
@@ -680,8 +678,8 @@ int mpool_desc_init_sb(struct mpool_descriptor *mp, struct omf_sb_descriptor *sb
 				rc = -EINVAL;
 				mp_pr_err("%s: pd %s, duplicate devices, uuid %s",
 					  rc, mp->pds_name, pd->pdi_name, uuid_str);
-				kfree(sb);
 				kfree(uuid_str);
+				kfree(sb);
 				return rc;
 			}
 		}
@@ -693,16 +691,15 @@ int mpool_desc_init_sb(struct mpool_descriptor *mp, struct omf_sb_descriptor *sb
 			return rc;
 		} else if (!force && (omf_ver < OMF_SB_DESC_VER_LAST || resize)) {
 			if ((flags & (1 << MP_FLAGS_PERMIT_META_CONV)) == 0) {
-				char *buf1;
-				char *buf2 = NULL;
-				struct omf_mdcver  *mdcver;
+				struct omf_mdcver *mdcver;
+				char *buf1, *buf2 = NULL;
 
 				/*
 				 * We have to get the permission from users
 				 * to update mpool meta data
 				 */
 				mdcver = omf_sbver_to_mdcver(omf_ver);
-				assert(mdcver != NULL);
+				ASSERT(mdcver != NULL);
 
 				buf1 = kmalloc(2 * MAX_MDCVERSTR, GFP_KERNEL);
 				if (buf1) {
@@ -716,8 +713,8 @@ int mpool_desc_init_sb(struct mpool_descriptor *mp, struct omf_sb_descriptor *sb
 					  rc, mp->pds_name,
 					  buf1, omfu_mdcver_comment(mdcver) ?: "",
 					  buf2, omfu_mdcver_comment(omfu_mdcver_cur()));
-				kfree(sb);
 				kfree(buf1);
+				kfree(sb);
 				return rc;
 			}
 
@@ -777,8 +774,8 @@ static int comp_func(const void *c1, const void *c2)
 int check_for_dups(char **listv, int cnt, int *dup, int *offset)
 {
 	const char **sortedv;
-	const char  *prev;
-	int          rc, i;
+	const char *prev;
+	int rc, i;
 
 	*dup = 0;
 	*offset = -1;
@@ -828,8 +825,8 @@ int check_for_dups(char **listv, int cnt, int *dup, int *offset)
 
 void fill_in_devprops(struct mpool_descriptor *mp, u64 pdh, struct mpool_devprops *dprop)
 {
-	struct mpool_dev_info  *pd;
-	struct media_class     *mc;
+	struct mpool_dev_info *pd;
+	struct media_class *mc;
 	int rc;
 
 	pd = &mp->pds_pdv[pdh];
@@ -848,7 +845,7 @@ void fill_in_devprops(struct mpool_descriptor *mp, u64 pdh, struct mpool_devprop
 
 int mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_descriptor *omf_devparm)
 {
-	struct mpool_dev_info  *pd = NULL;
+	struct mpool_dev_info *pd = NULL;
 	char uuid_str[40];
 	int rc;
 
@@ -884,11 +881,10 @@ int mpool_desc_unavail_add(struct mpool_descriptor *mp, struct omf_devparm_descr
 int mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 {
 	struct mlog_descriptor *ml_desc;
-	struct mlog_props       mlprops;
-	struct mlog_capacity    mlcap = {
+	struct mlog_capacity mlcap = {
 		.lcp_captgt = mlog_cap,
 	};
-
+	struct mlog_props mlprops;
 	u64 root_mlog_id[2];
 	int rc, i;
 
@@ -941,8 +937,8 @@ int mpool_create_rmlogs(struct mpool_descriptor *mp, u64 mlog_cap)
 
 struct mpool_descriptor *mpool_desc_alloc(void)
 {
-	struct mpool_descriptor    *mp;
-	int                         i;
+	struct mpool_descriptor *mp;
+	int i;
 
 	mp = kzalloc(sizeof(*mp), GFP_KERNEL);
 	if (!mp)
@@ -968,9 +964,9 @@ struct mpool_descriptor *mpool_desc_alloc(void)
  */
 void mpool_desc_free(struct mpool_descriptor *mp)
 {
-	struct mpool_descriptor    *found_mp = NULL;
-	struct mpool_uuid           uuid_zero;
-	int                         i;
+	struct mpool_descriptor *found_mp = NULL;
+	struct mpool_uuid uuid_zero;
+	int i;
 
 	mpool_uuid_clear(&uuid_zero);
 

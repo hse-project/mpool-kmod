@@ -165,7 +165,8 @@ omf_find_upgrade_hist(struct upgrade_history *uhtab, size_t tabsz,
 		mid = (beg + end) / 2;
 		cur = &uhtab[mid];
 		if (mdcver) {
-			assert(sbver == 0);
+			ASSERT(sbver == 0);
+
 			if (omfu_mdcver_cmp(mdcver, "==", &cur->uh_mdcver))
 				return cur;
 			else if (omfu_mdcver_cmp(mdcver, ">", &cur->uh_mdcver))
@@ -173,7 +174,8 @@ omf_find_upgrade_hist(struct upgrade_history *uhtab, size_t tabsz,
 			else
 				end = mid;
 		} else {
-			assert(sbver <= OMF_SB_DESC_VER_LAST);
+			ASSERT(sbver <= OMF_SB_DESC_VER_LAST);
+
 			if (sbver == cur->uh_sbver)
 				return cur;
 			else if (sbver > cur->uh_sbver)
@@ -219,11 +221,11 @@ omf_upgrade_convert_only(void *out, const void *in, struct upgrade_history *uhta
 	size_t newsz;
 
 	v1 = omf_find_upgrade_hist(uhtab, tabsz, sbv1, mdcv1);
-	assert(v1);
+	ASSERT(v1);
 
 	v2 = omf_find_upgrade_hist(uhtab, tabsz, sbv2, mdcv2);
-	assert(v2);
-	assert(v1 <= v2);
+	ASSERT(v2);
+	ASSERT(v1 <= v2);
 
 	if (v1 == v2)
 		/* No need to do conversion */
@@ -316,7 +318,8 @@ static int omf_unpack_letoh_and_convert(void *out, size_t outsz, const char *inb
 	int rc;
 
 	omf = omf_find_upgrade_hist(uhtab, tabsz, sbver, mdcver);
-	assert(omf);
+	ASSERT(omf);
+
 	if (omf == &uhtab[tabsz - 1]) {
 		/*
 		 * Current version is the latest version.
@@ -352,13 +355,16 @@ static int omf_unpack_letoh_and_convert(void *out, size_t outsz, const char *inb
 		old = new;
 	}
 
-	assert(newsz == outsz);
+	ASSERT(newsz == outsz);
+
 	memcpy(out, new, newsz);
 	kfree(new);
 
 	return 0;
 }
 
+_Static_assert(MPOOL_UUID_SIZE == OMF_UUID_PACKLEN, "mpool uuid sz != omf uuid packlen");
+_Static_assert(OMF_MPOOL_NAME_LEN == MPOOL_NAMESZ_MAX, "omf mpool name len != mpool namesz max");
 
 /*
  * devparm_descriptor
@@ -368,7 +374,6 @@ static void omf_dparm_pack_htole(struct omf_devparm_descriptor *dp, char *outbuf
 	struct devparm_descriptor_omf *dp_omf;
 
 	dp_omf = (struct devparm_descriptor_omf *)outbuf;
-	assert(MPOOL_UUID_SIZE == OMF_UUID_PACKLEN);
 	omf_set_podp_devid(dp_omf, dp->odp_devid.uuid, MPOOL_UUID_SIZE);
 	omf_set_podp_devsz(dp_omf, dp->odp_devsz);
 	omf_set_podp_zonetot(dp_omf, dp->odp_zonetot);
@@ -394,7 +399,6 @@ static int omf_dparm_unpack_letoh_v1(void *out, const char *inbuf)
 	dp_omf = (struct devparm_descriptor_omf *)inbuf;
 	dp = (struct omf_devparm_descriptor *)out;
 
-	assert(MPOOL_UUID_SIZE == OMF_UUID_PACKLEN);
 	omf_podp_devid(dp_omf, dp->odp_devid.uuid, MPOOL_UUID_SIZE);
 	dp->odp_devsz     = omf_podp_devsz(dp_omf);
 	dp->odp_zonetot    = omf_podp_zonetot(dp_omf);
@@ -663,7 +667,7 @@ struct omf_mdcver *omf_sbver_to_mdcver(enum sb_descriptor_ver_omf sbver)
 	uhtab = omf_find_upgrade_hist(sb_descriptor_table, ARRAY_SIZE(sb_descriptor_table),
 				      sbver, NULL);
 	if (uhtab) {
-		assert(uhtab->uh_sbver == sbver);
+		ASSERT(uhtab->uh_sbver == sbver);
 		return &uhtab->uh_mdcver;
 	}
 
@@ -683,9 +687,7 @@ int omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf)
 
 	/* Pack drive-specific info */
 	omf_set_psb_magic(sb_omf, sb->osb_magic);
-	assert(OMF_MPOOL_NAME_LEN == MPOOL_NAMESZ_MAX);
 	omf_set_psb_name(sb_omf, sb->osb_name, MPOOL_NAMESZ_MAX);
-	assert(MPOOL_UUID_SIZE == OMF_UUID_PACKLEN);
 	omf_set_psb_poolid(sb_omf, sb->osb_poolid.uuid, MPOOL_UUID_SIZE);
 	omf_set_psb_vers(sb_omf, sb->osb_vers);
 	omf_set_psb_gen(sb_omf, sb->osb_gen);
@@ -723,7 +725,6 @@ int omf_sb_pack_htole(struct omf_sb_descriptor *sb, char *outbuf)
 	return 0;
 }
 
-
 /**
  * omf_sb_unpack_letoh_v1()- unpack version 1 omf sb descriptor into in-memory format
  * @out: in-memory format
@@ -733,8 +734,7 @@ int omf_sb_unpack_letoh_v1(void *out, const char *inbuf)
 {
 	struct sb_descriptor_omf *sb_omf;
 	struct omf_sb_descriptor *sb;
-	u8 cksum[4];
-	u8 omf_cksum[4];
+	u8 cksum[4], omf_cksum[4];
 	int rc;
 
 	sb_omf = (struct sb_descriptor_omf *)inbuf;
@@ -750,13 +750,11 @@ int omf_sb_unpack_letoh_v1(void *out, const char *inbuf)
 
 	sb->osb_magic = omf_psb_magic(sb_omf);
 
-	assert(OMF_MPOOL_NAME_LEN == MPOOL_NAMESZ_MAX);
 	omf_psb_name(sb_omf, sb->osb_name, MPOOL_NAMESZ_MAX);
 
 	sb->osb_vers = omf_psb_vers(sb_omf);
-	assert(sb->osb_vers == OMF_SB_DESC_V1);
+	ASSERT(sb->osb_vers == OMF_SB_DESC_V1);
 
-	assert(MPOOL_UUID_SIZE == OMF_UUID_PACKLEN);
 	omf_psb_poolid(sb_omf, sb->osb_poolid.uuid, MPOOL_UUID_SIZE);
 
 	sb->osb_gen = omf_psb_gen(sb_omf);
@@ -784,9 +782,8 @@ int omf_sb_unpack_letoh_v1(void *out, const char *inbuf)
 int omf_sb_unpack_letoh(struct omf_sb_descriptor *sb, const char *inbuf, u16 *omf_ver)
 {
 	struct sb_descriptor_omf *sb_omf;
+	u8 cksum[4], omf_cksum[4];
 	u64 magic = 0;
-	u8 cksum[4];
-	u8 omf_cksum[4];
 	int rc;
 
 	sb_omf = (struct sb_descriptor_omf *)inbuf;
@@ -846,14 +843,13 @@ bool omf_sb_has_magic_le(const char *inbuf)
  *
  * Return: bytes packed if successful, -EINVAL otherwise
  */
-static u64
-omf_mdcrec_objcmn_pack_htole(struct mpool_descriptor *mp, struct omf_mdcrec_data *cdr, char *outbuf)
+static u64 omf_mdcrec_objcmn_pack_htole(struct mpool_descriptor *mp,
+					struct omf_mdcrec_data *cdr, char *outbuf)
 {
 	struct pmd_layout *layout = cdr->u.obj.omd_layout;
 	struct mdcrec_data_odelete_omf *odel_omf;
-	struct mdcrec_data_oerase_omf  *oera_omf;
-
-	s64    bytes = 0;
+	struct mdcrec_data_oerase_omf *oera_omf;
+	s64 bytes = 0;
 
 	switch (cdr->omd_rtype) {
 	case OMF_MDR_ODELETE:
@@ -1004,9 +1000,7 @@ static int omf_mdcrec_mcconfig_unpack_letoh(struct omf_mdcver *mdcver, struct om
  */
 static u64 omf_mdcver_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
 {
-	struct mdcver_omf *pv_omf;
-
-	pv_omf = (struct mdcver_omf *)outbuf;
+	struct mdcver_omf *pv_omf = (struct mdcver_omf *)outbuf;
 
 	omf_set_pv_rtype(pv_omf, cdr->omd_rtype);
 	omf_set_pv_mdcv_major(pv_omf, cdr->u.omd_version.mdcv_major);
@@ -1019,9 +1013,7 @@ static u64 omf_mdcver_pack_htole(struct omf_mdcrec_data *cdr, char *outbuf)
 
 void omf_mdcver_unpack_letoh(struct omf_mdcrec_data *cdr, const char *inbuf)
 {
-	struct mdcver_omf *pv_omf;
-
-	pv_omf = (struct mdcver_omf *)inbuf;
+	struct mdcver_omf *pv_omf = (struct mdcver_omf *)inbuf;
 
 	cdr->omd_rtype = omf_pv_rtype(pv_omf);
 	cdr->u.omd_version.mdcv_major = omf_pv_mdcv_major(pv_omf);

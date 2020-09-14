@@ -562,11 +562,11 @@ void mpc_reap_destroy(struct mpc_reap *reap)
 	for (i = 0; i < REAP_ELEM_MAX; ++i) {
 		elem = &reap->reap_elem[i];
 
-		assert(atomic64_read(&elem->reap_hpages) == 0);
-		assert(atomic64_read(&elem->reap_wpages) == 0);
-		assert(atomic64_read(&elem->reap_cpages) == 0);
-		assert(atomic_read(&elem->reap_nfreed) == 0);
-		assert(list_empty(&elem->reap_list));
+		ASSERT(atomic64_read(&elem->reap_hpages) == 0);
+		ASSERT(atomic64_read(&elem->reap_wpages) == 0);
+		ASSERT(atomic64_read(&elem->reap_cpages) == 0);
+		ASSERT(atomic_read(&elem->reap_nfreed) == 0);
+		ASSERT(list_empty(&elem->reap_list));
 
 		mutex_destroy(&elem->reap_lock);
 	}

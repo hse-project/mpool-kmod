@@ -8,10 +8,18 @@
 
 #include <linux/bug.h>
 
-#ifdef NDEBUG
-#define assert(cond)
+#ifdef CONFIG_MPOOL_ASSERT
+__cold __noreturn
+static inline void assertfail(const char *expr, const char *file, int line)
+{
+	pr_err("mpool assertion failed: %s in %s:%d\n", expr, file, line);
+	BUG();
+}
+
+#define ASSERT(_expr)   (likely(_expr) ? (void)0 : assertfail(#_expr, __FILE__, __LINE__))
+
 #else
-#define assert(cond)    WARN_ON(!(cond))
+#define ASSERT(_expr)   (void)(_expr)
 #endif
 
 #endif /* MPOOL_ASSERT_H */

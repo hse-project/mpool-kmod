@@ -262,8 +262,6 @@ static int mlog_logrecs_validate(struct mlog_stat *lstat, int *midrec, u16 rbidx
 	while (sectsz - recoff >= OMF_LOGREC_DESC_PACKLEN) {
 		omf_logrec_desc_unpack_letoh(&lrd, &rbuf[recoff]);
 
-		assert(lrd.olr_rtype <= OMF_LOGREC_CEND);
-
 		if (lrd.olr_rtype == OMF_LOGREC_CSTART) {
 			if (!lstat->lst_csem || lstat->lst_rsoff || recnum) {
 				rc = -ENODATA;
@@ -478,7 +476,6 @@ static int mlog_read_and_validate(struct mpool_descriptor *mp,
 				  struct pmd_layout *layout, bool *lempty)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
-
 	off_t leol_off = 0, rsoff;
 	int midrec = 0, remsec;
 	bool leol_found = false;
@@ -550,7 +547,7 @@ static int mlog_read_and_validate(struct mpool_descriptor *mp,
 		remsec -= nsecs;
 		if (remsec == 0)
 			break;
-		assert(remsec > 0);
+		ASSERT(remsec > 0);
 
 		if (fsetid_loop) {
 			u16    compsec;
@@ -565,7 +562,7 @@ static int mlog_read_and_validate(struct mpool_descriptor *mp,
 			endoff  = rsoff + nsecs - 1;
 			compsec = endoff - leol_off + 1;
 			remsec  = min_t(u32, remsec, maxsec - compsec);
-			assert(remsec >= 0);
+			ASSERT(remsec >= 0);
 
 			rsoff = endoff + 1;
 		} else {
@@ -961,7 +958,7 @@ static int mlog_append_marker(struct mpool_descriptor *mp, struct pmd_layout *la
 	lrd.olr_rlen  = 0;
 	lrd.olr_rtype = mtype;
 
-	assert(abuf != NULL);
+	ASSERT(abuf != NULL);
 
 	rc = omf_logrec_desc_pack_htole(&lrd, &abuf[lpgoff + aoff]);
 	if (!rc) {
@@ -1099,14 +1096,12 @@ int mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
  */
 static void memcpy_from_iov(struct kvec *iov, char *buf, size_t buflen, int *nextidx)
 {
-	int i = *nextidx;
-	int cp;
+	int i = *nextidx, cp;
 
 	if ((buflen > 0) && (iov[i].iov_len == 0))
 		i++;
 
 	while (buflen > 0) {
-
 		cp = (buflen < iov[i].iov_len) ? buflen : iov[i].iov_len;
 
 		if (iov[i].iov_base)
@@ -1184,7 +1179,7 @@ static int mlog_append_data_internal(struct mpool_descriptor *mp, struct mlog_de
 		lpgoff = asidx * sectsz;
 		aoff   = lstat->lst_aoff;
 
-		assert(abuf != NULL);
+		ASSERT(abuf != NULL);
 
 		rlenmax = min((u64)(sectsz - aoff - OMF_LOGREC_DESC_PACKLEN),
 			      (u64)OMF_LOGREC_DESC_RLENMAX);
@@ -1239,7 +1234,8 @@ static int mlog_append_data_internal(struct mpool_descriptor *mp, struct mlog_de
 			}
 		}
 
-		assert(rc == 0);
+		ASSERT(rc == 0);
+
 		if (bufoff == buflen)
 			break;
 	}

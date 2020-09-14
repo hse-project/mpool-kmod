@@ -41,10 +41,8 @@ static struct pmd_layout *mblock2layout(struct mblock_descriptor *mbh)
 	if (!layout)
 		return NULL;
 
-	WARN_ONCE(layout->eld_objid == 0 || kref_read(&layout->eld_ref) < 2,
-		  "%s: %p, objid %lx, state %x, refcnt %ld\n",
-		  __func__, layout, (ulong)layout->eld_objid,
-		  layout->eld_state, (long)kref_read(&layout->eld_ref));
+	ASSERT(layout->eld_objid > 0);
+	ASSERT(kref_read(&layout->eld_ref) >= 2);
 
 	return mblock_objid(layout->eld_objid) ? layout : NULL;
 }
@@ -72,9 +70,6 @@ static void mblock_getprops_cmn(struct mpool_descriptor *mp, struct pmd_layout *
 {
 	struct mpool_dev_info *pd;
 
-	assert(layout);
-	assert(prop);
-
 	pd = pmd_layout_pd_get(mp, layout);
 
 	prop->mpr_objid = layout->eld_objid;
@@ -89,17 +84,14 @@ static int mblock_alloc_cmn(struct mpool_descriptor *mp, u64 objid,
 			    enum mp_media_classp mclassp, bool spare,
 			    struct mblock_props *prop, struct mblock_descriptor **mbh)
 {
+	struct pmd_obj_capacity ocap = { .moc_spare = spare };
 	struct pmd_layout *layout = NULL;
-	struct pmd_obj_capacity ocap;
 	int rc;
 
 	if (!mp)
 		return -EINVAL;
 
 	*mbh = NULL;
-
-	ocap.moc_captgt = 0;
-	ocap.moc_spare  = spare;
 
 	if (!objid) {
 		rc = pmd_obj_alloc(mp, OMF_OBJ_MBLOCK, &ocap, mclassp, &layout);
@@ -249,7 +241,7 @@ int mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
 }
 
 /**
- * mblock_rw_argcheck() -
+ * mblock_rw_argcheck() - Validate mblock_write() and mblock_read().
  * @mp:      - Mpool descriptor
  * @layout:  - Layout of the mblock
  * @iov:     - iovec array
@@ -258,8 +250,6 @@ int mblock_delete(struct mpool_descriptor *mp, struct mblock_descriptor *mbh)
  *             for write
  * @rw:      - MPOOL_OP_READ or MPOOL_OP_WRITE
  * @len:     - number of bytes in iov list
- *
- * Validate mblock_write() and mblock_read()
  *
  * Returns: 0 if successful, -errno otherwise
  *
@@ -357,15 +347,15 @@ int mblock_write(struct mpool_descriptor *mp, struct mblock_descriptor *mbh,
 
 	boff = layout->eld_mblen;
 
-	assert(PAGE_ALIGNED(len));
-	assert(iovcnt == (len >> PAGE_SHIFT));
-	assert(PAGE_ALIGNED(boff));
+	ASSERT(PAGE_ALIGNED(len));
+	ASSERT(PAGE_ALIGNED(boff));
+	ASSERT(iovcnt == (len >> PAGE_SHIFT));
 
 	pmd_obj_wrlock(layout);
 	state = layout->eld_state;
 	if (!(state & PMD_LYT_COMMITTED)) {
 		struct mpool_dev_info *pd = pmd_layout_pd_get(mp, layout);
-		int                    flags = 0;
+		int flags = 0;
 
 		if (pd->pdi_fua)
 			flags = REQ_FUA;
@@ -386,8 +376,6 @@ int mblock_read(struct mpool_descriptor *mp, struct mblock_descriptor *mbh,
 	u8 state;
 	int rc;
 
-	assert(mp);
-
 	layout = mblock2layout(mbh);
 	if (!layout) {
 		mp_pr_layout_not_found(mp, mbh);
@@ -403,9 +391,9 @@ int mblock_read(struct mpool_descriptor *mp, struct mblock_descriptor *mbh,
 	if (len == 0)
 		return 0;
 
-	assert(PAGE_ALIGNED(len));
-	assert(PAGE_ALIGNED(boff));
-	assert(iovcnt == (len >> PAGE_SHIFT));
+	ASSERT(PAGE_ALIGNED(len));
+	ASSERT(PAGE_ALIGNED(boff));
+	ASSERT(iovcnt == (len >> PAGE_SHIFT));
 
 	/*
 	 * Read lock the mblock layout; mblock reads can proceed concurrently;

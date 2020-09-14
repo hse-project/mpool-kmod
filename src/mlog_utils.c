@@ -176,14 +176,14 @@ static void mlog_init_fsetparms(struct mpool_descriptor *mp, struct mlog_descrip
 	u16 sectsz;
 
 	layout = mlog2layout(mlh);
-	assert(layout);
+	ASSERT(layout);
 
 	pdp = &mp->pds_pdv[layout->eld_ld.ol_pdh].pdi_prop;
 	secshift = PD_SECTORSZ(pdp);
 	mfp->mfp_totsec = pmd_layout_cap_get(mp, layout) >> secshift;
 
 	sectsz = 1 << secshift;
-	assert((sectsz == PAGE_SIZE) || (sectsz == 512));
+	ASSERT((sectsz == PAGE_SIZE) || (sectsz == 512));
 
 	mfp->mfp_sectsz  = sectsz;
 	mfp->mfp_lpgsz   = PAGE_SIZE;
@@ -206,11 +206,11 @@ void
 mlog_extract_fsetparms(struct mlog_stat *lstat, u16 *sectsz, u32 *totsec, u16 *nsecmb, u16 *nseclpg)
 {
 	if (sectsz)
-		*sectsz  = MLOG_SECSZ(lstat);
+		*sectsz = MLOG_SECSZ(lstat);
 	if (totsec)
-		*totsec  = MLOG_TOTSEC(lstat);
+		*totsec = MLOG_TOTSEC(lstat);
 	if (nsecmb)
-		*nsecmb  = MLOG_NSECMB(lstat);
+		*nsecmb = MLOG_NSECMB(lstat);
 	if (nseclpg)
 		*nseclpg = MLOG_NSECLPG(lstat);
 }
@@ -398,11 +398,11 @@ mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u32 l_io
 	u16 i;
 	char *buf;
 
-	assert(len == PAGE_SIZE);
-	assert(l_iolen <= PAGE_SIZE);
+	ASSERT(len == PAGE_SIZE);
+	ASSERT(l_iolen <= PAGE_SIZE);
 
 	if (!iov) {
-		assert((iovcnt * sizeof(*iov)) <= PAGE_SIZE);
+		ASSERT((iovcnt * sizeof(*iov)) <= PAGE_SIZE);
 
 		iov = kcalloc(iovcnt, sizeof(*iov), GFP_KERNEL);
 		if (!iov)
@@ -413,14 +413,13 @@ mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u32 l_io
 	}
 
 	for (i = 0; i < iovcnt; i++, iov++) {
-
 		buf = ((op == MPOOL_OP_READ) ? lstat->lst_rbuf[i] : lstat->lst_abuf[i]);
 
 		/* iov_len for the last log page in read/write buffer. */
 		if (i == iovcnt - 1 && l_iolen != 0)
 			len = l_iolen;
 
-		assert(IS_ALIGNED(len, MLOG_SECSZ(lstat)));
+		ASSERT(IS_ALIGNED(len, MLOG_SECSZ(lstat)));
 
 		if (op == MPOOL_OP_WRITE && buf) {
 			iov->iov_base = buf;
@@ -432,7 +431,7 @@ mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u32 l_io
 		 * Pages for the append buffer are allocated in
 		 * mlog_append_*(), so we shouldn't be here for MPOOL_OP_WRITE.
 		 */
-		assert(op == MPOOL_OP_READ);
+		ASSERT(op == MPOOL_OP_READ);
 
 		/*
 		 * If the read buffer contains stale log pages from a prior
@@ -464,7 +463,7 @@ mlog_setup_buf(struct mlog_stat *lstat, struct kvec **riov, u16 iovcnt, u32 l_io
 		 * Must be a page-aligned buffer so that it can be used
 		 * in bio_add_page().
 		 */
-		assert(PAGE_ALIGNED(buf));
+		ASSERT(PAGE_ALIGNED(buf));
 
 		lstat->lst_rbuf[i] = iov->iov_base = buf;
 		iov->iov_len = len;
@@ -514,13 +513,12 @@ static int mlog_populate_abuf(struct mpool_descriptor *mp, struct pmd_layout *la
 	iov.iov_len  = MLOG_LPGSZ(lstat);
 
 	off = *soff * sectsz;
-	assert(IS_ALIGNED(off, MLOG_LPGSZ(lstat)));
+	ASSERT(IS_ALIGNED(off, MLOG_LPGSZ(lstat)));
 
 	rc = mlog_rw(mp, layout2mlog(layout), &iov, iovcnt, off, MPOOL_OP_READ, skip_ser);
 	if (rc) {
 		mp_pr_err("mpool %s, mlog 0x%lx, read IO failed, iovcnt: %u, off: 0x%lx",
 			  rc, mp->pds_name, (ulong)layout->eld_objid, iovcnt, off);
-
 		return rc;
 	}
 
@@ -571,12 +569,11 @@ int mlog_populate_rbuf(struct mpool_descriptor *mp, struct pmd_layout *layout,
 	if (rc) {
 		mp_pr_err("mpool %s, mlog 0x%lx setup failed, iovcnt: %u, last iolen: %u",
 			  rc, mp->pds_name, (ulong)layout->eld_objid, iovcnt, l_iolen);
-
 		return rc;
 	}
 
 	off = *soff * sectsz;
-	assert(IS_ALIGNED(off, MLOG_LPGSZ(lstat)));
+	ASSERT(IS_ALIGNED(off, MLOG_LPGSZ(lstat)));
 
 	rc = mlog_rw(mp, layout2mlog(layout), iov, iovcnt, off, MPOOL_OP_READ, skip_ser);
 	if (rc) {
@@ -585,7 +582,6 @@ int mlog_populate_rbuf(struct mpool_descriptor *mp, struct pmd_layout *layout,
 
 		mlog_free_rbuf(lstat, 0, MLOG_NLPGMB(lstat) - 1);
 		kfree(iov);
-
 		return rc;
 	}
 
@@ -617,22 +613,18 @@ static int mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *lay
 	struct mlog_stat *lstat = &layout->eld_lstat;
 	char *abuf;
 
-	assert(MLOG_LPGSZ(lstat) == PAGE_SIZE);
+	ASSERT(MLOG_LPGSZ(lstat) == PAGE_SIZE);
 
 	abuf = (char *)get_zeroed_page(GFP_KERNEL);
 	if (!abuf)
 		return -ENOMEM;
 
-	assert(PAGE_ALIGNED(abuf));
-
 	lstat->lst_abuf[abidx] = abuf;
 
 	if (abidx == 0) {
-		off_t  asoff;
-		off_t  wsoff;
-		u16    aoff;
-		u16    sectsz;
-		int    rc;
+		off_t asoff, wsoff;
+		u16 aoff, sectsz;
+		int rc;
 
 		/* This path is taken *only* for the first append following an mlog_open(). */
 		sectsz = MLOG_SECSZ(lstat);
@@ -654,15 +646,15 @@ static int mlog_alloc_abufpg(struct mpool_descriptor *mp, struct pmd_layout *lay
 		asoff = wsoff;
 		rc = mlog_populate_abuf(mp, layout, &asoff, abuf, skip_ser);
 		if (rc) {
-			mlog_free_abuf(lstat, abidx, abidx);
 			mp_pr_err("mpool %s, mlog 0x%lx, making write offset %ld 4K-aligned failed",
 				  rc, mp->pds_name, (ulong)layout->eld_objid, wsoff);
-
+			mlog_free_abuf(lstat, abidx, abidx);
 			return rc;
 		}
 
-		assert(asoff <= wsoff);
-		assert(IS_ALIGNED(asoff * sectsz, MLOG_LPGSZ(lstat)));
+		ASSERT(asoff <= wsoff);
+		ASSERT(IS_ALIGNED(asoff * sectsz, MLOG_LPGSZ(lstat)));
+
 		lstat->lst_cfssoff = ((wsoff - asoff) * sectsz) + aoff;
 		lstat->lst_asoff   = asoff;
 	}
@@ -680,10 +672,10 @@ static int mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *layou
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
 	struct kvec *iov = NULL;
-	u16    abidx, sectsz, nseclpg;
-	off_t  off;
-	u32    l_iolen;
-	int    rc;
+	u16 abidx, sectsz, nseclpg;
+	off_t off;
+	u32 l_iolen;
+	int rc;
 
 	mlog_extract_fsetparms(lstat, &sectsz, NULL, NULL, &nseclpg);
 
@@ -694,27 +686,22 @@ static int mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *layou
 	if (rc) {
 		mp_pr_err("mpool %s, mlog 0x%lx flush, buf setup failed, iovcnt: %u, iolen: %u",
 			  rc, mp->pds_name, (ulong)layout->eld_objid, abidx + 1, l_iolen);
-
 		return rc;
 	}
 
 	off = lstat->lst_asoff * sectsz;
 
-	assert((IS_ALIGNED(off, MLOG_LPGSZ(lstat))) ||
+	ASSERT((IS_ALIGNED(off, MLOG_LPGSZ(lstat))) ||
 		(IS_SECPGA(lstat) && IS_ALIGNED(off, MLOG_SECSZ(lstat))));
 
 	rc = mlog_rw(mp, layout2mlog(layout), iov, abidx + 1, off, MPOOL_OP_WRITE, skip_ser);
-	if (rc) {
+	if (rc)
 		mp_pr_err("mpool %s, mlog 0x%lx flush append buf, IO failed iovcnt %u, off 0x%lx",
 			  rc, mp->pds_name, (ulong)layout->eld_objid, abidx + 1, off);
-		kfree(iov);
-
-		return rc;
-	}
 
 	kfree(iov);
 
-	return 0;
+	return rc;
 }
 
 /**
@@ -725,15 +712,15 @@ static int mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *layou
 static void mlog_flush_posthdlr_4ka(struct pmd_layout *layout, bool fsucc)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
-	u16    abidx, sectsz, asidx;
-	off_t  asoff, wsoff;
-	char  *abuf;
-	u32    nsecwr;
+	u16 abidx, sectsz, asidx;
+	off_t asoff, wsoff;
+	char *abuf;
+	u32 nsecwr;
 
 	sectsz = MLOG_SECSZ(lstat);
-	abidx  = lstat->lst_abidx;
-	asoff  = lstat->lst_asoff;
-	wsoff  = lstat->lst_wsoff;
+	abidx = lstat->lst_abidx;
+	asoff = lstat->lst_asoff;
+	wsoff = lstat->lst_wsoff;
 
 	asidx  = wsoff - ((MLOG_NSECLPG(lstat) * abidx) + asoff);
 
@@ -742,7 +729,7 @@ static void mlog_flush_posthdlr_4ka(struct pmd_layout *layout, bool fsucc)
 	abuf = lstat->lst_abuf[0];
 
 	if (!fsucc) {
-		u32    cfssoff;
+		u32 cfssoff;
 
 		/*
 		 * Last CFS flush or header packing failed.
@@ -809,13 +796,9 @@ exit2:
 static void mlog_flush_posthdlr(struct pmd_layout *layout, bool fsucc)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
-
-	char  *abuf;
-	off_t  asoff;
-	off_t  lpgoff;
-	u16    abidx;
-	u16    sectsz;
-	u16    asidx;
+	u16 abidx, sectsz, asidx;
+	off_t asoff, lpgoff;
+	char *abuf;
 
 	sectsz = MLOG_SECSZ(lstat);
 	abidx  = lstat->lst_abidx;
@@ -829,7 +812,7 @@ static void mlog_flush_posthdlr(struct pmd_layout *layout, bool fsucc)
 	abuf = lstat->lst_abuf[0];
 
 	if (!fsucc) {
-		u32    cfssoff;
+		u32 cfssoff;
 
 		/*
 		 * Last CFS flush or header packing failed.
@@ -952,9 +935,9 @@ static int mlog_logblocks_hdrpack(struct pmd_layout *layout)
 int mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layout, bool skip_ser)
 {
 	struct mlog_stat *lstat = &layout->eld_lstat;
-	int    start, end, rc;
-	bool   fsucc = true;
-	u16    abidx;
+	int start, end, rc;
+	bool fsucc = true;
+	u16 abidx;
 
 	abidx = lstat->lst_abidx;
 
@@ -1108,12 +1091,13 @@ static int mlog_logblocks_load_media(struct mpool_descriptor *mp, struct mlog_re
 	}
 
 	lri->lri_rbidx = 0;
-	lri->lri_sidx  = 0;
+	lri->lri_sidx = 0;
 
-	rsoff   = lri->lri_soff;
+	rsoff = lri->lri_soff;
 	remsec -= rsoff;
-	assert(remsec > 0);
-	nsecs   = min_t(u32, maxsec, remsec);
+	ASSERT(remsec > 0);
+
+	nsecs = min_t(u32, maxsec, remsec);
 
 	if (layout->eld_flags & MLOG_OF_SKIP_SER)
 		skip_ser = true;
@@ -1261,15 +1245,12 @@ int mlog_logblock_load(struct mpool_descriptor *mp, struct mlog_read_iter *lri,
 	} else if ((lri->lri_soff == lstat->lst_wsoff) || (lstat->lst_asoff > -1 &&
 			lri->lri_soff >= lstat->lst_asoff &&
 			lri->lri_soff <= lstat->lst_wsoff)) {
+		u16 abidx, sectsz, asidx, nseclpg;
+
 		/*
 		 * lri refers to the currently accumulating log block
 		 * in lstat
 		 */
-		u16 abidx;
-		u16 sectsz;
-		u16 asidx;
-		u16 nseclpg;
-
 		if (!lri->lri_roff)
 			/* First read with handle from this log block. */
 			lri->lri_roff = OMF_LOGBLOCK_HDR_PACKLEN;

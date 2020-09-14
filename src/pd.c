@@ -380,8 +380,8 @@ static int pd_bio_rw(struct pd_dev_parm *dparm, const struct kvec *iov,
 		}
 	}
 
-	assert(bio);
-	assert(tot_pages == 0);
+	ASSERT(bio);
+	ASSERT(tot_pages == 0);
 
 	rc = SUBMIT_BIO_WAIT(op, bio);
 	bio_put(bio);
