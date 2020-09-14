@@ -62,7 +62,6 @@ struct pmd_mdc_info;
  * - Object layout rw locks must be acquired before any MDC locks.
  * - MDC-0 locks of a given class are below MDC-1/255 locks of those same
  *   classes.
- *
  */
 enum pmd_lock_class {
 	PMD_NONE       = 0,
@@ -89,9 +88,8 @@ enum pmd_obj_op {
 
 /**
  * enum pmd_layout_state - object state flags
- *
- * PMD_LYT_COMMITTED: object is committed to media
- * PMD_LYT_REMOVED:   object logically removed (aborted or deleted)
+ * @PMD_LYT_COMMITTED: object is committed to media
+ * @PMD_LYT_REMOVED:   object logically removed (aborted or deleted)
  */
 enum pmd_layout_state {
 	PMD_LYT_COMMITTED  = 0x01,
@@ -120,6 +118,16 @@ union pmd_layout_priv {
 
 /**
  * struct pmd_layout - object layout (in-memory version)
+ * @eld_nodemdc: rbtree node for uncommitted and committed objects
+ * @eld_objid:   object ID associated with layout
+ * @eld_mblen:   Amount of data written in the mblock in bytes (0 for mlogs)
+ * @eld_state:   enum pmd_layout_state
+ * @eld_flags:   enum mlog_open_flags for mlogs
+ * @eld_gen:     object generation
+ * @eld_ld:
+ * @eld_ref:     user ref count from alloc/get/put
+ * @eld_rwlock:  implements pmd_obj_*lock() for this layout
+ * @dle_mlpriv:  mlog private data
  *
  * LOCKING:
  * + objid: constant; no locking required
@@ -132,17 +140,6 @@ union pmd_layout_priv {
  *   compactlock for object's mdc; to read hold pmd_obj_*lock()
  *   See the comments associated with struct pmd_mdc_info for
  *   further details.
- *
- * @eld_nodemdc: rbtree node for uncommitted and committed objects
- * @eld_objid:   object ID associated with layout
- * @eld_mblen:   Amount of data written in the mblock in bytes (0 for mlogs)
- * @eld_state:   enum pmd_layout_state
- * @eld_flags:   enum mlog_open_flags for mlogs
- * @eld_gen:     object generation
- * @eld_ld:
- * @eld_ref:     user ref count from alloc/get/put
- * @eld_rwlock:  implements pmd_obj_*lock() for this layout
- * @dle_mlpriv:  mlog private data
  *
  * eld_priv[] contains exactly one element if the object type
  * is and mlog, otherwise it contains exactly zero element.
@@ -298,14 +295,12 @@ int pmd_obj_abort(struct mpool_descriptor *mp, struct pmd_layout *layout);
 int pmd_obj_delete(struct mpool_descriptor *mp, struct pmd_layout *layout);
 
 /**
- * pmd_obj_erase() -
+ * pmd_obj_erase() - Log erase for object and set state flag and generation number
  * @mp:
  * @layout:
  * @gen:
  *
- * Log erase for object and set state flag and generation number
- * in layout accordingly; object must be in committed state; caller MUST hold
- * pmd_obj_wrlock() on layout.
+ * Object must be in committed state; caller MUST hold pmd_obj_wrlock() on layout.
  *
  * Return: %0 if successful, -errno otherwise
  */
@@ -367,7 +362,7 @@ void pmd_update_credit(struct mpool_descriptor *mp);
  */
 void pmd_mpool_usage(struct mpool_descriptor *mp, struct mpool_usage *usage);
 
-/*
+/**
  * pmd_precompact_alsz() - Inform MDC1/255 pre-compacting about the active
  *	mlog of an mpool MDCi 0<i<=255.
  *	The size and how much is used are passed in.
@@ -421,21 +416,16 @@ void pmd_update_obj_stats(struct mpool_descriptor *mp, struct pmd_layout *layout
 			  struct pmd_mdc_info *cinfo, enum pmd_obj_op op);
 
 void pmd_obj_rdlock(struct pmd_layout *layout);
-
 void pmd_obj_rdunlock(struct pmd_layout *layout);
 
 void pmd_obj_wrlock(struct pmd_layout *layout);
-
 void pmd_obj_wrunlock(struct pmd_layout *layout);
 
 void pmd_co_rlock(struct pmd_mdc_info *cinfo, u8 slot);
-
 void pmd_co_runlock(struct pmd_mdc_info *cinfo);
 
 struct pmd_layout *pmd_co_find(struct pmd_mdc_info *cinfo, u64 objid);
-
 struct pmd_layout *pmd_co_insert(struct pmd_mdc_info *cinfo, struct pmd_layout *layout);
-
 struct pmd_layout *pmd_co_remove(struct pmd_mdc_info *cinfo, struct pmd_layout *layout);
 
 int pmd_smap_insert(struct mpool_descriptor *mp, struct pmd_layout *layout);

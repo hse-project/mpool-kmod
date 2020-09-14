@@ -63,9 +63,7 @@ struct mpool_config;
  */
 
 /**
- * struct pre_compact_ctrs - objects records counters, used for
- *	pre compaction of MDC1/255.
- *	One such structure per mpool MDC.
+ * struct pre_compact_ctrs - objects records counters, used for pre compaction of MDC1/255.
  * @pcc_cr:   count of object create records
  * @pcc_up:   count of object update records
  * @pcc_del:  count of object delete records. If the object is shceduled for
@@ -75,6 +73,8 @@ struct mpool_config;
  * @pcc_cobj: count of committed objects (and not deleted).
  * @pcc_cap: In bytes, size of each mlog of the MDC
  * @pcc_len: In bytes, how much is filled the active mlog.
+ *
+ * One such structure per mpool MDC.
  *
  * Locking:
  *	Updates are serialized by the MDC compact lock.
@@ -206,7 +206,6 @@ struct pmd_mdc_info {
 
 /**
  * struct pmd_mdc_selector - Object containing MDC slots for allocation
- *
  * @mds_tbl_idx:      idx of the MDC slot selector in the mds_tbl
  * @mds_tbl:          slot table used for MDC selection
  * @mds_mdc:          scratch pad for sorting mdc by free size
@@ -223,8 +222,7 @@ struct pmd_mdc_selector {
 
 /**
  * struct pmd_mda_info - Metadata container array (mda).
- * @mdi_slotvlock:   it is assumed that this spinlock is NOT taken from
- *	interrupt context
+ * @mdi_slotvlock:   it is assumed that this spinlock is NOT taken from interrupt context
  * @mdi_slotvcnt:    number of active slotv entries
  * @mdi_slotv:       per mdc info
  * @mdi_sel:         MDC allocation selector
@@ -346,12 +344,6 @@ int pmd_prop_mcconfig(struct mpool_descriptor *mp, struct mpool_dev_info *pd, bo
 int pmd_prop_mcspare(struct mpool_descriptor *mp, enum mp_media_classp mclassp,
 		     u8 spzone, bool compacting);
 
-/**
- * pmd_prop_mpconfig() -
- * @mp:
- * @cfg:
- * @compacting:
- */
 int pmd_prop_mpconfig(struct mpool_descriptor *mp, const struct mpool_config *cfg, bool compacting);
 
 /**

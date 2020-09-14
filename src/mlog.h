@@ -19,9 +19,8 @@ struct mpool_descriptor;
 struct mlog_descriptor;
 
 
-/*
+/**
  * struct mlog_read_iter -
- *
  * @lri_layout: Layout of log being read
  * @lri_soff:   Sector offset of next log block to read from
  * @lri_gen:    Log generation number at iterator initialization
@@ -62,9 +61,7 @@ struct mlog_fsetparms {
 };
 
 /**
- * struct mlog_stat - mlog open status (referenced by associated
- * struct pmd_layout)
- *
+ * struct mlog_stat - mlog open status (referenced by associated struct pmd_layout)
  * @lst_citr:    Current mlog read iterator
  * @lst_mfp:     Mlog flush set parameters
  * @lst_abuf:    Append buffer, max 1 MiB size
@@ -150,15 +147,14 @@ int mlog_abort(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 int mlog_delete(struct mpool_descriptor *mp, struct mlog_descriptor *mlh);
 
 /**
- * mlog_open() -
- *
- * Open committed log, validate contents, and return its generation number;
- * if log is already open just returns gen; if csem is true enforces compaction
- * semantics so that open fails if valid cstart/cend markers are not present.
+ * mlog_open() - Open committed log, validate contents, and return its generation number
  * @mp:
  * @mlh:
  * @flags:
  * @gen: output
+ *
+ * If log is already open just returns gen; if csem is true enforces compaction
+ * semantics so that open fails if valid cstart/cend markers are not present.
  *
  * Returns: 0 if successful, -errno otherwise
  */

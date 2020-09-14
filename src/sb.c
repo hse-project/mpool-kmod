@@ -38,10 +38,10 @@ static struct omf_sb_descriptor SBCLEAR;
  */
 
 /**
- * sb_prop_valid() - Validate the PD properties needed to read the erase
- *	superblocks.
- *	When the superblocks are read, the zone parameters may not been known
- *	yet. They may be obtained from the superblocks.
+ * sb_prop_valid() - Validate the PD properties needed to read the erase superblocks.
+ *
+ * When the superblocks are read, the zone parameters may not been known
+ * yet. They may be obtained from the superblocks.
  *
  * Returns: true if we have enough to read the superblocks.
  */

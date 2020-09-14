@@ -43,9 +43,8 @@ struct smap_zone {
 	u64             smz_value;
 };
 
-/*
+/**
  * enum smap_space_type - space allocation policy flag
- *
  * @SMAP_SPC_UNDEF:
  * @SMAP_SPC_USABLE_ONLY:    allocate from usable space only
  * @SMAP_SPC_USABLE_2_SPARE: allocate from usable space first then spare
@@ -75,9 +74,8 @@ static inline int saptype_valid(enum smap_space_type saptype)
  * + all other fields: protected by dalock
  */
 
-/*
+/**
  * struct smap_dev_alloc -
- *
  * @sda_dalock:
  * @sda_rgnsz:    number of zones per rgn, excepting last
  * @sda_rgnladdr: address of first zone in last rgn
@@ -127,8 +125,7 @@ struct smap_dev_znstats {
 };
 
 /**
- * smap_usage_work - delayed work struct for checking mpool free usable
- *                   space usage
+ * smap_usage_work - delayed work struct for checking mpool free usable space usage
  * @smapu_wstruct:
  * @smapu_mp:
  * @smapu_freepct: free space %
@@ -320,15 +317,13 @@ int smap_free(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u16 zonecnt);
 void smap_mclass_usage(struct mpool_descriptor *mp, u8 mclass, struct mpool_usage *usage);
 
 /**
- * smap_log_mpool_usage() - check drive mpool free usable space %, and log
- *                    a message if needed
+ * smap_log_mpool_usage() - check drive mpool free usable space %, and log a message if needed
  * @ws:
  */
 void smap_log_mpool_usage(struct work_struct *ws);
 
 /**
- * smap_wait_usage_done() - wait for periodical job for logging
- *                          pd free usable space % to complete
+ * smap_wait_usage_done() - wait for periodical job for logging pd free usable space % to complete
  * @mp:
  */
 void smap_wait_usage_done(struct mpool_descriptor *mp);

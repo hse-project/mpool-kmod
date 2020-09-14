@@ -141,7 +141,7 @@ int mpool_dev_sbwrite(struct mpool_descriptor *mp, struct mpool_dev_info *pd,
 }
 
 /**
- * mpool_mdc0_alloc() -
+ * mpool_mdc0_alloc() - Allocate space for the two MDC0 mlogs
  * @mp:
  * @sb:
  *
@@ -438,7 +438,7 @@ int mpool_desc_pdmc_add(struct mpool_descriptor *mp, u16 pdh,
 }
 
 /**
- * mpool_desc_init_newpool() -
+ * mpool_desc_init_newpool() - Create the media classes and add all the mpool PDs
  * @mp:
  * @flags: enum mp_mgmt_flags
  *

@@ -26,16 +26,15 @@
 
 /**
  * struct mdcver_info - mpool MDC content version and its information.
- *
- * Such a structure instance is added each time the mpool MDCs content
- * semantic/format changes (making it incompatible with earlier binary
- * versions).
- *
  * @mi_mdcver:  version of a mpool MDC content. It is the version of the
  *              first binary that introduced that content semantic/format.
  * @mi_types:   types used by this release (when writing MDC0-N content)
  * @mi_ntypes:  no. of types are used by this release.
  * @mi_comment: comment about that version
+ *
+ * Such a structure instance is added each time the mpool MDCs content
+ * semantic/format changes (making it incompatible with earlier binary
+ * versions).
  */
 struct mdcver_info {
 	struct omf_mdcver   mi_mdcver;

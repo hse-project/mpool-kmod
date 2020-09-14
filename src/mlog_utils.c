@@ -123,7 +123,6 @@ struct pmd_layout_mlpriv *oml_layout_remove(struct mpool_descriptor *mp, u64 key
 
 /**
  * mlog_free_abuf() - Free log pages in the append buffer, range:[start, end].
- *
  * @lstat: mlog_stat
  * @start: start log page index, inclusive
  * @end:   end log page index, inclusive
@@ -142,7 +141,6 @@ void mlog_free_abuf(struct mlog_stat *lstat, int start, int end)
 
 /**
  * mlog_free_rbuf() - Free log pages in the read buffer, range:[start, end].
- *
  * @lstat: mlog_stat
  * @start: start log page index, inclusive
  * @end:   end log page index, inclusive
@@ -160,9 +158,7 @@ void mlog_free_rbuf(struct mlog_stat *lstat, int start, int end)
 }
 
 /**
- * mlog_init_fsetparms() - Initialize frequently used mlog & flush set
- * parameters.
- *
+ * mlog_init_fsetparms() - Initialize frequently used mlog & flush set parameters.
  * @mp:     mpool descriptor
  * @layout: layout descriptor
  * @mfp:    fset parameters (output)
@@ -195,7 +191,6 @@ static void mlog_init_fsetparms(struct mpool_descriptor *mp, struct mlog_descrip
 
 /**
  * mlog_extract_fsetparms() - Helper to extract flush set parameters.
- *
  * @lstat:   mlog stat
  * @sectsz:  sector size
  * @totsec:  total number of sectors in the mlog
@@ -216,9 +211,7 @@ mlog_extract_fsetparms(struct mlog_stat *lstat, u16 *sectsz, u32 *totsec, u16 *n
 }
 
 /**
- * mlog_stat_free()
- *
- * Deallocate log stat struct for mlog layout (if any).
+ * mlog_stat_free() - Deallocate log stat struct for mlog layout (if any)
  */
 void mlog_stat_free(struct pmd_layout *layout)
 {
@@ -982,7 +975,7 @@ int mlog_logblocks_flush(struct mpool_descriptor *mp, struct pmd_layout *layout,
 }
 
 /**
- * mlog_append_dmax()
+ * mlog_append_dmax() -
  *
  * Max data record that can be appended to log in bytes; -1 if no room
  * for a 0 byte data record due to record descriptor length.
@@ -1019,10 +1012,7 @@ s64 mlog_append_dmax(struct pmd_layout *layout)
 }
 
 /**
- * mlog_update_append_idx() -
- *
- * Check whether the active log block is full and update the append offsets
- * accordingly.
+ * mlog_update_append_idx() - Check if active log block is full and update the append offsets
  *
  * Returns: 0 on success; -errno otherwise
  */

@@ -917,7 +917,7 @@ int mlog_erase(struct mpool_descriptor *mp, struct mlog_descriptor *mlh, u64 min
  *
  * Returns: 0 on success; -errno otherwise
  * One of the possible errno values:
- * EFBIG - if no room in log
+ * -EFBIG - if no room in log
  */
 static int mlog_append_marker(struct mpool_descriptor *mp, struct pmd_layout *layout,
 			      enum logrec_type_omf mtype)
@@ -982,7 +982,7 @@ static int mlog_append_marker(struct mpool_descriptor *mp, struct pmd_layout *la
  *
  * Returns: 0 on success; -errno otherwise
  * One of the possible errno values:
- * EFBIG - if no room in log
+ * -EFBIG - if no room in log
  */
 int mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
@@ -1035,7 +1035,7 @@ int mlog_append_cstart(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
  *
  * Returns: 0 on success; -errno otherwise
  * One of the possible errno values:
- * EFBIG - if no room in log
+ * -EFBIG - if no room in log
  */
 int mlog_append_cend(struct mpool_descriptor *mp, struct mlog_descriptor *mlh)
 {
@@ -1133,7 +1133,7 @@ static void memcpy_from_iov(struct kvec *iov, char *buf, size_t buflen, int *nex
  *
  * Returns: 0 on success; -errno otherwise
  * One of the possible errno values:
- * EFBIG - if no room in log
+ * -EFBIG - if no room in log
  */
 static int mlog_append_data_internal(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
 				     struct kvec *iov, u64 buflen, int sync, bool skip_ser)
@@ -1243,9 +1243,6 @@ static int mlog_append_data_internal(struct mpool_descriptor *mp, struct mlog_de
 	return rc;
 }
 
-/**
- * mlog_append_datav() -
- */
 static int mlog_append_datav(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
 			     struct kvec *iov, u64 buflen, int sync)
 {
@@ -1312,9 +1309,6 @@ static int mlog_append_datav(struct mpool_descriptor *mp, struct mlog_descriptor
 	return rc;
 }
 
-/**
- * mlog_append_data() -
- */
 int mlog_append_data(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
 		     char *buf, u64 buflen, int sync)
 {

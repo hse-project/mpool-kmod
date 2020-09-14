@@ -74,9 +74,6 @@ static int smap_zone_insert(struct rb_root *root, struct smap_zone *item)
 	return true;
 }
 
-/**
- * See smap.h.
- */
 int smap_mpool_init(struct mpool_descriptor *mp)
 {
 	struct mpool_dev_info *pd = NULL;
@@ -108,9 +105,6 @@ int smap_mpool_init(struct mpool_descriptor *mp)
 	return rc;
 }
 
-/**
- * See smap.h.
- */
 void smap_mpool_free(struct mpool_descriptor *mp)
 {
 	u64 pdh = 0;
@@ -119,9 +113,6 @@ void smap_mpool_free(struct mpool_descriptor *mp)
 		smap_drive_free(mp, pdh);
 }
 
-/**
- * See smap.h.
- */
 void smap_mpool_usage(struct mpool_descriptor *mp, u8 mclass, struct mpool_usage *usage)
 {
 	if (mclass == MP_MED_ALL) {
@@ -190,9 +181,6 @@ static void smap_calc_znstats(struct mpool_dev_info *pd, struct smap_dev_znstats
 	zones->sdv_used = pd->pdi_ds.sda_uact;
 }
 
-/**
- * See smap.h.
- */
 int smap_drive_usage(struct mpool_descriptor *mp, u16 pdh, struct mpool_devprops *dprop)
 {
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
@@ -216,9 +204,6 @@ int smap_drive_usage(struct mpool_descriptor *mp, u16 pdh, struct mpool_devprops
 	return 0;
 }
 
-/**
- * See smap.h.
- */
 int smap_drive_init(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16 pdh)
 {
 	struct mpool_dev_info *pd __maybe_unused;
@@ -248,9 +233,6 @@ int smap_drive_init(struct mpool_descriptor *mp, struct mc_smap_parms *mcsp, u16
 	return rc;
 }
 
-/**
- * See smap.h.
- */
 void smap_drive_free(struct mpool_descriptor *mp, u16 pdh)
 {
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
@@ -352,9 +334,6 @@ static bool smap_alloccheck(struct mpool_dev_info *pd, u64 zonecnt, enum smap_sp
 	return alloced;
 }
 
-/**
- * See smap.h.
- */
 int smap_alloc(struct mpool_descriptor *mp, u16 pdh, u64 zonecnt,
 	       enum smap_space_type sapolicy, u64 *zoneaddr, u64 align)
 {
@@ -483,9 +462,6 @@ int smap_alloc(struct mpool_descriptor *mp, u16 pdh, u64 zonecnt,
 	return 0;
 }
 
-/**
- * See smap.h.
- */
 /*
  * smap internal functions
  */
@@ -739,9 +715,6 @@ errout:
 	return rc;
 }
 
-/**
- * See smap.h.
- */
 int smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonecnt)
 {
 	struct mpool_dev_info *pd = &mp->pds_pdv[pdh];
@@ -792,7 +765,6 @@ int smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonecnt)
 
 	return rc;
 }
-
 
 /**
  * smap_free_byrgn() - free the specified range of zones

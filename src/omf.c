@@ -116,8 +116,7 @@ static struct upgrade_history mdcrec_data_ocreate_table[]
  */
 
 /**
- * omf_find_upgrade_hist() -
- *
+ * omf_find_upgrade_hist() - Find the upgrade history entry for the given sb or mdc version
  * @uhtab:
  * @tabsz:   NELEM of upgrade_table
  * @sbver:   superblock version
@@ -192,8 +191,7 @@ omf_find_upgrade_hist(struct upgrade_history *uhtab, size_t tabsz,
 }
 
 /**
- * omf_upgrade_convert_only()-
- *
+ * omf_upgrade_convert_only() - Convert sb/mdc from v1 to v2 (v1 <= v2)
  * @out:   v2 in-memory metadata structure
  * @in:    v1 in-memory metadata structure
  * @uhtab: upgrade history table for this structure
@@ -294,10 +292,7 @@ static int omf_upgrade_unpack_only(void *out, const char *inbuf, struct upgrade_
 }
 
 /**
- * omf_unpack_letoh_and_convert() -
- *
- * Unpack OMF meta data and convert it to the latest version.
- *
+ * omf_unpack_letoh_and_convert() - Unpack OMF meta data and convert it to the latest version.
  * @out:    in-memory structure
  * @outsz:  size of in-memory structure
  * @inbuf:  OMF structure
@@ -514,11 +509,11 @@ static int omf_pmd_layout_pack_htole(const struct mpool_descriptor *mp, u8 rtype
 }
 
 /**
- * omf_pmd_layout_unpack_letoh_v1() - Unpack little-endian mdc obj record and
- *	optional obj layout from inbuf.
- * For version 1 of OMF_MDR_OCREATE record (strut layout_descriptor_omf)
+ * omf_pmd_layout_unpack_letoh_v1() - Unpack little-endian mdc obj record and optional obj layout
  * @out:
  * @inbuf:
+ *
+ * For version 1 of OMF_MDR_OCREATE record (struct layout_descriptor_omf)
  *
  * Return:
  *   0 if successful
@@ -556,7 +551,7 @@ static int omf_pmd_layout_unpack_letoh_v1(void *out, const char *inbuf)
 
 
 /**
- * omf_pmd_layout_unpack_letoh() - Unpack little-endian mdc obj record and optional obj layout from inbuf.
+ * omf_pmd_layout_unpack_letoh() - Unpack little-endian mdc obj record and optional obj layout
  * @mp:
  * @mdcver: version of the mpool MDC content being unpacked.
  * @cdr: output
@@ -626,16 +621,15 @@ static int omf_pmd_layout_unpack_letoh(struct mpool_descriptor *mp, struct omf_m
  * sb_descriptor
  */
 
-/*
- * omf_cksum_crc32c_le() -
- *
- * Compute 4-byte checksum of type CRC32C for data buffer dbuf with length dlen
- * and store in obuf little-endian; CRC32C is the only crypto algorithm we
- * currently support
- *
+/**
+ * omf_cksum_crc32c_le() - compute checksum
  * @dbuf: data buf
  * @dlen: data length
  * @obuf: output buf
+ *
+ * Compute 4-byte checksum of type CRC32C for data buffer dbuf with length dlen
+ * and store in obuf little-endian; CRC32C is the only crypto algorithm we
+ * currently support.
  *
  * Return: 0 if successful, -EINVAL otherwise...
  */
@@ -890,8 +884,7 @@ static u64 omf_mdcrec_objcmn_pack_htole(struct mpool_descriptor *mp,
 }
 
 /**
- * omf_mdcrec_objcmn_unpack_letoh() - Unpack little-endian mdc object-related
- *	record and optional obj layout from inbuf.
+ * omf_mdcrec_objcmn_unpack_letoh() - Unpack little-endian mdc record and optional obj layout
  * @mp:
  * @mdcver:
  * @cdr:

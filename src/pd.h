@@ -49,8 +49,7 @@ struct pd_dev_parm {
  * @PD_STAT_ONLINE:      drive is responding to I/O requests
  * @PD_STAT_SUSPECT:     drive is failing some I/O requests
  * @PD_STAT_OFFLINE:     drive declared non-responsive to I/O requests
- * @PD_STAT_UNAVAIL:     drive path not provided or open failed when
- *                        mpool was opened
+ * @PD_STAT_UNAVAIL:     drive path not provided or open failed when mpool was opened
  *
  * Transient drive status, these are stored as atomic_t variable
  * values
@@ -68,8 +67,7 @@ _Static_assert((PD_STAT_UNAVAIL < 256), "enum pd_status must fit in uint8_t");
 /**
  * enum pd_cmd_opt - drive command options
  * @PD_CMD_DISCARD:	     the device has TRIM/UNMAP command.
- * @PD_CMD_SECTOR_UPDATABLE: the device can be read/written with sector
- *	granularity.
+ * @PD_CMD_SECTOR_UPDATABLE: the device can be read/written with sector granularity.
  * @PD_CMD_DIF_ENABLED:      T10 DIF is used on this device.
  * @PD_CMD_SED_ENABLED:      Self encrypting enabled
  * @PD_CMD_DISCARD_ZERO:     the device supports discard_zero
@@ -91,14 +89,12 @@ enum pd_cmd_opt {
 };
 
 /**
- * Device types.
+ * enum pd_devtype - Device types
  * @PD_DEV_TYPE_BLOCK_STREAM: Block device implementing streams.
  * @PD_DEV_TYPE_BLOCK_STD:    Standard (non-streams) device (SSD, HDD).
  * @PD_DEV_TYPE_FILE:	      File in user space for UT.
- * @PD_DEV_TYPE_MEM:	      Memory semantic device. Such as NVDIMM
- *			      direct access (raw or dax mode).
- * @PD_DEV_TYPE_ZONE:	      zone-like device, such as open channel SSD
- *			      and SMR HDD (using ZBC/ZAC).
+ * @PD_DEV_TYPE_MEM:	      Memory semantic device, e.g. NVDIMM direct access (raw or dax mode)
+ * @PD_DEV_TYPE_ZONE:	      zone-like device, e.g., open channel SSD and SMR HDD (using ZBC/ZAC)
  * @PD_DEV_TYPE_BLOCK_NVDIMM: Standard (non-streams) NVDIMM in sector mode.
  */
 enum pd_devtype {
@@ -114,7 +110,7 @@ enum pd_devtype {
 _Static_assert((PD_DEV_TYPE_LAST < 256), "enum pd_devtype must fit in uint8_t");
 
 /**
- * Device states.
+ * enum pd_state - Device states
  * @PD_DEV_STATE_AVAIL:       Device is available
  * @PD_DEV_STATE_UNAVAIL:     Device is unavailable
  */
@@ -139,25 +135,8 @@ _Static_assert((PD_DEV_STATE_LAST < 256), "enum pd_state must fit in uint8_t");
  * -EIO       all other errors
  */
 
-/**
- * pd_dev_open() -
- * @path:
- * @dparm:
- *
- * Return:
- */
 int pd_dev_open(const char *path, struct pd_dev_parm *dparm, struct pd_prop *pd_prop);
-
-/**
- * pd_dev_close() -
- * @pd:
- */
 int pd_dev_close(struct pd_dev_parm *dparm);
-
-/**
- * pd_dev_flush() -
- * @pd:
- */
 int pd_dev_flush(struct pd_dev_parm *dparm);
 
 /**
@@ -215,13 +194,6 @@ int pd_zone_pwritev_sync(struct pd_dev_parm *dparm, const struct kvec *iov,
 int pd_zone_preadv(struct pd_dev_parm *dparm, const struct kvec *iov,
 		   int iovcnt, u64 zaddr, loff_t boff);
 
-/**
- * pd_dev_set_unavail() -
- * @dparm:
- * @omf_devparm:
- *
- * Return:
- */
 void pd_dev_set_unavail(struct pd_dev_parm *dparm, struct omf_devparm_descriptor *omf_devparm);
 
 int pd_init(void) __cold;

@@ -66,10 +66,6 @@ void mpc_reap_xvm_touch(struct mpc_xvm *xvm, int index);
  */
 bool mpc_reap_xvm_duress(struct mpc_xvm *xvm);
 
-/**
- * mpc_reap_params_add() -
- * @dattr:
- */
 void mpc_reap_params_add(struct device_attribute *dattr);
 
 #endif /* MPOOL_REAPER_H */

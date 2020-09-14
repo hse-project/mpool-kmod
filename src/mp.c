@@ -23,7 +23,7 @@
 #include "mp.h"
 
 /*
- * lock for serializing certain mpool ops where required/desirable; could be per
+ * Lock for serializing certain mpool ops where required/desirable; could be per
  * mpool in some cases but no meaningful performance benefit for these rare ops;
  * also protects mpool_pools and certain mpool_descriptor fields.
  */

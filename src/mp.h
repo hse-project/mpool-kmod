@@ -129,20 +129,18 @@ int mpool_deactivate(struct mpool_descriptor *mp);
 int mpool_destroy(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags);
 
 /**
- * mpool_rename() - Rename an mpool
+ * mpool_rename() - Rename mpool to mp_newname
  * @dcnt:
  * @dpaths:
  * @pd_prop: PD properties.
  * @flags:
  * @mp_newname:
  *
- * Rename mpool to mp_newname.
- *
  * Return:
  * %0 if successful, -errno otherwise
  */
-int
-mpool_rename(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags, const char *mp_newname);
+int mpool_rename(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags,
+		 const char *mp_newname);
 
 /**
  * mpool_drive_add() - Add new drive dpath to mpool.
@@ -155,33 +153,27 @@ mpool_rename(u64 dcnt, char **dpaths, struct pd_prop *pd_prop, u32 flags, const 
 int mpool_drive_add(struct mpool_descriptor *mp, char *dpath, struct pd_prop *pd_prop);
 
 /**
- * mpool_drive_spares() -
+ * mpool_drive_spares() - Set percent spare zones to spzone for drives in media class mclassp.
  * @mp:
  * @mclassp:
  * @spzone:
- *
- * Set percent spare zones to spzone for drives in media class mclassp.
  *
  * Return: 0 if successful, -errno otherwise...
  */
 int mpool_drive_spares(struct mpool_descriptor *mp, enum mp_media_classp mclassp, u8 spzone);
 
 /**
- * mpool_mclass_get_cnt() -
+ * mpool_mclass_get_cnt() - Get a count of media classes with drives in this mpool
  * @mp:
  * @info:
- *
- * Get a count of media classes with drives in this mpool
  */
 void mpool_mclass_get_cnt(struct mpool_descriptor *mp, u32 *cnt);
 
 /**
- * mpool_mclass_get() -
+ * mpool_mclass_get() - Get a information on mcl_cnt media classes
  * @mp:
  * @mcic:
  * @mciv:
- *
- * Get a information on mcl_cnt media classes
  *
  * Return: 0 if successful, -errno otherwise...
  */
@@ -195,27 +187,24 @@ int mpool_mclass_get(struct mpool_descriptor *mp, u32 *mcxc, struct mpool_mclass
 void mpool_get_xprops(struct mpool_descriptor *mp, struct mpool_xprops *xprops);
 
 /**
- * mpool_get_devprops_by_name() -
+ * mpool_get_devprops_by_name() - Fill in dprop for active drive with name pdname
  * @mp:
  * @pdname:
  * @dprop:
  *
- * Fill in dprop for active drive with name pdname
- *
  * Return: %0 if success, -errno otherwise...
  * -ENOENT if device with specified name cannot be found
  */
-int
-mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname, struct mpool_devprops *dprop);
+int mpool_get_devprops_by_name(struct mpool_descriptor *mp, char *pdname,
+			       struct mpool_devprops *dprop);
 
 /**
- * mpool_get_usage() -
+ * mpool_get_usage() - Fill in stats with mpool space usage for the media class mclassp
  * @mp:
  * @mclassp:
  * @usage:
  *
- * Fill in stats with mpool space usage for the media class mclassp;
- *	if mclassp is MCLASS_ALL, report on entire pool (all media classes).
+ * If mclassp is MCLASS_ALL, report on entire pool (all media classes).
  *
  * Return: %0 if successful; err_t otherwise...
  */
