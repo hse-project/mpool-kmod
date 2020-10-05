@@ -617,8 +617,8 @@ static u32 smap_addr2rgn(struct mpool_descriptor *mp, struct mpool_dev_info *pd,
  */
 static int smap_insert_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u16 zonecnt)
 {
-	struct smap_zone *elem = NULL;
 	const char *msg __maybe_unused;
+	struct smap_zone *elem = NULL;
 	struct rb_root *rmap;
 	struct rb_node *node;
 	u64 fsoff, fslen;
@@ -781,11 +781,11 @@ int smap_insert(struct mpool_descriptor *mp, u16 pdh, u64 zoneaddr, u32 zonecnt)
  */
 static int smap_free_byrgn(struct mpool_dev_info *pd, u32 rgn, u64 zoneaddr, u32 zonecnt)
 {
+	const char *msg __maybe_unused;
 	struct smap_zone *left, *right;
 	struct smap_zone *new, *old;
 	struct rb_root *rmap;
 	struct rb_node *node;
-	const char *msg __maybe_unused;
 	u32 orig_zonecnt = zonecnt;
 	int rc = 0;
 

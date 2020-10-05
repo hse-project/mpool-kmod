@@ -91,7 +91,7 @@ void mcache_exit(void) __cold;
 
 static inline pgoff_t mpc_xvm_pgoff(struct mpc_xvm *xvm)
 {
-	return ((ulong)xvm->xvm_rgn << mpc_xvm_size_max) >> PAGE_SHIFT;
+	return ((ulong)xvm->xvm_rgn << xvm_size_max) >> PAGE_SHIFT;
 }
 
 static inline size_t mpc_xvm_pglen(struct mpc_xvm *xvm)

@@ -111,8 +111,8 @@ static void mdc_put(struct mlog_descriptor *mlh1, struct mlog_descriptor *mlh2)
 	mlog_put(mlh2);
 }
 
-uint64_t mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags,
-		     struct mp_mdc **mdc_out)
+int mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags,
+		struct mp_mdc **mdc_out)
 {
 	struct mlog_descriptor *mlh[2];
 	struct mlog_props *props = NULL;
@@ -290,7 +290,7 @@ exit:
 	return err;
 }
 
-uint64_t mp_mdc_cstart(struct mp_mdc *mdc)
+int mp_mdc_cstart(struct mp_mdc *mdc)
 {
 	struct mlog_descriptor *tgth = NULL;
 	struct mpool_descriptor *mp;
@@ -329,7 +329,7 @@ uint64_t mp_mdc_cstart(struct mp_mdc *mdc)
 	return 0;
 }
 
-uint64_t mp_mdc_cend(struct mp_mdc *mdc)
+int mp_mdc_cend(struct mp_mdc *mdc)
 {
 	struct mlog_descriptor *srch = NULL;
 	struct mlog_descriptor *tgth = NULL;
@@ -378,7 +378,7 @@ uint64_t mp_mdc_cend(struct mp_mdc *mdc)
 	return rc;
 }
 
-uint64_t mp_mdc_close(struct mp_mdc *mdc)
+int mp_mdc_close(struct mp_mdc *mdc)
 {
 	struct mpool_descriptor *mp;
 	int rval = 0, rc;
@@ -419,7 +419,7 @@ uint64_t mp_mdc_close(struct mp_mdc *mdc)
 	return rval;
 }
 
-uint64_t mp_mdc_rewind(struct mp_mdc *mdc)
+int mp_mdc_rewind(struct mp_mdc *mdc)
 {
 	bool rw = false;
 	int rc;
@@ -441,7 +441,7 @@ uint64_t mp_mdc_rewind(struct mp_mdc *mdc)
 	return rc;
 }
 
-uint64_t mp_mdc_read(struct mp_mdc *mdc, void *data, size_t len, size_t *rdlen)
+int mp_mdc_read(struct mp_mdc *mdc, void *data, size_t len, size_t *rdlen)
 {
 	bool rw = true;
 	int rc;
@@ -463,7 +463,7 @@ uint64_t mp_mdc_read(struct mp_mdc *mdc, void *data, size_t len, size_t *rdlen)
 	return rc;
 }
 
-uint64_t mp_mdc_append(struct mp_mdc *mdc, void *data, ssize_t len, bool sync)
+int mp_mdc_append(struct mp_mdc *mdc, void *data, ssize_t len, bool sync)
 {
 	bool rw = true;
 	int rc;

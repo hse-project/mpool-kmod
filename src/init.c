@@ -18,33 +18,33 @@
 /*
  * Module params...
  */
-unsigned int mpc_xvm_max __read_mostly = 1048576 * 128;
-module_param(mpc_xvm_max, uint, 0444);
-MODULE_PARM_DESC(mpc_xvm_max, " max extended VMA regions");
+unsigned int xvm_max __read_mostly = 1048576 * 128;
+module_param(xvm_max, uint, 0444);
+MODULE_PARM_DESC(xvm_max, " max extended VMA regions");
 
-unsigned int mpc_xvm_size_max __read_mostly = 30;
-module_param(mpc_xvm_size_max, uint, 0444);
-MODULE_PARM_DESC(mpc_xvm_size_max, " max extended VMA size log2");
+unsigned int xvm_size_max __read_mostly = 30;
+module_param(xvm_size_max, uint, 0444);
+MODULE_PARM_DESC(xvm_size_max, " max extended VMA size log2");
 
-unsigned int mpc_maxunits __read_mostly = 1024;
-module_param(mpc_maxunits, uint, 0444);
-MODULE_PARM_DESC(mpc_maxunits, " max mpools");
+unsigned int maxunits __read_mostly = 1024;
+module_param(maxunits, uint, 0444);
+MODULE_PARM_DESC(maxunits, " max mpools");
 
-unsigned int mpc_rwsz_max __read_mostly = 32;
-module_param(mpc_rwsz_max, uint, 0444);
-MODULE_PARM_DESC(mpc_rwsz_max, " max mblock/mlog r/w size (mB)");
+unsigned int rwsz_max_mb __read_mostly = 32;
+module_param(rwsz_max_mb, uint, 0444);
+MODULE_PARM_DESC(rwsz_max_mb, " max mblock/mlog r/w size (mB)");
 
-unsigned int mpc_rwconc_max __read_mostly = 8;
-module_param(mpc_rwconc_max, uint, 0444);
-MODULE_PARM_DESC(mpc_rwconc_max, " max mblock/mlog large r/w concurrency");
+unsigned int rwconc_max __read_mostly = 8;
+module_param(rwconc_max, uint, 0444);
+MODULE_PARM_DESC(rwconc_max, " max mblock/mlog large r/w concurrency");
 
-unsigned int mpc_rsvd_bios_max __read_mostly = 16;
-module_param(mpc_rsvd_bios_max, uint, 0444);
-MODULE_PARM_DESC(mpc_rsvd_bios_max, "max reserved bios in mpool bioset");
+unsigned int rsvd_bios_max __read_mostly = 16;
+module_param(rsvd_bios_max, uint, 0444);
+MODULE_PARM_DESC(rsvd_bios_max, "max reserved bios in mpool bioset");
 
-int mpc_chunker_size __read_mostly = 128;
-module_param(mpc_chunker_size, uint, 0644);
-MODULE_PARM_DESC(mpc_chunker_size, "Chunking size (in KiB) for device I/O");
+int chunk_size_kb __read_mostly = 128;
+module_param(chunk_size_kb, uint, 0644);
+MODULE_PARM_DESC(chunk_size_kb, "Chunk size (in KiB) for device I/O");
 
 static void mpool_exit_impl(void)
 {

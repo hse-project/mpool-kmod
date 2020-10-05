@@ -313,7 +313,6 @@ int pmd_obj_erase(struct mpool_descriptor *mp, struct pmd_layout *layout, u64 ge
  * @which:
  *
  * Get layout for object with specified objid; return NULL either if not found
- * or if there's a dataset id mismatch.
  *
  * Return: pointer to layout if successful, NULL otherwise
  */
@@ -356,7 +355,7 @@ void pmd_obj_wrunlock(struct pmd_layout *layout);
 void pmd_update_credit(struct mpool_descriptor *mp);
 
 /**
- * pmd_mpool_usage() - calculate per-dataset space usage
+ * pmd_mpool_usage() - calculate per-mpool space usage
  * @mp:
  * @usage:
  */

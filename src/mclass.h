@@ -112,7 +112,7 @@ void mc_init_class(struct media_class *mc, struct mc_parms *mc_parms, struct mc_
  * @mc:
  * @spzone:
  *
- * Return: 0, or merr(ENOENT) if the specified mclass doesn't exist.
+ * Return: 0, or -ENOENT if the specified mclass doesn't exist.
  */
 int mc_set_spzone(struct media_class *mc, u8 spzone);
 

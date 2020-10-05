@@ -171,9 +171,6 @@ struct pmd_mdc_stats {
  *    the object's mdc and mdc logging is inherently serial
  *  + see struct pmd_layout comments for specifics on how
  *    compactlock is used to freeze metadata for committed objects
- *  + mmi_bgoplock protects the rec count in every committed object
- *    layout in the mdc; it is rarely used so is not a performance
- *    bottleneck and it saves memory by not having a lock per object
  */
 struct pmd_mdc_info {
 	struct mutex            mmi_compactlock;

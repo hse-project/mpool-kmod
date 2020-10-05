@@ -240,8 +240,8 @@ static struct bio *pd_bio_chain(struct bio *target, int op, unsigned int nr_page
  * pd_bio_rw() expects a list of kvecs wherein each base ptr is sector
  * aligned and each length is multiple of sectors.
  *
- * If the IO is bigger than 1MiB (BIO_MAX_PAGES pages),
- * it is split in several IOs smaller that BIO_MAX_PAGES.
+ * If the IO is bigger than 1MiB (BIO_MAX_PAGES pages) or chunk_size_kb,
+ * it is split in several IOs.
  *
  * NOTE:
  * If the size of an I/O is bigger than "Max data transfer size(MDTS),
@@ -324,8 +324,8 @@ static int pd_bio_rw(struct pd_dev_parm *dparm, const struct kvec *iov,
 	if (tot_len == 0)
 		return 0;
 
-	/* IO size for each bio is determined by the chunker size. */
-	iolimit = (mpc_chunker_size << 10) >> PAGE_SHIFT;
+	/* IO size for each bio is determined by the chunk size. */
+	iolimit = chunk_size_kb >> (PAGE_SHIFT - 10);
 	iolimit = clamp_t(u32, iolimit, 32, BIO_MAX_PAGES);
 
 	/*
@@ -459,18 +459,18 @@ int pd_init(void)
 {
 	int rc = 0;
 
-	mpc_chunker_size = clamp_t(uint, mpc_chunker_size, 128, 1024);
+	chunk_size_kb = clamp_t(uint, chunk_size_kb, 128, 1024);
 
-	mpc_rsvd_bios_max = clamp_t(uint, mpc_rsvd_bios_max, 1, 1024);
+	rsvd_bios_max = clamp_t(uint, rsvd_bios_max, 1, 1024);
 
 #if HAVE_BIOSET_INIT
-	rc = bioset_init(&mpool_bioset, mpc_rsvd_bios_max, 0, BIOSET_NEED_BVECS);
+	rc = bioset_init(&mpool_bioset, rsvd_bios_max, 0, BIOSET_NEED_BVECS);
 #elif HAVE_BIOSET_CREATE_3
-	mpool_bioset = bioset_create(mpc_rsvd_bios_max, 0, BIOSET_NEED_BVECS);
+	mpool_bioset = bioset_create(rsvd_bios_max, 0, BIOSET_NEED_BVECS);
 	if (!mpool_bioset)
 		rc = -ENOMEM;
 #else
-	mpool_bioset = bioset_create(mpc_rsvd_bios_max, 0);
+	mpool_bioset = bioset_create(rsvd_bios_max, 0);
 	if (!mpool_bioset)
 		rc = -ENOMEM;
 #endif

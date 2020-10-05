@@ -1325,7 +1325,7 @@ int mlog_append_data(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
  *
  * Log must be open; skips non-data records (markers).
  *
- * Returns: 0 on success; merr_t otherwise
+ * Returns: 0 on success; -errno otherwise
  */
 int mlog_read_data_init(struct mlog_descriptor *mlh)
 {
@@ -1586,10 +1586,9 @@ static int mlog_read_data_next_impl(struct mpool_descriptor *mp, struct mlog_des
  * Log must be open; skips non-data records (markers).
  *
  * Iterator lri must be re-init if returns any error except ENOMEM
- * in merr_t
  *
  * Returns:
- *   0 on success; merr_t with the following errno values on failure:
+ *   0 on success; The following errno values on failure:
  *   -EOVERFLOW if buflen is insufficient to hold data record; can retry
  *   errno otherwise
  *
@@ -1605,7 +1604,7 @@ int mlog_read_data_next(struct mpool_descriptor *mp, struct mlog_descriptor *mlh
 /**
  * mlog_get_props() - Return basic mlog properties in prop.
  *
- * Returns: 0 if successful; merr_t otherwise
+ * Returns: 0 if successful; -errno otherwise
  */
 static int mlog_get_props(struct mpool_descriptor *mp, struct mlog_descriptor *mlh,
 			  struct mlog_props *prop)
@@ -1625,7 +1624,7 @@ static int mlog_get_props(struct mpool_descriptor *mp, struct mlog_descriptor *m
 /**
  * mlog_get_props_ex() - Return extended mlog properties in prop.
  *
- * Returns: 0 if successful; merr_t otherwise
+ * Returns: 0 if successful; -errno otherwise
  */
 int mlog_get_props_ex(struct mpool_descriptor *mp, struct mlog_descriptor  *mlh,
 		      struct mlog_props_ex *prop)

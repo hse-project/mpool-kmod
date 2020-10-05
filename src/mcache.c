@@ -415,7 +415,7 @@ static int mpc_readpage_impl(struct page *page, struct mpc_xvm *xvm)
 	int rc;
 
 	offset  = page->index << PAGE_SHIFT;
-	offset %= (1ul << mpc_xvm_size_max);
+	offset %= (1ul << xvm_size_max);
 
 	mbnum = offset / xvm->xvm_bktsz;
 	if (mbnum >= xvm->xvm_mbinfoc) {
@@ -562,7 +562,7 @@ static int mpc_readpages(struct file *file, struct address_space *mapping,
 	work   = NULL;
 	w      = NULL;
 
-	key = offset >> mpc_xvm_size_max;
+	key = offset >> xvm_size_max;
 
 	/*
 	 * The idr value here (xvm) is pinned for the lifetime of the address map.
@@ -577,7 +577,7 @@ static int mpc_readpages(struct file *file, struct address_space *mapping,
 	if (!xvm)
 		return 0;
 
-	offset %= (1ul << mpc_xvm_size_max);
+	offset %= (1ul << xvm_size_max);
 
 	mbnum = offset / xvm->xvm_bktsz;
 	if (mbnum >= xvm->xvm_mbinfoc)
@@ -599,7 +599,7 @@ static int mpc_readpages(struct file *file, struct address_space *mapping,
 	for (i = 0; i < nr_pages; ++i) {
 		page    = lru_to_page(pages);
 		offset  = page->index << PAGE_SHIFT;
-		offset %= (1ul << mpc_xvm_size_max);
+		offset %= (1ul << xvm_size_max);
 
 		/* Don't read past the end of the mblock. */
 		if (offset >= mbend)
@@ -740,11 +740,11 @@ int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 	len = vma->vm_end - vma->vm_start - 1;
 
 	/* Verify that the request does not cross an xvm region boundary. */
-	if ((off >> mpc_xvm_size_max) != ((off + len) >> mpc_xvm_size_max))
+	if ((off >> xvm_size_max) != ((off + len) >> xvm_size_max))
 		return -EINVAL;
 
 	/* Acquire a reference on the region map for this region. */
-	key = off >> mpc_xvm_size_max;
+	key = off >> xvm_size_max;
 
 	xvm = mpc_xvm_lookup(&unit->un_rgnmap, key);
 	if (!xvm)
@@ -873,7 +873,7 @@ int mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, struct 
 
 	xvm->xvm_bktsz = roundup_pow_of_two(largest);
 
-	if (xvm->xvm_bktsz * mbidc > (1ul << mpc_xvm_size_max)) {
+	if (xvm->xvm_bktsz * mbidc > (1ul << xvm_size_max)) {
 		rc = -E2BIG;
 		goto errout;
 	}
@@ -889,10 +889,10 @@ int mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, struct 
 		goto errout;
 	}
 
-	ioc->im_offset = (ulong)xvm->xvm_rgn << mpc_xvm_size_max;
+	ioc->im_offset = (ulong)xvm->xvm_rgn << xvm_size_max;
 	ioc->im_bktsz = xvm->xvm_bktsz;
 	ioc->im_len = xvm->xvm_bktsz * mbidc;
-	ioc->im_len = ALIGN(ioc->im_len, (1ul << mpc_xvm_size_max));
+	ioc->im_len = ALIGN(ioc->im_len, (1ul << xvm_size_max));
 
 	atomic_inc(&rm->rm_rgncnt);
 
@@ -925,7 +925,7 @@ int mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	if (!unit || !ioc)
 		return -EINVAL;
 
-	rgn = ioc->im_offset >> mpc_xvm_size_max;
+	rgn = ioc->im_offset >> xvm_size_max;
 	rm = &unit->un_rgnmap;
 
 	mutex_lock(&rm->rm_lock);
@@ -950,7 +950,7 @@ int mpioc_xvm_purge(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	if (!unit || !ioc)
 		return -EINVAL;
 
-	rgn = ioc->im_offset >> mpc_xvm_size_max;
+	rgn = ioc->im_offset >> xvm_size_max;
 
 	xvm = mpc_xvm_lookup(&unit->un_rgnmap, rgn);
 	if (!xvm)
@@ -971,7 +971,7 @@ int mpioc_xvm_vrss(struct mpc_unit *unit, struct mpioc_vma *ioc)
 	if (!unit || !ioc)
 		return -EINVAL;
 
-	rgn = ioc->im_offset >> mpc_xvm_size_max;
+	rgn = ioc->im_offset >> xvm_size_max;
 
 	xvm = mpc_xvm_lookup(&unit->un_rgnmap, rgn);
 	if (!xvm)
@@ -990,8 +990,8 @@ int mcache_init(void)
 	size_t sz;
 	int rc, i;
 
-	mpc_xvm_max = clamp_t(uint, mpc_xvm_max, 1024, 1u << 30);
-	mpc_xvm_size_max = clamp_t(ulong, mpc_xvm_size_max, 27, 32);
+	xvm_max = clamp_t(uint, xvm_max, 1024, 1u << 30);
+	xvm_size_max = clamp_t(ulong, xvm_size_max, 27, 32);
 
 	sz = sizeof(struct mpc_mbinfo) * 8;
 	mpc_xvm_cachesz[0] = sizeof(struct mpc_xvm) + sz;

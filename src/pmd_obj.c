@@ -1382,10 +1382,8 @@ void pmd_update_credit(struct mpool_descriptor *mp)
 	}
 
 	slotnum = kcalloc(MDC_SLOTS, sizeof(*slotnum), GFP_KERNEL);
-	if (!slotnum) {
-		mp_pr_err("slotnum array alloc failed", -ENOMEM);
+	if (!slotnum)
 		return;
-	}
 
 	nmtoc = atomic_read(&mp->pds_pco.pco_nmtoc);
 	nmtoc = nmtoc % (mp->pds_mda.mdi_slotvcnt - 1) + 1;

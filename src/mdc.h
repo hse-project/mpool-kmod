@@ -16,8 +16,7 @@ struct mlog_descriptor;
 
 /**
  * struct mp_mdc - MDC handle
- * @mdc_ds:     dataset handle (user client) or mpool desc (kernel client)
- * @mdc_ctxt:   mdc context
+ * @mdc_mp:     mpool handle
  * @mdc_logh1:  mlog 1 handle
  * @mdc_logh2:  mlog 2 handle
  * @mdc_alogh:  active mlog handle
@@ -26,12 +25,6 @@ struct mlog_descriptor;
  * @mdc_valid:  is the handle valid?
  * @mdc_magic:  MDC handle magic
  * @mdc_flags:	MDC flags
- *
- * Ordering:
- *     mdc handle lock (mdc_lock)
- *     mlog handle lock (ml_lock)
- *     dataset handle lock (ds_lock)
- *     mpool core locks
  */
 struct mp_mdc {
 	struct mpool_descriptor    *mdc_mp;
@@ -49,26 +42,26 @@ struct mp_mdc {
 
 /**
  * mp_mdc_open() - Open MDC by OIDs
- * @ds:       dataset handle
+ * @mp:       mpool handle
  * @logid1:   Mlog ID 1
  * @logid2:   Mlog ID 2
  * @flags:    MDC Open flags (enum mdc_open_flags)
  * @mdc_out:  MDC handle
  */
-uint64_t
+int
 mp_mdc_open(struct mpool_descriptor *mp, u64 logid1, u64 logid2, u8 flags, struct mp_mdc **mdc_out);
 
 /**
  * mp_mdc_close() - Close MDC
  * @mdc:      MDC handle
  */
-uint64_t mp_mdc_close(struct mp_mdc *mdc);
+int mp_mdc_close(struct mp_mdc *mdc);
 
 /**
  * mp_mdc_rewind() - Rewind MDC to first record
  * @mdc:      MDC handle
  */
-uint64_t mp_mdc_rewind(struct mp_mdc *mdc);
+int mp_mdc_rewind(struct mp_mdc *mdc);
 
 /**
  * mp_mdc_read() - Read next record from MDC
@@ -78,11 +71,11 @@ uint64_t mp_mdc_rewind(struct mp_mdc *mdc);
  * @rdlen:    number of bytes read
  *
  * Return:
- *   If merr_errno() of the return value is EOVERFLOW, then the receive buffer
- *   "data" is too small and must be resized according to the value returned
+ *   If the return value is -EOVERFLOW, then the receive buffer "data"
+ *   is too small and must be resized according to the value returned
  *   in "rdlen".
  */
-uint64_t mp_mdc_read(struct mp_mdc *mdc, void *data, size_t len, size_t *rdlen);
+int mp_mdc_read(struct mp_mdc *mdc, void *data, size_t len, size_t *rdlen);
 
 /**
  * mp_mdc_append() - append record to MDC
@@ -91,7 +84,7 @@ uint64_t mp_mdc_read(struct mp_mdc *mdc, void *data, size_t len, size_t *rdlen);
  * @len:      length of data
  * @sync:     flag to defer return until IO is complete
  */
-uint64_t mp_mdc_append(struct mp_mdc *mdc, void *data, ssize_t len, bool sync);
+int mp_mdc_append(struct mp_mdc *mdc, void *data, ssize_t len, bool sync);
 
 /**
  * mp_mdc_cstart() - Initiate MDC compaction
@@ -100,7 +93,7 @@ uint64_t mp_mdc_append(struct mp_mdc *mdc, void *data, ssize_t len, bool sync);
  * Swap active (ostensibly full) and inactive (empty) mlogs
  * Append a compaction start marker to newly active mlog
  */
-uint64_t mp_mdc_cstart(struct mp_mdc *mdc);
+int mp_mdc_cstart(struct mp_mdc *mdc);
 
 /**
  * mp_mdc_cend() - End MDC compactions
@@ -108,6 +101,6 @@ uint64_t mp_mdc_cstart(struct mp_mdc *mdc);
  *
  * Append a compaction end marker to the active mlog
  */
-uint64_t mp_mdc_cend(struct mp_mdc *mdc);
+int mp_mdc_cend(struct mp_mdc *mdc);
 
 #endif /* MPOOL_MDC_PRIV_H */

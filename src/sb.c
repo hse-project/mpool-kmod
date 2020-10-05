@@ -25,7 +25,7 @@
 static struct omf_sb_descriptor SBCLEAR;
 
 /*
- * Drives have 4 superblocks.
+ * Drives have 2 superblocks.
  * + sb0 at byte offset 0
  * + sb1 at byte offset SB_AREA_SZ + MDC0MD_AREA_SZ
  *

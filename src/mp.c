@@ -589,7 +589,7 @@ errout:
 int mpool_rename(u64 dcnt, char **dpaths, struct pd_prop *pd_prop,
 		 u32 flags, const char *mp_newname)
 {
-	struct omf_sb_descriptor*sb;
+	struct omf_sb_descriptor *sb;
 	struct mpool_descriptor *mp;
 	struct mpool_dev_info *pd = NULL;
 	u16 omf_ver = OMF_SB_DESC_UNDEF;

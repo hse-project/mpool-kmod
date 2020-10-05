@@ -149,7 +149,7 @@ static ssize_t mpc_label_show(struct device *dev, struct device_attribute *da, c
 
 static ssize_t mpc_vma_show(struct device *dev, struct device_attribute *da, char *buf)
 {
-	return scnprintf(buf, PAGE_SIZE, "%u\n", mpc_xvm_size_max);
+	return scnprintf(buf, PAGE_SIZE, "%u\n", xvm_size_max);
 }
 
 static ssize_t mpc_type_show(struct device *dev, struct device_attribute *da, char *buf)
@@ -258,7 +258,7 @@ static void mpool_params_merge_defaults(struct mpool_params *params)
 	if (params->mp_mode != -1)
 		params->mp_mode &= 0777;
 
-	params->mp_vma_size_max = mpc_xvm_size_max;
+	params->mp_vma_size_max = xvm_size_max;
 
 	params->mp_rsvd0 = 0;
 	params->mp_rsvd1 = 0;
@@ -656,7 +656,7 @@ static int mpc_cf_journal(struct mpc_unit *unit)
 	cfg.mc_oid2 = unit->un_ds_oidv[1];
 	cfg.mc_captgt = unit->un_mdc_captgt;
 	cfg.mc_ra_pages_max = unit->un_ra_pages_max;
-	cfg.mc_vma_size_max = mpc_xvm_size_max;
+	cfg.mc_vma_size_max = xvm_size_max;
 	memcpy(&cfg.mc_utype, &unit->un_utype, sizeof(cfg.mc_utype));
 	strlcpy(cfg.mc_label, unit->un_label, sizeof(cfg.mc_label));
 
@@ -673,7 +673,7 @@ static int mpc_cf_journal(struct mpc_unit *unit)
  * @env:
  *
  * See man 7 udev for more info.
-*/
+ */
 static int mpc_uevent(struct device *dev, struct kobj_uevent_env *env)
 {
 	struct mpc_unit *unit = dev_get_drvdata(dev);
@@ -735,7 +735,7 @@ static int mpc_mp_chown(struct mpc_unit *unit, struct mpool_params *params)
 
 /**
  * mpioc_params_get() - get parameters of an activated mpool
- * @unit:   mpool device unit ptr
+ * @unit:   mpool unit ptr
  * @get:    mpool params
  *
  * MPIOC_PARAMS_GET ioctl handler to get mpool parameters
@@ -766,7 +766,7 @@ static int mpioc_params_get(struct mpc_unit *unit, struct mpioc_params *get)
 	params->mp_oidv[0] = unit->un_ds_oidv[0];
 	params->mp_oidv[1] = unit->un_ds_oidv[1];
 	params->mp_ra_pages_max = unit->un_ra_pages_max;
-	params->mp_vma_size_max = mpc_xvm_size_max;
+	params->mp_vma_size_max = xvm_size_max;
 	memcpy(&params->mp_utype, &unit->un_utype, sizeof(params->mp_utype));
 	strlcpy(params->mp_label, unit->un_label, sizeof(params->mp_label));
 	strlcpy(params->mp_name, unit->un_name, sizeof(params->mp_name));
@@ -789,7 +789,7 @@ static int mpioc_params_get(struct mpc_unit *unit, struct mpioc_params *get)
 
 /**
  * mpioc_params_set() - set parameters of an activated mpool
- * @unit:   control device unit ptr
+ * @unit:   mpool unit ptr
  * @set:    mpool params
  *
  * MPIOC_PARAMS_SET ioctl handler to set mpool parameters
@@ -810,7 +810,7 @@ static int mpioc_params_set(struct mpc_unit *unit, struct mpioc_params *set)
 
 	params = &set->mps_params;
 
-	params->mp_vma_size_max = mpc_xvm_size_max;
+	params->mp_vma_size_max = xvm_size_max;
 
 	mutex_lock(&ss->ss_lock);
 	if (params->mp_uid != -1 || params->mp_gid != -1 || params->mp_mode != -1) {
@@ -867,7 +867,7 @@ static int mpioc_params_set(struct mpc_unit *unit, struct mpioc_params *set)
 
 /**
  * mpioc_mp_mclass_get() - get information regarding an mpool's mclasses
- * @unit:   control device unit ptr
+ * @unit:   mpool unit ptr
  * @mcl:    mclass info struct
  *
  * MPIOC_MP_MCLASS_GET ioctl handler to get mclass information
@@ -946,7 +946,7 @@ static void mpioc_prop_get(struct mpc_unit *unit, struct mpioc_prop *kprop)
 	params->mp_oidv[0] = unit->un_ds_oidv[0];
 	params->mp_oidv[1] = unit->un_ds_oidv[1];
 	params->mp_ra_pages_max = unit->un_ra_pages_max;
-	params->mp_vma_size_max = mpc_xvm_size_max;
+	params->mp_vma_size_max = xvm_size_max;
 	memcpy(&params->mp_utype, &unit->un_utype, sizeof(params->mp_utype));
 	strlcpy(params->mp_label, unit->un_label, sizeof(params->mp_label));
 	strlcpy(params->mp_name, unit->un_name, sizeof(params->mp_name));
@@ -1015,8 +1015,8 @@ static int mpioc_proplist_get_itercb(int minor, void *item, void *arg)
 }
 
 /**
- * mpioc_proplist_get() - Get mpool or dataset properties.
- * @unit:   mpool or dataset unit ptr
+ * mpioc_proplist_get() - Get mpool properties.
+ * @unit:   mpool unit ptr
  * @ls:     properties parameter block
  *
  * MPIOC_PROP_GET ioctl handler to retrieve properties for one
@@ -1599,7 +1599,7 @@ errout:
 
 /**
  * mpioc_mp_add() - add a device to an existing mpool
- * @unit:   control device unit ptr
+ * @unit:   mpool unit ptr
  * @drv:    mpool device parameter block
  *
  * MPIOC_MP_ADD ioctl handler to add a drive to a activated mpool
@@ -1790,7 +1790,7 @@ static int mpc_physio(struct mpool_descriptor *mpd, void *desc, struct iovec *ui
 	if (length < PAGE_SIZE || !IS_ALIGNED(length, PAGE_SIZE))
 		return -EINVAL;
 
-	if (length > (mpc_rwsz_max << 20))
+	if (length > (rwsz_max_mb << 20))
 		return -EINVAL;
 
 	/*
@@ -1892,11 +1892,10 @@ static int mpc_physio(struct mpool_descriptor *mpd, void *desc, struct iovec *ui
 
 	switch (objtype) {
 	case MP_OBJ_MBLOCK:
-		if (rw == WRITE) {
+		if (rw == WRITE)
 			rc = mblock_write(mpd, desc, iov_base, niov, pagesc << PAGE_SHIFT);
-		} else {
+		else
 			rc = mblock_read(mpd, desc, iov_base, niov, offset, pagesc << PAGE_SHIFT);
-		}
 		break;
 
 	case MP_OBJ_MLOG:
@@ -1927,7 +1926,7 @@ errout:
 
 /**
  * mpioc_mb_alloc() - Allocate an mblock object.
- * @unit:   mpool or dataset unit ptr
+ * @unit:   mpool unit ptr
  * @mb:     mblock parameter block
  *
  * MPIOC_MB_ALLOC ioctl handler to allocate a single mblock.
@@ -1961,7 +1960,7 @@ static int mpioc_mb_alloc(struct mpc_unit *unit, struct mpioc_mblock *mb)
 
 /**
  * mpioc_mb_find() - Find an mblock object by its objid
- * @unit:   mpool or dataset unit ptr
+ * @unit:   mpool unit ptr
  * @mb:     mblock parameter block
  *
  * Return:  Returns 0 if successful, -errno otherwise...
@@ -1995,7 +1994,7 @@ static int mpioc_mb_find(struct mpc_unit *unit, struct mpioc_mblock *mb)
 
 /**
  * mpioc_mb_abcomdel() - Abort, commit, or delete an mblock.
- * @unit:   mpool or dataset unit ptr
+ * @unit:   mpool unit ptr
  * @cmd     MPIOC_MB_ABORT, MPIOC_MB_COMMIT, or MPIOC_MB_DELETE
  * @mi:     mblock parameter block
  *
@@ -2053,7 +2052,7 @@ static int mpioc_mb_abcomdel(struct mpc_unit *unit, uint cmd, struct mpioc_mbloc
 
 /**
  * mpioc_mb_rw() - read/write mblock ioctl handler
- * @unit:   dataset unit ptr
+ * @unit:   mpool unit ptr
  * @cmd:    MPIOC_MB_READ or MPIOC_MB_WRITE
  * @mbiov:  mblock parameter block
  */
@@ -2394,7 +2393,7 @@ static void mpc_bdi_teardown(void)
  */
 
 /**
- * mpc_open() - Open an mpool or dataset device.
+ * mpc_open() - Open an mpool device.
  * @ip: inode ptr
  * @fp: file ptr
  *
@@ -2478,7 +2477,7 @@ errout:
 }
 
 /**
- * mpc_release() - Close the specified mpool or dataset device.
+ * mpc_release() - Close the specified mpool device.
  * @ip: inode ptr
  * @fp: file ptr
  *
@@ -2739,7 +2738,7 @@ void mpctl_exit(void)
 					cdev_del(&ss->ss_cdev);
 				class_destroy(ss->ss_class);
 			}
-			unregister_chrdev_region(ss->ss_devno, mpc_maxunits);
+			unregister_chrdev_region(ss->ss_devno, maxunits);
 		}
 
 		ss->ss_inited = false;
@@ -2767,16 +2766,16 @@ int mpctl_init(void)
 
 	ctlunit = NULL;
 
-	mpc_maxunits = clamp_t(uint, mpc_maxunits, 8, 8192);
+	maxunits = clamp_t(uint, maxunits, 8, 8192);
 
-	mpc_rwsz_max = clamp_t(ulong, mpc_rwsz_max, 1, 128);
-	mpc_rwconc_max = clamp_t(ulong, mpc_rwconc_max, 1, 32);
+	rwsz_max_mb = clamp_t(ulong, rwsz_max_mb, 1, 128);
+	rwconc_max = clamp_t(ulong, rwconc_max, 1, 32);
 
 	/* Must be same as mpc_physio() pagesvsz calculation. */
-	sz = (mpc_rwsz_max << 20) / PAGE_SIZE;
+	sz = (rwsz_max_mb << 20) / PAGE_SIZE;
 	sz *= (sizeof(void *) + sizeof(struct iovec));
 
-	rc = mpc_vcache_init(&mpc_physio_vcache, sz, mpc_rwconc_max);
+	rc = mpc_vcache_init(&mpc_physio_vcache, sz, rwconc_max);
 	if (rc) {
 		errmsg = "vcache init failed";
 		goto errout;
@@ -2792,7 +2791,7 @@ int mpctl_init(void)
 	sema_init(&ss->ss_op_sema, 1);
 	ss->ss_inited = true;
 
-	rc = alloc_chrdev_region(&ss->ss_devno, 0, mpc_maxunits, "mpool");
+	rc = alloc_chrdev_region(&ss->ss_devno, 0, maxunits, "mpool");
 	if (rc) {
 		errmsg = "cannot allocate control device major";
 		ss->ss_devno = NODEV;
@@ -2809,7 +2808,7 @@ int mpctl_init(void)
 
 	ss->ss_class->dev_uevent = mpc_uevent;
 
-	rc = cdev_add(&ss->ss_cdev, ss->ss_devno, mpc_maxunits);
+	rc = cdev_add(&ss->ss_cdev, ss->ss_devno, maxunits);
 	if (rc) {
 		errmsg = "cdev_add() failed";
 		ss->ss_cdev.ops = NULL;

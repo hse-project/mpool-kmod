@@ -603,9 +603,9 @@ static void pmd_mdc_alloc_set(struct mpool_descriptor *mp)
 static int pmd_cmp_drv_mdc0(struct mpool_descriptor *mp, u8 pdh,
 			    struct omf_devparm_descriptor *omd)
 {
+	const char *msg __maybe_unused;
 	struct mc_parms mcp_mdc0list, mcp_pd;
 	struct mpool_dev_info *pd;
-	const char *msg __maybe_unused;
 
 	pd = &mp->pds_pdv[pdh];
 

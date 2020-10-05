@@ -649,7 +649,7 @@ void mpc_reap_xvm_touch(struct mpc_xvm *xvm, int index)
 	if (!reap)
 		return;
 
-	offset = (index << PAGE_SHIFT) % (1ul << mpc_xvm_size_max);
+	offset = (index << PAGE_SHIFT) % (1ul << xvm_size_max);
 	mbnum = offset / xvm->xvm_bktsz;
 
 	atimep = &xvm->xvm_mbinfov[mbnum].mbatime;

@@ -698,7 +698,8 @@ static int mlog_flush_abuf(struct mpool_descriptor *mp, struct pmd_layout *layou
 }
 
 /**
- * mlog_flush_posthdlr_4ka() - Handles both successful and failed flush for 512B sectors with 4K-Alignment.
+ * mlog_flush_posthdlr_4ka() - Handles both successful and failed flush for
+ *                             512B sectors with 4K-Alignment.
  * @layout: layout descriptor
  * @fsucc:  flush status
  */
