@@ -23,10 +23,6 @@
 #include "pmd_obj.h"
 #include "mpcore.h"
 
-#define _STR(x) #x
-#define STR(x)  _STR(x)
-static const char mpool_sbver[] = "MPOOL_SBVER_" STR(OMF_SB_DESC_VER_LAST);
-
 static struct crypto_shash *mpool_tfm;
 
 enum unpack_only {

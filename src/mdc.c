@@ -456,7 +456,7 @@ int mp_mdc_read(struct mp_mdc *mdc, void *data, size_t len, size_t *rdlen)
 	rc = mlog_read_data_next(mdc->mdc_mp, mdc->mdc_alogh, data, (u64)len, (u64 *)rdlen);
 	if (rc && rc != -EOVERFLOW)
 		mp_pr_err("mpool %s, mdc %p read failed, mlog %p len %lu",
-			  rc, mdc->mdc_mpname, mdc, mdc->mdc_alogh, len);
+			  rc, mdc->mdc_mpname, mdc, mdc->mdc_alogh, (ulong)len);
 
 	mdc_release(mdc, rw);
 
@@ -478,7 +478,7 @@ int mp_mdc_append(struct mp_mdc *mdc, void *data, ssize_t len, bool sync)
 	rc = mlog_append_data(mdc->mdc_mp, mdc->mdc_alogh, data, (u64)len, sync);
 	if (rc)
 		mp_pr_rl("mpool %s, mdc %p append failed, mlog %p, len %lu sync %d",
-			 rc, mdc->mdc_mpname, mdc, mdc->mdc_alogh, len, sync);
+			 rc, mdc->mdc_mpname, mdc, mdc->mdc_alogh, (ulong)len, sync);
 
 	mdc_release(mdc, rw);
 

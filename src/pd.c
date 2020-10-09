@@ -101,7 +101,7 @@ int pd_dev_flush(struct pd_dev_parm *dparm)
  * @off:
  * @len:
  */
-static int pd_bio_discard(struct pd_dev_parm *dparm, u64 off, size_t len)
+static int pd_bio_discard(struct pd_dev_parm *dparm, loff_t off, size_t len)
 {
 	struct block_device *bdev;
 	int rc;
@@ -260,11 +260,10 @@ static int pd_bio_rw(struct pd_dev_parm *dparm, const struct kvec *iov,
 	struct request_queue *q;
 	struct page *page;
 	struct bio *bio;
-	u64 iov_base, sector_mask;
-	u32 tot_pages, tot_len, len, iov_len, left;
-	u32 iolimit;
-	int i, cc, op;
-	int rc = 0;
+	uintptr_t iov_base;
+	u64 sector_mask;
+	u32 tot_pages, tot_len, len, iov_len, left, iolimit;
+	int i, cc, op, rc = 0;
 
 	if (iovcnt < 1)
 		return 0;
@@ -341,7 +340,7 @@ static int pd_bio_rw(struct pd_dev_parm *dparm, const struct kvec *iov,
 	op = (rw == REQ_OP_READ) ? READ : WRITE;
 
 	for (i = 0; i < iovcnt; i++) {
-		iov_base = (u64)iov[i].iov_base;
+		iov_base = (uintptr_t)iov[i].iov_base;
 		iov_len = iov[i].iov_len;
 
 		while (iov_len > 0) {

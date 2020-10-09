@@ -9,6 +9,8 @@
 #include <linux/migrate.h>
 #include <linux/delay.h>
 #include <linux/uio.h>
+#include <linux/fadvise.h>
+#include <linux/prefetch.h>
 
 #include "mpool_ioctl.h"
 
@@ -768,11 +770,47 @@ int mpc_mmap(struct file *fp, struct vm_area_struct *vma)
 	vma->vm_private_data = xvm;
 
 	fp->f_ra.ra_pages = unit->un_ra_pages_max;
+	fp->f_mode |= FMODE_RANDOM;
 
 	mpc_reap_xvm_add(unit->un_ds_reap, xvm);
 
 	return 0;
 }
+
+#if HAVE_FOPS_FADVISE
+/**
+ * mpc_fadvise() -
+ *
+ * mpc_fadvise() currently handles only POSIX_FADV_WILLNEED.
+ *
+ * The code path that leads here is: madvise_willneed() -> vfs_fadvise() -> mpc_fadvise()
+ */
+int mpc_fadvise(struct file *file, loff_t offset, loff_t len, int advice)
+{
+	pgoff_t start, end;
+
+	if (!file)
+		return -EINVAL;
+
+	if (advice != POSIX_FADV_WILLNEED)
+		return -EOPNOTSUPP;
+
+	start = offset >> PAGE_SHIFT;
+	end = (offset + len - 1) >> PAGE_SHIFT;
+
+	if (end < start)
+		return -EINVAL;
+
+	/* To force page cache readahead */
+	spin_lock(&file->f_lock);
+	file->f_mode |= FMODE_RANDOM;
+	spin_unlock(&file->f_lock);
+
+	page_cache_sync_readahead(file->f_mapping, &file->f_ra, file, start, end - start + 1);
+
+	return 0;
+}
+#endif /* HAVE_FOPS_FADVISE */
 
 /**
  * mpioc_xvm_create() - create an extended VMA map (AKA mcache map)

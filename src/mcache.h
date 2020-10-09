@@ -76,6 +76,10 @@ void mpc_rgnmap_flush(struct mpc_rgnmap *rm);
 
 int mpc_mmap(struct file *fp, struct vm_area_struct *vma);
 
+#if HAVE_FOPS_FADVISE
+int mpc_fadvise(struct file *file, loff_t offset, loff_t len, int advice);
+#endif
+
 int mpioc_xvm_create(struct mpc_unit *unit, struct mpool_descriptor *mp, struct mpioc_vma *ioc);
 
 int mpioc_xvm_destroy(struct mpc_unit *unit, struct mpioc_vma *ioc);

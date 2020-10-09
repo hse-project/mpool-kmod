@@ -8,6 +8,8 @@
 
 #include <linux/printk.h>
 
+static unsigned long mp_pr_rl_state __maybe_unused;
+
 /* TODO: Use dev_crit(), dev_err(), ... */
 
 #define mp_pr_crit(_fmt, _err, ...)				\
@@ -32,10 +34,7 @@
 /* Rate limited version of mp_pr_err(). */
 #define mp_pr_rl(_fmt, _err, ...)				\
 do {								\
-	static unsigned long mp_pr_rl_state;			\
-	uint dly = msecs_to_jiffies(333);			\
-								\
-	if (printk_timed_ratelimit(&mp_pr_rl_state, dly)) {	\
+	if (printk_timed_ratelimit(&mp_pr_rl_state, 333)) {	\
 		pr_err("%s: " _fmt ": errno %d",		\
 		       __func__, ## __VA_ARGS__, (_err));	\
 	}							\
