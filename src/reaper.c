@@ -579,19 +579,13 @@ void mpc_reap_destroy(struct mpc_reap *reap)
 void mpc_reap_xvm_add(struct mpc_reap *reap, struct mpc_xvm *xvm)
 {
 	struct mpc_reap_elem *elem;
-	uint idx, mult;
+	uint idx;
 
 	if (!reap || !xvm)
 		return;
 
 	if (xvm->xvm_advice == MPC_VMA_PINNED)
 		return;
-
-	mult = 1;
-	if (xvm->xvm_advice == MPC_VMA_WARM)
-		mult = 10;
-	else if (xvm->xvm_advice == MPC_VMA_HOT)
-		mult = 30;
 
 	/* Acquire a reference on xvm for the reaper... */
 	atomic_inc(&xvm->xvm_reapref);

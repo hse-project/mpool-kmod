@@ -28,7 +28,6 @@
 #include <linux/delay.h>
 #include <linux/ctype.h>
 #include <linux/uio.h>
-#include <linux/prefetch.h>
 
 #include "mpool_printk.h"
 #include "assert.h"
@@ -81,7 +80,13 @@ static const struct file_operations mpc_fops_default;
 
 static struct mpc_softstate mpc_softstate;
 
-static struct backing_dev_info *mpc_bdi;
+#if HAVE_ADDRESS_SPACE_BDI
+static struct backing_dev_info mpc_bdi = {
+	.name         = "mpctl",
+	.capabilities = BDI_CAP_NO_ACCT_AND_WRITEBACK,
+	.ra_pages     = MPOOL_RA_PAGES_MAX,
+};
+#endif
 
 static unsigned int mpc_ctl_uid __read_mostly;
 static unsigned int mpc_ctl_gid __read_mostly = 6;
@@ -2310,83 +2315,23 @@ static struct mpc_softstate *mpc_cdev2ss(struct cdev *cdev)
 	return container_of(cdev, struct mpc_softstate, ss_cdev);
 }
 
-static int mpc_bdi_alloc(void)
-{
-#if HAVE_BDI_INIT
-	mpc_bdi = kzalloc(sizeof(*mpc_bdi), GFP_KERNEL);
-	if (mpc_bdi) {
-		int    rc;
-
-		rc = bdi_init(mpc_bdi);
-		if (rc) {
-			kfree(mpc_bdi);
-			return rc;
-		}
-	}
-#elif HAVE_BDI_ALLOC_NODE
-	mpc_bdi = bdi_alloc_node(GFP_KERNEL, NUMA_NO_NODE);
-#else
-	mpc_bdi = bdi_alloc(NUMA_NO_NODE);
-#endif
-	if (!mpc_bdi)
-		return -ENOMEM;
-
-	return 0;
-}
-
-static void mpc_bdi_save(struct mpc_unit *unit, struct inode *ip, struct file *fp)
-{
 #if HAVE_ADDRESS_SPACE_BDI
-	unit->un_saved_bdi = fp->f_mapping->backing_dev_info;
-	fp->f_mapping->backing_dev_info = mpc_bdi;
-#else
-	unit->un_saved_bdi = ip->i_sb->s_bdi;
-#if HAVE_BDI_INIT
-	ip->i_sb->s_bdi = mpc_bdi;
-#else
-	ip->i_sb->s_bdi = bdi_get(mpc_bdi);
-#endif /* HAVE_BDI_INIT */
-#endif /* HAVE_ADDRESS_SPACE_BDI */
-}
-
-static void mpc_bdi_restore(struct mpc_unit *unit, struct inode *ip, struct file *fp)
-{
-#if HAVE_ADDRESS_SPACE_BDI
-	fp->f_mapping->backing_dev_info = unit->un_saved_bdi;
-#else
-	ip->i_sb->s_bdi = unit->un_saved_bdi;
-#if !HAVE_BDI_INIT
-	bdi_put(mpc_bdi);
-#endif /* !HAVE_BDI_INIT */
-#endif /* HAVE_ADDRESS_SPACE_BDI */
-}
-
 static int mpc_bdi_setup(void)
 {
 	int rc;
 
-	rc = mpc_bdi_alloc();
+	rc = bdi_init(&mpc_bdi);
 	if (rc)
 		return rc;
-
-#if HAVE_BDI_NAME
-	mpc_bdi->name = "mpoolctl";
-#endif
-	mpc_bdi->capabilities = BDI_CAP_NO_ACCT_AND_WRITEBACK;
-	mpc_bdi->ra_pages = MPOOL_RA_PAGES_MAX;
 
 	return 0;
 }
 
 static void mpc_bdi_teardown(void)
 {
-#if HAVE_BDI_INIT
-	bdi_destroy(mpc_bdi);
-	kfree(mpc_bdi);
-#else
-	bdi_put(mpc_bdi);
-#endif
+	bdi_destroy(&mpc_bdi);
 }
+#endif /* HAVE_ADDRESS_SPACE_BDI */
 
 /*
  * MPCTL file operations.
@@ -2447,13 +2392,17 @@ static int mpc_open(struct inode *ip, struct file *fp)
 	fp->f_op = &mpc_fops_default;
 	fp->f_mapping->a_ops = &mpc_aops_default;
 
-	mpc_bdi_save(unit, ip, fp);
+
+#if HAVE_ADDRESS_SPACE_BDI
+	unit->un_saved_bdi = fp->f_mapping->backing_dev_info;
+	fp->f_mapping->backing_dev_info = &mpc_bdi;
+#endif
 
 	unit->un_mapping = fp->f_mapping;
 	unit->un_ds_reap = mpc_reap;
 
 	inode_lock(ip);
-	i_size_write(ip, 1ul << 63);
+	i_size_write(ip, 1ul << (__BITS_PER_LONG - 1));
 	inode_unlock(ip);
 
 	unit->un_open_excl = !!(fp->f_flags & O_EXCL);
@@ -2503,7 +2452,9 @@ static int mpc_release(struct inode *ip, struct file *fp)
 		unit->un_ds_reap = NULL;
 		unit->un_mapping = NULL;
 
-		mpc_bdi_restore(unit, ip, fp);
+#if HAVE_ADDRESS_SPACE_BDI
+		fp->f_mapping->backing_dev_info = unit->un_saved_bdi;
+#endif
 	}
 
 	unit->un_open_excl = false;
@@ -2712,6 +2663,9 @@ static const struct file_operations mpc_fops_default = {
 	.release	= mpc_release,
 	.unlocked_ioctl	= mpc_ioctl,
 	.mmap           = mpc_mmap,
+#if HAVE_FOPS_FADVISE
+	.fadvise        = mpc_fadvise,
+#endif
 };
 
 static int mpc_exit_unit(int minor, void *item, void *arg)
@@ -2746,7 +2700,9 @@ void mpctl_exit(void)
 
 	mpc_vcache_fini(&mpc_physio_vcache);
 
+#if HAVE_ADDRESS_SPACE_BDI
 	mpc_bdi_teardown();
+#endif
 }
 
 /**
@@ -2815,11 +2771,13 @@ int mpctl_init(void)
 		goto errout;
 	}
 
+#if HAVE_ADDRESS_SPACE_BDI
 	rc = mpc_bdi_setup();
 	if (rc) {
 		errmsg = "mpc bdi setup failed";
 		goto errout;
 	}
+#endif
 
 	cfg = kzalloc(sizeof(*cfg), GFP_KERNEL);
 	if (!cfg) {
