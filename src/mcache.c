@@ -1067,7 +1067,7 @@ int mcache_init(void)
 	}
 
 	for (i = 0; i < ARRAY_SIZE(mpc_wq_rav); ++i) {
-		int     maxactive = 16;
+		int     maxactive = 4;
 		char    name[16];
 
 		snprintf(name, sizeof(name), "mpc_wq_ra%d", i);
