@@ -87,7 +87,7 @@ int pd_dev_flush(struct pd_dev_parm *dparm)
 #if HAVE_BLKDEV_FLUSH_3
 	rc = blkdev_issue_flush(bdev, GFP_NOIO, NULL);
 #else
-	rc = blkdev_issue_flush(bdev, GFP_NOIO);
+	rc = blkdev_issue_flush(bdev);
 #endif
 	if (rc)
 		mp_pr_err("bdev %s, flush failed", rc, dparm->dpr_name);
@@ -240,7 +240,7 @@ static struct bio *pd_bio_chain(struct bio *target, int op, unsigned int nr_page
  * pd_bio_rw() expects a list of kvecs wherein each base ptr is sector
  * aligned and each length is multiple of sectors.
  *
- * If the IO is bigger than 1MiB (BIO_MAX_PAGES pages) or chunk_size_kb,
+ * If the IO is bigger than 1MiB (BIO_MAX_VECS pages) or chunk_size_kb,
  * it is split in several IOs.
  *
  * NOTE:
@@ -325,7 +325,7 @@ static int pd_bio_rw(struct pd_dev_parm *dparm, const struct kvec *iov,
 
 	/* IO size for each bio is determined by the chunk size. */
 	iolimit = chunk_size_kb >> (PAGE_SHIFT - 10);
-	iolimit = clamp_t(u32, iolimit, 32, BIO_MAX_PAGES);
+	iolimit = clamp_t(u32, iolimit, 32, BIO_MAX_VECS);
 
 	/*
 	 * TODO: the fix for the linux bug will be included in kernel 4.12
