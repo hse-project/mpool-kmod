@@ -84,10 +84,14 @@ int pd_dev_flush(struct pd_dev_parm *dparm)
 		return rc;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,12,0)
+	rc = blkdev_issue_flush(bdev);
+#else
 #if HAVE_BLKDEV_FLUSH_3
 	rc = blkdev_issue_flush(bdev, GFP_NOIO, NULL);
 #else
-	rc = blkdev_issue_flush(bdev);
+	rc = blkdev_issue_flush(bdev, GFP_NOIO);
+#endif
 #endif
 	if (rc)
 		mp_pr_err("bdev %s, flush failed", rc, dparm->dpr_name);
@@ -325,7 +329,12 @@ static int pd_bio_rw(struct pd_dev_parm *dparm, const struct kvec *iov,
 
 	/* IO size for each bio is determined by the chunk size. */
 	iolimit = chunk_size_kb >> (PAGE_SHIFT - 10);
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5,12,0)
 	iolimit = clamp_t(u32, iolimit, 32, BIO_MAX_VECS);
+#else
+	iolimit = clamp_t(u32, iolimit, 32, BIO_MAX_PAGES);
+#endif
 
 	/*
 	 * TODO: the fix for the linux bug will be included in kernel 4.12
